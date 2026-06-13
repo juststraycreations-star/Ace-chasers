@@ -107,7 +107,7 @@ export default function Login() {
       <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-disc-green mb-2">⛳ Ace Chasers</h1>
-          <p className="text-gray-600">Find your disc golf match</p>
+          <p className="text-gray-600">Connect with local players</p>
         </div>
 
         <form onSubmit={handleEmailLogin} className="space-y-4" data-testid="login-form">

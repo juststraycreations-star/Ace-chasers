@@ -1,6 +1,6 @@
 # ⛳ Ace Chasers
 
-A disc golf dating and social app built with React, Tailwind CSS, and modern web technologies. Connect with fellow disc golf players, discover matches, and arrange rounds together.
+A disc golf social / connection app built with React, Tailwind CSS, and modern web technologies. Connect with local players, find people to play with, and arrange rounds together.
 
 ## Features
 
