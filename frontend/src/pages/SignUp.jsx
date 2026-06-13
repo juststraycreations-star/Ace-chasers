@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signInWithPopup,
   updateProfile,
 } from 'firebase/auth';
 import { useAuthStore } from '../store/authStore';
 import { firebaseConfigured, getFirebaseAuth, googleProvider } from '../lib/firebase';
-import { makeDevSession } from '../lib/devAuth';
+import { clearDevSession, makeDevSession } from '../lib/devAuth';
 import { api } from '../lib/api';
 
 export default function SignUp() {
@@ -21,30 +22,51 @@ export default function SignUp() {
     confirmPassword: '',
     age: '',
     skillLevel: 'Beginner',
+    inviteCode: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const requireInvite = useAuthStore((s) => s.config.require_invite);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const finalizeSession = async () => {
+  /**
+   * Try /auth/sync (with invite_code), then push the initial profile fields
+   * from the form. Only commits the session on success — failure keeps the
+   * user on /signup with a visible error.
+   */
+  const commitSession = async (userObj) => {
     try {
-      // Sync user record, then push initial profile fields from the form.
-      const sync = await api.post('/auth/sync');
+      await api.post('/auth/sync', {
+        invite_code: formData.inviteCode ? formData.inviteCode.trim() : undefined,
+      });
       const payload = {
-        name: formData.name || sync.data.name,
-        age: formData.age ? Number(formData.age) : sync.data.age,
+        name: formData.name || userObj.name || null,
+        age: formData.age ? Number(formData.age) : null,
         skillLevel: formData.skillLevel,
       };
       const updated = await api.put('/users/me', payload);
+      setUser(userObj);
       setProfile(updated.data);
+      navigate('/discovery');
+      return true;
     } catch (err) {
-      console.warn('post-signup sync failed:', err?.response?.data || err.message);
+      const detail = err?.response?.data?.detail || err.message;
+      setError(typeof detail === 'string' ? detail : 'Sign up failed');
+      if (!firebaseConfigured) {
+        clearDevSession();
+      } else {
+        try {
+          await getFirebaseAuth().signOut();
+        } catch {
+          /* noop */
+        }
+      }
+      return false;
     }
-    navigate('/discovery');
   };
 
   const handleEmailSignup = async (e) => {
@@ -70,11 +92,25 @@ export default function SignUp() {
         if (formData.name) {
           await updateProfile(cred.user, { displayName: formData.name });
         }
+        const ok = await commitSession({
+          uid: cred.user.uid,
+          email: cred.user.email,
+          name: formData.name || cred.user.displayName,
+          photoURL: cred.user.photoURL,
+        });
+        if (ok) {
+          // Fire the verification email (best-effort; soft banner handles
+          // the rest of the lifecycle).
+          try {
+            await sendEmailVerification(cred.user);
+          } catch (err) {
+            console.warn('sendEmailVerification failed:', err?.message);
+          }
+        }
       } else {
         const { user } = makeDevSession({ email: formData.email, name: formData.name });
-        setUser(user);
+        await commitSession(user);
       }
-      await finalizeSession();
     } catch (err) {
       setError(err?.message || 'Sign up failed');
     } finally {
@@ -91,8 +127,13 @@ export default function SignUp() {
         return;
       }
       const auth = getFirebaseAuth();
-      await signInWithPopup(auth, googleProvider);
-      await finalizeSession();
+      const cred = await signInWithPopup(auth, googleProvider);
+      await commitSession({
+        uid: cred.user.uid,
+        email: cred.user.email,
+        name: cred.user.displayName,
+        photoURL: cred.user.photoURL,
+      });
     } catch (err) {
       setError(err?.message || 'Google sign-in failed');
     } finally {
@@ -169,6 +210,24 @@ export default function SignUp() {
               <option>Pro</option>
             </select>
           </div>
+
+          {requireInvite && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Invite Code</label>
+              <input
+                type="text"
+                name="inviteCode"
+                value={formData.inviteCode}
+                onChange={handleChange}
+                className="w-full border border-gray-300 rounded-lg px-4 py-2 font-mono uppercase focus:outline-none focus:border-disc-green"
+                placeholder="ACE-XXXX-XXXX"
+                data-testid="signup-invite-input"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Ace Chasers is currently invite-only. Paste the code from your invite.
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>

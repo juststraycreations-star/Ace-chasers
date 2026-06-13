@@ -6,7 +6,7 @@ import {
 } from 'firebase/auth';
 import { useAuthStore } from '../store/authStore';
 import { firebaseConfigured, getFirebaseAuth, googleProvider } from '../lib/firebase';
-import { makeDevSession } from '../lib/devAuth';
+import { clearDevSession, makeDevSession } from '../lib/devAuth';
 import { api } from '../lib/api';
 
 export default function Login() {
@@ -18,14 +18,36 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const finalizeSession = async () => {
+  /**
+   * Run /api/auth/sync and commit the session only on success. The local
+   * Firebase session / dev token has already been established by the caller
+   * so the API client can attach the right Authorization header.
+   */
+  const commitSession = async (userObj) => {
     try {
-      const sync = await api.post('/auth/sync');
+      const sync = await api.post('/auth/sync', {});
+      setUser(userObj);
       setProfile(sync.data);
+      navigate('/discovery');
+      return true;
     } catch (err) {
-      console.warn('auth/sync failed:', err?.response?.data || err.message);
+      const detail = err?.response?.data?.detail || err.message;
+      setError(
+        typeof detail === 'string' && detail.toLowerCase().includes('invite')
+          ? `${detail} If you don't have an account yet, use the Sign up page instead — invite codes are entered there.`
+          : detail
+      );
+      if (!firebaseConfigured) {
+        clearDevSession();
+      } else {
+        try {
+          await getFirebaseAuth().signOut();
+        } catch {
+          /* noop */
+        }
+      }
+      return false;
     }
-    navigate('/discovery');
   };
 
   const handleEmailLogin = async (e) => {
@@ -39,14 +61,17 @@ export default function Login() {
     try {
       if (firebaseConfigured) {
         const auth = getFirebaseAuth();
-        await signInWithEmailAndPassword(auth, email, password);
-        // onAuthStateChanged in AuthProvider will populate user
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+        await commitSession({
+          uid: cred.user.uid,
+          email: cred.user.email,
+          name: cred.user.displayName,
+          photoURL: cred.user.photoURL,
+        });
       } else {
-        // Dev fallback - mints a local JWT consumed by the backend dev path.
         const { user } = makeDevSession({ email });
-        setUser(user);
+        await commitSession(user);
       }
-      await finalizeSession();
     } catch (err) {
       setError(err?.message || 'Login failed');
     } finally {
@@ -63,8 +88,13 @@ export default function Login() {
         return;
       }
       const auth = getFirebaseAuth();
-      await signInWithPopup(auth, googleProvider);
-      await finalizeSession();
+      const cred = await signInWithPopup(auth, googleProvider);
+      await commitSession({
+        uid: cred.user.uid,
+        email: cred.user.email,
+        name: cred.user.displayName,
+        photoURL: cred.user.photoURL,
+      });
     } catch (err) {
       setError(err?.message || 'Google sign-in failed');
     } finally {

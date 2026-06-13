@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useAuthStore } from './store/authStore';
 import AuthProvider from './components/AuthProvider';
 import Navigation from './components/Navigation';
+import EmailVerificationBanner from './components/EmailVerificationBanner';
 import Discovery from './pages/Discovery';
 import Messages from './pages/Messages';
 import Profile from './pages/Profile';
@@ -24,6 +25,7 @@ function AppRoutes() {
   return (
     <div className="min-h-screen bg-gray-50">
       {isAuthenticated && <Navigation />}
+      {isAuthenticated && <EmailVerificationBanner />}
 
       <Routes>
         {!isAuthenticated ? (

@@ -12,6 +12,9 @@ export const useAuthStore = create((set, get) => ({
   authReady: false,      // becomes true once the first auth check completes
   loading: false,
   error: null,
+  config: { require_invite: false }, // server-side feature flags
+
+  setConfig: (config) => set({ config }),
 
   setUser: (user) =>
     set({

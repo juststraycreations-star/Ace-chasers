@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from typing import List, Literal, Optional
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -36,6 +36,12 @@ from db import (  # noqa: E402  (load_dotenv must run first)
     seed_demo_users,
 )
 from firebase_auth import get_current_user, init_firebase  # noqa: E402
+from invites import (  # noqa: E402
+    create_invite,
+    list_invites,
+    redeem_invite,
+    revoke_invite,
+)
 
 logger = logging.getLogger("server")
 logging.basicConfig(level=logging.INFO)
@@ -65,9 +71,19 @@ class ProfileIn(BaseModel):
     profilePictureUrl: Optional[str] = None
 
 
+class AuthSyncIn(BaseModel):
+    invite_code: Optional[str] = None
+
+
+class InviteCreateIn(BaseModel):
+    email: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
 class ProfileOut(BaseModel):
     uid: str
     email: Optional[str] = None
+    emailVerified: bool = False
     name: Optional[str] = None
     age: Optional[int] = None
     skillLevel: Optional[str] = None
@@ -93,10 +109,11 @@ class LikeOut(BaseModel):
 
 # --- Helpers ----------------------------------------------------------------
 
-def _user_to_profile(doc: dict) -> ProfileOut:
+def _user_to_profile(doc: dict, *, email_verified: Optional[bool] = None) -> ProfileOut:
     return ProfileOut(
         uid=doc["uid"],
         email=doc.get("email"),
+        emailVerified=bool(email_verified if email_verified is not None else doc.get("email_verified", False)),
         name=doc.get("name"),
         age=doc.get("age"),
         skillLevel=doc.get("skillLevel"),
@@ -115,6 +132,28 @@ def _match_key(a: str, b: str) -> tuple[str, str]:
     return (a, b) if a < b else (b, a)
 
 
+def _require_invite_enabled() -> bool:
+    return os.environ.get("REQUIRE_INVITE", "false").strip().lower() in {"1", "true", "yes"}
+
+
+def _claims_email_verified(claims: dict) -> bool:
+    # Firebase Admin returns `email_verified`. Our dev path may set the same.
+    if "email_verified" in claims:
+        return bool(claims["email_verified"])
+    # Dev fallback: no info → treat as verified so devs aren't blocked by
+    # the banner. Real deployments always have the field.
+    return True
+
+
+async def require_admin(x_admin_key: Optional[str] = Header(default=None)) -> bool:
+    expected = os.environ.get("ADMIN_API_KEY", "").strip()
+    if not expected:
+        raise HTTPException(status_code=503, detail="Admin API not configured")
+    if not x_admin_key or x_admin_key != expected:
+        raise HTTPException(status_code=401, detail="Invalid admin key")
+    return True
+
+
 # --- Lifecycle --------------------------------------------------------------
 
 @app.on_event("startup")
@@ -131,12 +170,33 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/api/config")
+async def config():
+    """Public config consumed by the frontend on app load."""
+    return {"require_invite": _require_invite_enabled()}
+
+
 @app.post("/api/auth/sync", response_model=ProfileOut)
-async def auth_sync(current=Depends(get_current_user)):
-    """Idempotently upsert the user record for the caller, and ensure the
-    demo "auto-like" inbound likes exist so the matched-likes flow works."""
+async def auth_sync(
+    payload: AuthSyncIn = Body(default_factory=AuthSyncIn),
+    current=Depends(get_current_user),
+):
+    """Idempotently upsert the user record for the caller. New users may need
+    to redeem an invite code when REQUIRE_INVITE is enabled. Existing users
+    always pass through (no retroactive gating)."""
     db = get_db()
+    existing = await db.users.find_one({"uid": current["uid"]})
+    is_new_user = existing is None
+
+    if is_new_user and _require_invite_enabled():
+        await redeem_invite(
+            code=(payload.invite_code or "").strip(),
+            uid=current["uid"],
+            email=current.get("email"),
+        )
+
     now = datetime.now(timezone.utc).isoformat()
+    email_verified = _claims_email_verified(current.get("claims") or {})
     update = {
         "$setOnInsert": {
             "uid": current["uid"],
@@ -148,10 +208,10 @@ async def auth_sync(current=Depends(get_current_user)):
         },
         "$set": {
             "email": current.get("email"),
+            "email_verified": email_verified,
             "updated_at": now,
         },
     }
-    # Only stamp name/picture from the token if we don't already have one
     if current.get("name"):
         update["$setOnInsert"]["name"] = current["name"]
     if current.get("picture"):
@@ -161,7 +221,7 @@ async def auth_sync(current=Depends(get_current_user)):
     await ensure_inbound_likes_for(current["uid"])
 
     doc = await db.users.find_one({"uid": current["uid"]})
-    return _user_to_profile(doc)
+    return _user_to_profile(doc, email_verified=email_verified)
 
 
 @app.get("/api/users/me", response_model=ProfileOut)
@@ -170,7 +230,28 @@ async def get_me(current=Depends(get_current_user)):
     doc = await db.users.find_one({"uid": current["uid"]})
     if not doc:
         raise HTTPException(status_code=404, detail="User not found — call /api/auth/sync first")
-    return _user_to_profile(doc)
+    email_verified = _claims_email_verified(current.get("claims") or {})
+    return _user_to_profile(doc, email_verified=email_verified)
+
+
+# --- Admin: invitations -----------------------------------------------------
+
+@app.get("/api/admin/invites")
+async def admin_list_invites(_: bool = Depends(require_admin)):
+    return await list_invites()
+
+
+@app.post("/api/admin/invites")
+async def admin_create_invite(payload: InviteCreateIn, _: bool = Depends(require_admin)):
+    return await create_invite(email=payload.email, expires_at=payload.expires_at)
+
+
+@app.delete("/api/admin/invites/{code}")
+async def admin_revoke_invite(code: str, _: bool = Depends(require_admin)):
+    ok = await revoke_invite(code)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    return {"ok": True}
 
 
 @app.put("/api/users/me", response_model=ProfileOut)
@@ -180,7 +261,7 @@ async def update_me(payload: ProfileIn, current=Depends(get_current_user)):
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.users.update_one({"uid": current["uid"]}, {"$set": updates}, upsert=True)
     doc = await db.users.find_one({"uid": current["uid"]})
-    return _user_to_profile(doc)
+    return _user_to_profile(doc, email_verified=_claims_email_verified(current.get("claims") or {}))
 
 
 @app.get("/api/discovery", response_model=List[ProfileOut])
