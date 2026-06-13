@@ -28,7 +28,7 @@ export default function Login() {
       const sync = await api.post('/auth/sync', {});
       setUser(userObj);
       setProfile(sync.data);
-      navigate('/discovery');
+      navigate('/feed');
       return true;
     } catch (err) {
       const detail = err?.response?.data?.detail || err.message;

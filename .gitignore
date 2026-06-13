@@ -31,3 +31,4 @@ yarn-error.log*
 *.sln
 *.sw?
 backend/firebase-admin.json
+backend/uploads/

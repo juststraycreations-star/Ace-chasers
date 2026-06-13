@@ -4,6 +4,7 @@ import AuthProvider from './components/AuthProvider';
 import Navigation from './components/Navigation';
 import EmailVerificationBanner from './components/EmailVerificationBanner';
 import Discovery from './pages/Discovery';
+import Feed from './pages/Feed';
 import Messages from './pages/Messages';
 import Profile from './pages/Profile';
 import Likes from './pages/Likes';
@@ -36,11 +37,12 @@ function AppRoutes() {
           </>
         ) : (
           <>
+            <Route path="/feed" element={<Feed />} />
             <Route path="/discovery" element={<Discovery />} />
             <Route path="/likes" element={<Likes />} />
             <Route path="/messages" element={<Messages />} />
             <Route path="/profile" element={<Profile />} />
-            <Route path="*" element={<Navigate to="/discovery" replace />} />
+            <Route path="*" element={<Navigate to="/feed" replace />} />
           </>
         )}
       </Routes>

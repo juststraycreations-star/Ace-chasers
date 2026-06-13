@@ -8,3 +8,4 @@ python-dotenv==1.2.2
 requests==2.34.2
 uvicorn==0.25.0
 firebase-admin==7.4.0
+python-multipart==0.0.32

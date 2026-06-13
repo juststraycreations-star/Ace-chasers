@@ -23,8 +23,9 @@ from datetime import datetime, timezone
 from typing import List, Literal, Optional
 
 from dotenv import load_dotenv
-from fastapi import Body, Depends, FastAPI, Header, HTTPException, status
+from fastapi import Body, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 load_dotenv()
@@ -42,6 +43,15 @@ from invites import (  # noqa: E402
     redeem_invite,
     revoke_invite,
 )
+from posts import (  # noqa: E402
+    ALLOWED_IMAGE_TYPES,
+    MAX_IMAGE_BYTES,
+    UPLOAD_DIR,
+    create_post,
+    delete_post,
+    ensure_indexes as ensure_post_indexes,
+    list_feed,
+)
 
 logger = logging.getLogger("server")
 logging.basicConfig(level=logging.INFO)
@@ -55,6 +65,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve user-uploaded images. Files are stored at /app/backend/uploads/.
+app.mount("/api/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 # --- Models -----------------------------------------------------------------
@@ -105,6 +118,22 @@ class LikeOut(BaseModel):
     likedAt: str
     matched: bool
     friended: bool
+
+
+class PostAuthor(BaseModel):
+    uid: str
+    name: Optional[str] = None
+    profilePictureUrl: Optional[str] = None
+
+
+class PostOut(BaseModel):
+    id: str
+    body: str
+    image_url: Optional[str] = None
+    visibility: Literal["public", "friends_only"]
+    created_at: str
+    author: PostAuthor
+    is_mine: bool = False
 
 
 # --- Helpers ----------------------------------------------------------------
@@ -160,6 +189,7 @@ async def require_admin(x_admin_key: Optional[str] = Header(default=None)) -> bo
 async def on_startup() -> None:
     init_firebase()
     await ensure_indexes()
+    await ensure_post_indexes()
     await seed_demo_users()
 
 
@@ -373,4 +403,84 @@ async def remove_like(target_uid: str, current=Depends(get_current_user)):
     )
     a, b = _match_key(current["uid"], target_uid)
     await db.matches.delete_one({"user_a": a, "user_b": b})
+    return {"ok": True}
+
+
+# --- Feed / Posts -----------------------------------------------------------
+
+POST_BODY_MAX = 1000
+
+
+async def _hydrate_post(post: dict, viewer_uid: str) -> PostOut:
+    db = get_db()
+    author = await db.users.find_one({"uid": post["author_uid"]})
+    author_obj = PostAuthor(
+        uid=post["author_uid"],
+        name=(author or {}).get("name"),
+        profilePictureUrl=(author or {}).get("profilePictureUrl"),
+    )
+    image_url = None
+    if post.get("image_path"):
+        # image_path stored as plain filename; expose via /api/uploads/<file>.
+        image_url = f"/api/uploads/{post['image_path']}"
+    return PostOut(
+        id=post["id"],
+        body=post.get("body", ""),
+        image_url=image_url,
+        visibility=post.get("visibility", "public"),
+        created_at=post.get("created_at", ""),
+        author=author_obj,
+        is_mine=post["author_uid"] == viewer_uid,
+    )
+
+
+@app.get("/api/feed", response_model=List[PostOut])
+async def get_feed(current=Depends(get_current_user)):
+    raw_posts = await list_feed(current["uid"])
+    return [await _hydrate_post(p, current["uid"]) for p in raw_posts]
+
+
+@app.post("/api/posts", response_model=PostOut)
+async def create_post_endpoint(
+    body: str = Form(""),
+    visibility: Literal["public", "friends_only"] = Form("public"),
+    image: Optional[UploadFile] = File(default=None),
+    current=Depends(get_current_user),
+):
+    body = (body or "").strip()
+    if not body and image is None:
+        raise HTTPException(status_code=400, detail="Post must include text or an image")
+    if len(body) > POST_BODY_MAX:
+        raise HTTPException(status_code=400, detail=f"Post text capped at {POST_BODY_MAX} characters")
+
+    image_filename: Optional[str] = None
+    if image is not None and image.filename:
+        if image.content_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(status_code=400, detail=f"Unsupported image type: {image.content_type}")
+        data = await image.read()
+        if len(data) > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=400, detail="Image exceeds 5MB limit")
+        ext = (image.filename.rsplit(".", 1)[-1] or "bin").lower()
+        # Sanitize: only allow letters/digits in the extension we keep
+        if not ext.isalnum() or len(ext) > 5:
+            ext = "bin"
+        image_filename = f"{current['uid'].replace('/', '_')}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{os.urandom(4).hex()}.{ext}"
+        dest = os.path.join(UPLOAD_DIR, image_filename)
+        with open(dest, "wb") as f:
+            f.write(data)
+
+    post = await create_post(
+        author_uid=current["uid"],
+        body=body,
+        visibility=visibility,
+        image_path=image_filename,
+    )
+    return await _hydrate_post(post, current["uid"])
+
+
+@app.delete("/api/posts/{post_id}")
+async def delete_post_endpoint(post_id: str, current=Depends(get_current_user)):
+    ok = await delete_post(post_id, current["uid"])
+    if not ok:
+        raise HTTPException(status_code=404, detail="Post not found or not yours")
     return {"ok": True}

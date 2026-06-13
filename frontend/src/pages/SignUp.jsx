@@ -51,7 +51,7 @@ export default function SignUp() {
       const updated = await api.put('/users/me', payload);
       setUser(userObj);
       setProfile(updated.data);
-      navigate('/discovery');
+      navigate('/feed');
       return true;
     } catch (err) {
       const detail = err?.response?.data?.detail || err.message;
