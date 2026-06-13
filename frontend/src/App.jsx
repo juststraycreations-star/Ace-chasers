@@ -4,6 +4,7 @@ import Navigation from './components/Navigation';
 import Discovery from './pages/Discovery';
 import Messages from './pages/Messages';
 import Profile from './pages/Profile';
+import Likes from './pages/Likes';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 
@@ -14,7 +15,7 @@ function App() {
     <Router>
       <div className="min-h-screen bg-gray-50">
         {isAuthenticated && <Navigation />}
-        
+
         <Routes>
           {!isAuthenticated ? (
             <>
@@ -25,6 +26,7 @@ function App() {
           ) : (
             <>
               <Route path="/discovery" element={<Discovery />} />
+              <Route path="/likes" element={<Likes />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="*" element={<Navigate to="/discovery" replace />} />
