@@ -22,7 +22,9 @@ function timeAgo(iso) {
 export default function Feed() {
   const profile = useAuthStore((s) => s.profile);
   const [posts, setPosts] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [body, setBody] = useState('');
   const [visibility, setVisibility] = useState('public');
   const [imageFile, setImageFile] = useState(null);
@@ -34,11 +36,26 @@ export default function Feed() {
   const fetchFeed = async () => {
     try {
       const res = await api.get('/feed');
-      setPosts(res.data);
+      setPosts(res.data.posts);
+      setNextCursor(res.data.next_cursor);
     } catch (err) {
       setError(err?.response?.data?.detail || err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await api.get('/feed', { params: { before: nextCursor } });
+      setPosts((prev) => [...prev, ...res.data.posts]);
+      setNextCursor(res.data.next_cursor);
+    } catch (err) {
+      setError(err?.response?.data?.detail || err.message);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -54,7 +71,14 @@ export default function Feed() {
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setError('Image exceeds 5MB limit');
+      setError('Image exceeds the 5MB limit. Pick a smaller file or compress it.');
+      // Reset the input so the same file can be re-selected after fix.
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setError(`That doesn't look like an image (got ${file.type || 'unknown type'}).`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
     setError('');
@@ -115,6 +139,29 @@ export default function Feed() {
         className="bg-white rounded-2xl shadow-lg p-5 mb-8"
         data-testid="compose-form"
       >
+        {error && (
+          <div
+            className="mb-4 flex items-start gap-3 bg-red-50 border-2 border-red-300 rounded-lg px-4 py-3 text-sm text-red-800"
+            role="alert"
+            data-testid="compose-error"
+          >
+            <span className="text-lg leading-none" aria-hidden="true">⚠️</span>
+            <div className="flex-1">
+              <p className="font-semibold">Couldn&apos;t post</p>
+              <p>{error}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setError('')}
+              className="text-red-700 hover:text-red-900 font-bold leading-none"
+              aria-label="Dismiss"
+              data-testid="compose-error-dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <div className="flex gap-3">
           <img
             src={
@@ -193,12 +240,6 @@ export default function Feed() {
                 {posting ? 'Posting…' : 'Post'}
               </button>
             </div>
-
-            {error && (
-              <p className="mt-2 text-sm text-red-600" data-testid="compose-error">
-                {error}
-              </p>
-            )}
           </div>
         </div>
       </form>
@@ -274,6 +315,20 @@ export default function Feed() {
               )}
             </article>
           ))}
+
+          {nextCursor && (
+            <div className="flex justify-center pt-2">
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="border-2 border-disc-green text-disc-green hover:bg-disc-green hover:text-white font-semibold px-6 py-2 rounded-lg transition disabled:opacity-50"
+                data-testid="feed-load-more-btn"
+              >
+                {loadingMore ? 'Loading…' : 'Load more posts'}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

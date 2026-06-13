@@ -434,10 +434,24 @@ async def _hydrate_post(post: dict, viewer_uid: str) -> PostOut:
     )
 
 
-@app.get("/api/feed", response_model=List[PostOut])
-async def get_feed(current=Depends(get_current_user)):
-    raw_posts = await list_feed(current["uid"])
-    return [await _hydrate_post(p, current["uid"]) for p in raw_posts]
+FEED_PAGE_SIZE = 20
+
+
+@app.get("/api/feed")
+async def get_feed(
+    before: Optional[str] = None,
+    limit: int = FEED_PAGE_SIZE,
+    current=Depends(get_current_user),
+):
+    """Cursor-paginated feed. `before` is the ISO `created_at` of the last
+    item from the previous page; omit on first call. Response shape:
+    `{ posts, next_cursor }` where `next_cursor` is null when there are no
+    more posts."""
+    limit = max(1, min(limit, 50))
+    raw_posts = await list_feed(current["uid"], limit=limit, before=before)
+    hydrated = [await _hydrate_post(p, current["uid"]) for p in raw_posts]
+    next_cursor = raw_posts[-1]["created_at"] if len(raw_posts) == limit else None
+    return {"posts": hydrated, "next_cursor": next_cursor}
 
 
 @app.post("/api/posts", response_model=PostOut)

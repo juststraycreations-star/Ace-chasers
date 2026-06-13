@@ -65,20 +65,28 @@ async def create_post(
     return doc
 
 
-async def list_feed(viewer_uid: str, limit: int = 50) -> list[dict]:
+async def list_feed(
+    viewer_uid: str,
+    limit: int = 20,
+    before: Optional[str] = None,
+) -> list[dict]:
+    """Return posts visible to the viewer, newest first, paginated by an
+    ISO `created_at` cursor (`before` excluded)."""
     db = get_db()
     friends = await get_friend_uids(viewer_uid)
 
-    visibility_filter = {
+    query: dict = {
         "$or": [
             {"author_uid": viewer_uid},
             {"visibility": "public"},
             {"visibility": "friends_only", "author_uid": {"$in": friends}},
         ]
     }
+    if before:
+        query["created_at"] = {"$lt": before}
 
     posts = []
-    async for p in db.posts.find(visibility_filter).sort("created_at", -1).limit(limit):
+    async for p in db.posts.find(query).sort("created_at", -1).limit(limit):
         p.pop("_id", None)
         posts.append(p)
     return posts
