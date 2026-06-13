@@ -1,41 +1,42 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
-export const useAuthStore = create(
-  persist(
-    (set, get) => ({
+/**
+ * Holds the currently authenticated user (Firebase user mapped onto our
+ * profile schema) plus the API-loaded profile. NOT persisted - we rely on
+ * Firebase's own persistence + AuthProvider rehydration on every load.
+ */
+export const useAuthStore = create((set, get) => ({
+  user: null,            // { uid, email, name, photoURL }
+  profile: null,         // full profile loaded from /api/users/me
+  isAuthenticated: false,
+  authReady: false,      // becomes true once the first auth check completes
+  loading: false,
+  error: null,
+
+  setUser: (user) =>
+    set({
+      user,
+      isAuthenticated: Boolean(user),
+    }),
+
+  setProfile: (profile) => set({ profile }),
+
+  patchProfile: (patch) =>
+    set((state) => ({
+      profile: state.profile ? { ...state.profile, ...patch } : state.profile,
+    })),
+
+  setAuthReady: (ready) => set({ authReady: ready }),
+
+  reset: () =>
+    set({
       user: null,
+      profile: null,
       isAuthenticated: false,
       loading: false,
       error: null,
-
-      login: (userData) =>
-        set({
-          user: userData,
-          isAuthenticated: true,
-          error: null,
-        }),
-
-      logout: () =>
-        set({
-          user: null,
-          isAuthenticated: false,
-        }),
-
-      /**
-       * Merge partial fields into the authenticated user object.
-       */
-      updateUser: (patch) =>
-        set((state) => ({
-          user: state.user ? { ...state.user, ...patch } : state.user,
-        })),
-
-      setError: (error) => set({ error }),
-      setLoading: (loading) => set({ loading }),
     }),
-    {
-      name: 'ace-chasers-auth',
-      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
-    }
-  )
-);
+
+  setError: (error) => set({ error }),
+  setLoading: (loading) => set({ loading }),
+}));

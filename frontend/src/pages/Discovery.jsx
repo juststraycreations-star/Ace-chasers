@@ -1,24 +1,31 @@
+import { useEffect } from 'react';
 import { useMatchStore } from '../store/matchStore';
 import PlayerCard from '../components/PlayerCard';
-import { MOCK_PLAYERS } from '../data/mockPlayers';
 
 export default function Discovery() {
-  const { currentPlayerIndex, likedPlayers, passedPlayers, likePlayer, passPlayer } =
-    useMatchStore();
+  const { deck, loading, fetchDeck, likePlayer, passPlayer } = useMatchStore();
 
-  // Filter out players the user has already swiped on, then pick the current one.
-  const deck = MOCK_PLAYERS.filter(
-    (p) => !likedPlayers[p.id] && !passedPlayers[p.id]
-  );
+  useEffect(() => {
+    fetchDeck();
+  }, [fetchDeck]);
+
   const currentPlayer = deck[0];
 
-  const handleLike = (player) => {
-    likePlayer(player);
+  const handleLike = async (player) => {
+    await likePlayer(player);
   };
 
-  const handlePass = (player) => {
-    passPlayer(player);
+  const handlePass = async (player) => {
+    await passPlayer(player);
   };
+
+  if (loading && deck.length === 0) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-12" data-testid="discovery-loading">
+        <p className="text-center text-gray-500">Loading players…</p>
+      </div>
+    );
+  }
 
   if (!currentPlayer) {
     return (
@@ -35,6 +42,13 @@ export default function Discovery() {
     );
   }
 
+  // Map server profile -> PlayerCard expected shape (image instead of profilePictureUrl).
+  const cardPlayer = {
+    ...currentPlayer,
+    id: currentPlayer.uid,
+    image: currentPlayer.profilePictureUrl,
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-12" data-testid="discovery-view">
       <div className="text-center mb-8">
@@ -43,7 +57,11 @@ export default function Discovery() {
       </div>
 
       <div className="flex justify-center">
-        <PlayerCard player={currentPlayer} onLike={handleLike} onPass={handlePass} />
+        <PlayerCard
+          player={cardPlayer}
+          onLike={() => handleLike(currentPlayer)}
+          onPass={() => handlePass(currentPlayer)}
+        />
       </div>
     </div>
   );

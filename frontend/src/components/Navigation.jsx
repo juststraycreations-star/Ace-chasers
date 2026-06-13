@@ -1,20 +1,31 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { signOut } from 'firebase/auth';
 import { useAuthStore } from '../store/authStore';
+import { firebaseConfigured, getFirebaseAuth } from '../lib/firebase';
+import { clearDevSession } from '../lib/devAuth';
 
 export default function Navigation() {
   const location = useLocation();
-  const logout = useAuthStore((state) => state.logout);
+  const navigate = useNavigate();
+  const reset = useAuthStore((s) => s.reset);
 
   const isActive = (path) => location.pathname === path;
-
-  const handleLogout = () => {
-    logout();
-  };
-
   const linkClasses = (path) =>
-    `font-semibold transition ${
-      isActive(path) ? 'text-disc-gold' : 'hover:text-disc-gold'
-    }`;
+    `font-semibold transition ${isActive(path) ? 'text-disc-gold' : 'hover:text-disc-gold'}`;
+
+  const handleLogout = async () => {
+    if (firebaseConfigured) {
+      try {
+        await signOut(getFirebaseAuth());
+      } catch (err) {
+        console.warn('sign-out failed', err);
+      }
+    } else {
+      clearDevSession();
+    }
+    reset();
+    navigate('/login');
+  };
 
   return (
     <nav className="bg-disc-green text-white shadow-lg sticky top-0 z-50">
