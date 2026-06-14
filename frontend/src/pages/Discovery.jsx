@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useMatchStore } from '../store/matchStore';
 import { resolveImageUrl } from '../lib/images';
 
@@ -59,13 +60,19 @@ export default function Discovery() {
               className="relative rounded-3xl overflow-hidden shadow-xl bg-gray-900 group"
               data-testid={`discovery-card-${player.uid}`}
             >
-              {/* Full-bleed profile image */}
-              <img
-                src={image}
-                alt={player.name || 'Player'}
-                className="w-full h-[640px] object-cover"
-                loading="lazy"
-              />
+              {/* Full-bleed profile image — links to player profile */}
+              <Link
+                to={`/players/${player.uid}`}
+                aria-label={`Open ${player.name || 'player'}'s profile`}
+                data-testid={`discovery-photo-link-${player.uid}`}
+              >
+                <img
+                  src={image}
+                  alt={player.name || 'Player'}
+                  className="w-full h-[640px] object-cover hover:opacity-95 transition"
+                  loading="lazy"
+                />
+              </Link>
 
               {/* Top-of-card identity (subtle gradient so name reads on any photo) */}
               <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/70 via-black/30 to-transparent p-6 text-white pointer-events-none">

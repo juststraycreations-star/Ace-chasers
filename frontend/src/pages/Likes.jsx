@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useMatchStore } from '../store/matchStore';
 
 /**
@@ -57,11 +58,16 @@ export default function Likes() {
             className="bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col"
             data-testid={`liked-player-${player.uid}`}
           >
-            <div className="relative h-56 bg-gray-300">
+            <Link
+              to={`/players/${player.uid}`}
+              className="relative h-56 bg-gray-300 block"
+              aria-label={`Open ${player.name || 'player'}'s profile`}
+              data-testid={`liked-player-link-${player.uid}`}
+            >
               <img
                 src={player.profilePictureUrl}
                 alt={player.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover hover:opacity-95 transition"
               />
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-transparent to-transparent p-4">
                 <h2 className="text-2xl font-bold text-white">
@@ -78,7 +84,7 @@ export default function Likes() {
                   It&apos;s a match!
                 </div>
               )}
-            </div>
+            </Link>
 
             <div className="p-4 flex-1 flex flex-col">
               <div className="text-sm text-gray-600 space-y-1 mb-4">
