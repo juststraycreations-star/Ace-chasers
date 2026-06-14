@@ -7,6 +7,7 @@ import Discovery from './pages/Discovery';
 import Feed from './pages/Feed';
 import Messages from './pages/Messages';
 import Profile from './pages/Profile';
+import PlayerProfile from './pages/PlayerProfile';
 import Likes from './pages/Likes';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
@@ -42,6 +43,7 @@ function AppRoutes() {
             <Route path="/likes" element={<Likes />} />
             <Route path="/messages" element={<Messages />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/players/:uid" element={<PlayerProfile />} />
             <Route path="*" element={<Navigate to="/feed" replace />} />
           </>
         )}

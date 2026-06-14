@@ -282,26 +282,12 @@ export default function Feed() {
             >
               <header className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  {post.is_mine ? (
-                    <Link
-                      to="/profile"
-                      aria-label="Open your profile"
-                      className="rounded-full hover:ring-2 hover:ring-disc-green transition"
-                      data-testid={`post-avatar-link-${post.id}`}
-                    >
-                      <img
-                        src={
-                          post.author.profilePictureUrl
-                            ? (post.author.profilePictureUrl.startsWith('http')
-                                ? post.author.profilePictureUrl
-                                : `${BACKEND_URL}${post.author.profilePictureUrl}`)
-                            : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop'
-                        }
-                        alt={post.author.name || 'Player'}
-                        className="w-10 h-10 rounded-full object-cover"
-                      />
-                    </Link>
-                  ) : (
+                  <Link
+                    to={post.is_mine ? '/profile' : `/players/${post.author.uid}`}
+                    aria-label={`Open ${post.author.name || 'player'}'s profile`}
+                    className="rounded-full hover:ring-2 hover:ring-disc-green transition"
+                    data-testid={`post-avatar-link-${post.id}`}
+                  >
                     <img
                       src={
                         post.author.profilePictureUrl
@@ -313,11 +299,15 @@ export default function Feed() {
                       alt={post.author.name || 'Player'}
                       className="w-10 h-10 rounded-full object-cover"
                     />
-                  )}
+                  </Link>
                   <div>
-                    <p className="font-semibold text-gray-800" data-testid={`post-author-${post.id}`}>
+                    <Link
+                      to={post.is_mine ? '/profile' : `/players/${post.author.uid}`}
+                      className="font-semibold text-gray-800 hover:text-disc-green transition"
+                      data-testid={`post-author-${post.id}`}
+                    >
                       {post.author.name || 'Player'}
-                    </p>
+                    </Link>
                     <p className="text-xs text-gray-500 flex items-center gap-2">
                       <span>{timeAgo(post.created_at)}</span>
                       <span aria-hidden="true">·</span>

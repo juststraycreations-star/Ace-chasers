@@ -280,6 +280,22 @@ async def get_me(current=Depends(get_current_user)):
     return _user_to_profile(doc, email_verified=email_verified)
 
 
+@app.get("/api/users/{uid}", response_model=ProfileOut)
+async def get_user_by_uid(uid: str, current=Depends(get_current_user)):
+    """Public profile view of any user. Email is stripped unless it's the
+    caller's own record."""
+    db = get_db()
+    doc = await db.users.find_one({"uid": uid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Player not found")
+    is_self = uid == current["uid"]
+    profile = _user_to_profile(doc)
+    if not is_self:
+        profile.email = None
+        profile.emailVerified = False
+    return profile
+
+
 # --- Admin: invitations -----------------------------------------------------
 
 @app.get("/api/admin/invites")
