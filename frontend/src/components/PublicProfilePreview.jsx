@@ -1,62 +1,79 @@
+import { resolveImageUrl } from '../lib/images';
+
+const DEFAULT_AVATAR =
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop';
+
 /**
  * PublicProfilePreview
  *
- * Renders a profile in the same layout used by the discovery PlayerCard, so the
- * "preview" on the Profile page mirrors what other players see publicly.
- * Action buttons are intentionally omitted - this is read-only.
+ * Read-only view of a profile in the same shape other players see. The banner
+ * spans the top, the circular thumbnail overlaps it, and the public profile
+ * fields render below.
  */
 export default function PublicProfilePreview({ player }) {
   if (!player) return null;
+
+  const banner = resolveImageUrl(player.bannerUrl);
+  const avatar = resolveImageUrl(player.profilePictureUrl) || player.image || DEFAULT_AVATAR;
 
   return (
     <div
       className="bg-white rounded-2xl shadow-lg overflow-hidden max-w-sm mx-auto"
       data-testid="public-profile-preview"
     >
-      {/* Player Image */}
-      <div className="relative h-96 bg-gray-300">
-        <img
-          src={player.image || 'https://via.placeholder.com/400x400'}
-          alt={player.name}
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-transparent to-transparent p-6">
-          <h2 className="text-3xl font-bold text-white">
-            {player.name}, {player.age}
-          </h2>
-          <p className="text-disc-gold text-lg">{player.skillLevel}</p>
-        </div>
-      </div>
+      {/* Banner */}
+      <div
+        className="h-32 bg-gradient-to-r from-disc-green to-disc-purple bg-cover bg-center"
+        style={banner ? { backgroundImage: `url(${banner})` } : undefined}
+        data-testid="public-profile-banner"
+      />
 
-      {/* Player Info */}
-      <div className="p-6">
-        <div className="mb-4 space-y-2">
+      {/* Avatar + identity */}
+      <div className="px-6 pb-6 -mt-12">
+        <img
+          src={avatar}
+          alt={player.name || 'Profile'}
+          className="w-24 h-24 rounded-full border-4 border-white shadow-lg object-cover bg-gray-200"
+          data-testid="public-profile-thumbnail"
+        />
+        <div className="mt-2">
+          <h2 className="text-2xl font-bold text-gray-800">
+            {player.name}
+            {player.age ? `, ${player.age}` : ''}
+          </h2>
+          {player.skillLevel && (
+            <p className="text-disc-gold font-semibold">{player.skillLevel}</p>
+          )}
+        </div>
+
+        {/* Info */}
+        <div className="mt-4 space-y-2">
           {player.location && (
-            <p className="text-gray-600">
+            <p className="text-gray-600 text-sm">
               <span className="font-semibold text-gray-800">Location:</span> {player.location}
             </p>
           )}
           {player.favoriteCourse && (
-            <p className="text-gray-600">
+            <p className="text-gray-600 text-sm">
               <span className="font-semibold text-gray-800">Favorite Course:</span>{' '}
               {player.favoriteCourse}
             </p>
           )}
           {player.favoriteFrisbee && (
-            <p className="text-gray-600" data-testid="public-profile-favorite-frisbee">
+            <p className="text-gray-600 text-sm" data-testid="public-profile-favorite-frisbee">
               <span className="font-semibold text-gray-800">Favorite Frisbee:</span>{' '}
               {player.favoriteFrisbee}
             </p>
           )}
           {player.bio && (
-            <p className="text-gray-600">
+            <p className="text-gray-600 text-sm">
               <span className="font-semibold text-gray-800">Bio:</span> {player.bio}
             </p>
           )}
         </div>
 
         {player.interests && player.interests.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             {player.interests.map((interest) => (
               <span
                 key={interest}

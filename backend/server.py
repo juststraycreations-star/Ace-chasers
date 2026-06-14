@@ -82,6 +82,7 @@ class ProfileIn(BaseModel):
     bio: Optional[str] = None
     interests: Optional[List[str]] = None
     profilePictureUrl: Optional[str] = None
+    bannerUrl: Optional[str] = None
 
 
 class AuthSyncIn(BaseModel):
@@ -106,6 +107,7 @@ class ProfileOut(BaseModel):
     bio: Optional[str] = None
     interests: List[str] = Field(default_factory=list)
     profilePictureUrl: Optional[str] = None
+    bannerUrl: Optional[str] = None
 
 
 class SwipeIn(BaseModel):
@@ -152,6 +154,7 @@ def _user_to_profile(doc: dict, *, email_verified: Optional[bool] = None) -> Pro
         bio=doc.get("bio"),
         interests=doc.get("interests") or [],
         profilePictureUrl=doc.get("profilePictureUrl"),
+        bannerUrl=doc.get("bannerUrl"),
     )
 
 
@@ -290,6 +293,56 @@ async def update_me(payload: ProfileIn, current=Depends(get_current_user)):
     updates = {k: v for k, v in payload.model_dump(exclude_none=True).items()}
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.users.update_one({"uid": current["uid"]}, {"$set": updates}, upsert=True)
+    doc = await db.users.find_one({"uid": current["uid"]})
+    return _user_to_profile(doc, email_verified=_claims_email_verified(current.get("claims") or {}))
+
+
+async def _save_image_for_user(image: UploadFile, uid: str, prefix: str) -> str:
+    """Validate, persist to UPLOAD_DIR, return the public URL path."""
+    if image.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail=f"Unsupported image type: {image.content_type}")
+    data = await image.read()
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail="Image exceeds 5MB limit")
+    ext = (image.filename.rsplit(".", 1)[-1] or "bin").lower() if image.filename else "bin"
+    if not ext.isalnum() or len(ext) > 5:
+        ext = "bin"
+    safe_uid = uid.replace("/", "_")
+    filename = f"{prefix}-{safe_uid}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{os.urandom(4).hex()}.{ext}"
+    dest = os.path.join(UPLOAD_DIR, filename)
+    with open(dest, "wb") as f:
+        f.write(data)
+    return f"/api/uploads/{filename}"
+
+
+@app.post("/api/users/me/profile-picture", response_model=ProfileOut)
+async def upload_profile_picture(
+    image: UploadFile = File(...),
+    current=Depends(get_current_user),
+):
+    url = await _save_image_for_user(image, current["uid"], prefix="pic")
+    db = get_db()
+    await db.users.update_one(
+        {"uid": current["uid"]},
+        {"$set": {"profilePictureUrl": url, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    doc = await db.users.find_one({"uid": current["uid"]})
+    return _user_to_profile(doc, email_verified=_claims_email_verified(current.get("claims") or {}))
+
+
+@app.post("/api/users/me/banner", response_model=ProfileOut)
+async def upload_banner(
+    image: UploadFile = File(...),
+    current=Depends(get_current_user),
+):
+    url = await _save_image_for_user(image, current["uid"], prefix="banner")
+    db = get_db()
+    await db.users.update_one(
+        {"uid": current["uid"]},
+        {"$set": {"bannerUrl": url, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
     doc = await db.users.find_one({"uid": current["uid"]})
     return _user_to_profile(doc, email_verified=_claims_email_verified(current.get("claims") or {}))
 
