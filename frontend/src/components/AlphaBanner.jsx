@@ -8,7 +8,7 @@ import { useState } from 'react';
  *   form / bug tracker URL if you prefer.
  */
 const STORAGE_KEY = 'ace-alpha-banner-dismissed-v1';
-const CONTACT_HREF = 'mailto:hello@acechasers.net?subject=Ace%20Chasers%20feedback';
+const CONTACT_HREF = 'mailto:juststraycreations@gmail.com?subject=Ace%20Chasers%20feedback';
 
 export default function AlphaBanner() {
   const [dismissed, setDismissed] = useState(() => {
