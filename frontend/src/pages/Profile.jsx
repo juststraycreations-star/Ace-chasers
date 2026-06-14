@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../lib/api';
+import { compressImage } from '../lib/compressImage';
 import { resolveImageUrl } from '../lib/images';
 import PublicProfilePreview from '../components/PublicProfilePreview';
 
 const DEFAULT_INTERESTS = ['tournaments', 'hiking', 'casual play'];
 const DEFAULT_AVATAR =
   'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop';
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_RAW_BYTES = 30 * 1024 * 1024;
 
 export default function Profile() {
   const profile = useAuthStore((s) => s.profile);
@@ -35,7 +36,7 @@ export default function Profile() {
   const validateImage = (file) => {
     if (!file) return 'No file selected';
     if (!file.type.startsWith('image/')) return `That doesn't look like an image (${file.type || 'unknown type'}).`;
-    if (file.size > MAX_IMAGE_BYTES) return 'Image exceeds the 5MB limit. Pick a smaller file or compress it.';
+    if (file.size > MAX_RAW_BYTES) return 'Image is huge (>30MB). Pick a smaller file or take a fresh photo.';
     return null;
   };
 
@@ -48,8 +49,9 @@ export default function Profile() {
     setUploadError('');
     setUploadingType(kind);
     try {
+      const compressed = await compressImage(file, kind === 'avatar' ? 'avatar' : 'banner');
       const form = new FormData();
-      form.append('image', file);
+      form.append('image', compressed);
       const endpoint =
         kind === 'avatar' ? '/users/me/profile-picture' : '/users/me/banner';
       const res = await api.post(endpoint, form, {

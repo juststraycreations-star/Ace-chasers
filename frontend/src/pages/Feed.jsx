@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../lib/api';
+import { compressImage } from '../lib/compressImage';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const MAX_RAW_BYTES = 30 * 1024 * 1024;
 
 function fullImageUrl(path) {
   if (!path) return null;
@@ -63,17 +65,11 @@ export default function Feed() {
     fetchFeed();
   }, []);
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) {
       setImageFile(null);
       setImagePreview(null);
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Image exceeds the 5MB limit. Pick a smaller file or compress it.');
-      // Reset the input so the same file can be re-selected after fix.
-      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
     if (!file.type.startsWith('image/')) {
@@ -81,9 +77,20 @@ export default function Feed() {
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
+    if (file.size > MAX_RAW_BYTES) {
+      setError('Image is huge (>30MB). Pick a smaller file or take a fresh photo.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
     setError('');
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+    try {
+      const compressed = await compressImage(file, 'post');
+      setImageFile(compressed);
+      setImagePreview(URL.createObjectURL(compressed));
+    } catch (err) {
+      setError(err?.message || 'Could not process that image.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const clearImage = () => {
