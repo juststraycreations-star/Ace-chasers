@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../lib/api';
 import { compressImage } from '../lib/compressImage';
+import AlphaBanner from '../components/AlphaBanner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const MAX_RAW_BYTES = 30 * 1024 * 1024;
@@ -139,6 +140,7 @@ export default function Feed() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8" data-testid="feed-view">
+      <AlphaBanner />
       <h1 className="text-4xl font-bold text-disc-green mb-6">Feed</h1>
 
       {/* Compose box */}
