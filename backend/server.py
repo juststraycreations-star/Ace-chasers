@@ -46,12 +46,14 @@ from invites import (  # noqa: E402
 from posts import (  # noqa: E402
     ALLOWED_IMAGE_TYPES,
     MAX_IMAGE_BYTES,
+    MIME_TO_EXT,
     UPLOAD_DIR,
     create_post,
     delete_post,
     ensure_indexes as ensure_post_indexes,
     get_latest_public_post,
     list_feed,
+    sniff_image_mime,
 )
 
 logger = logging.getLogger("server")
@@ -74,16 +76,16 @@ app.mount("/api/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # --- Models -----------------------------------------------------------------
 
 class ProfileIn(BaseModel):
-    name: Optional[str] = None
-    age: Optional[int] = None
-    skillLevel: Optional[str] = None
-    location: Optional[str] = None
-    favoriteCourse: Optional[str] = None
-    favoriteFrisbee: Optional[str] = None
-    bio: Optional[str] = None
-    interests: Optional[List[str]] = None
-    profilePictureUrl: Optional[str] = None
-    bannerUrl: Optional[str] = None
+    name: Optional[str] = Field(default=None, max_length=80)
+    age: Optional[int] = Field(default=None, ge=13, le=120)
+    skillLevel: Optional[str] = Field(default=None, max_length=20)
+    location: Optional[str] = Field(default=None, max_length=120)
+    favoriteCourse: Optional[str] = Field(default=None, max_length=120)
+    favoriteFrisbee: Optional[str] = Field(default=None, max_length=120)
+    bio: Optional[str] = Field(default=None, max_length=1000)
+    interests: Optional[List[str]] = Field(default=None, max_length=20)
+    profilePictureUrl: Optional[str] = Field(default=None, max_length=500)
+    bannerUrl: Optional[str] = Field(default=None, max_length=500)
 
 
 class AuthSyncIn(BaseModel):
@@ -327,15 +329,15 @@ async def update_me(payload: ProfileIn, current=Depends(get_current_user)):
 
 
 async def _save_image_for_user(image: UploadFile, uid: str, prefix: str) -> str:
-    """Validate, persist to UPLOAD_DIR, return the public URL path."""
-    if image.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail=f"Unsupported image type: {image.content_type}")
+    """Validate by sniffing magic bytes, persist to UPLOAD_DIR with a
+    server-controlled filename + extension, return the public URL path."""
     data = await image.read()
     if len(data) > MAX_IMAGE_BYTES:
         raise HTTPException(status_code=400, detail="Image exceeds 5MB limit")
-    ext = (image.filename.rsplit(".", 1)[-1] or "bin").lower() if image.filename else "bin"
-    if not ext.isalnum() or len(ext) > 5:
-        ext = "bin"
+    real_mime = sniff_image_mime(data)
+    if real_mime is None:
+        raise HTTPException(status_code=400, detail="File is not a supported image (jpeg/png/webp/gif)")
+    ext = MIME_TO_EXT[real_mime]
     safe_uid = uid.replace("/", "_")
     filename = f"{prefix}-{safe_uid}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{os.urandom(4).hex()}.{ext}"
     dest = os.path.join(UPLOAD_DIR, filename)
@@ -561,15 +563,13 @@ async def create_post_endpoint(
 
     image_filename: Optional[str] = None
     if image is not None and image.filename:
-        if image.content_type not in ALLOWED_IMAGE_TYPES:
-            raise HTTPException(status_code=400, detail=f"Unsupported image type: {image.content_type}")
         data = await image.read()
         if len(data) > MAX_IMAGE_BYTES:
             raise HTTPException(status_code=400, detail="Image exceeds 5MB limit")
-        ext = (image.filename.rsplit(".", 1)[-1] or "bin").lower()
-        # Sanitize: only allow letters/digits in the extension we keep
-        if not ext.isalnum() or len(ext) > 5:
-            ext = "bin"
+        real_mime = sniff_image_mime(data)
+        if real_mime is None:
+            raise HTTPException(status_code=400, detail="File is not a supported image (jpeg/png/webp/gif)")
+        ext = MIME_TO_EXT[real_mime]
         image_filename = f"{current['uid'].replace('/', '_')}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{os.urandom(4).hex()}.{ext}"
         dest = os.path.join(UPLOAD_DIR, image_filename)
         with open(dest, "wb") as f:

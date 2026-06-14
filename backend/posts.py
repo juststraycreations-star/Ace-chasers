@@ -20,6 +20,34 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp", "im
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB
 
 
+# Validated MIME -> safe extension. The client-supplied filename extension is
+# ignored to prevent an attacker from uploading a `.html` masquerading as an
+# image and getting it served back by the StaticFiles mount.
+MIME_TO_EXT = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+}
+
+
+def sniff_image_mime(data: bytes) -> Optional[str]:
+    """Inspect magic bytes to determine the real image MIME type.
+    Returns None for unrecognized formats."""
+    if len(data) < 12:
+        return None
+    if data[0:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[0:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[0:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if data[0:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 

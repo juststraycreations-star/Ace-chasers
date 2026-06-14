@@ -41,12 +41,21 @@ def init_firebase() -> bool:
         return False
 
     sa_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
-    if not sa_path or not os.path.exists(sa_path):
+    if not sa_path:
         logger.warning(
-            "FIREBASE_SERVICE_ACCOUNT_JSON not set or file missing — running in "
-            "INSECURE DEV MODE (tokens decoded without verification)."
+            "FIREBASE_SERVICE_ACCOUNT_JSON not set — running in INSECURE DEV "
+            "MODE (tokens decoded without verification). Set ENV=prod to "
+            "disable this fallback."
         )
         return False
+
+    # If an admin path is configured but unreadable, fail hard rather than
+    # silently dropping into insecure-decode mode.
+    if not os.path.exists(sa_path):
+        raise RuntimeError(
+            f"FIREBASE_SERVICE_ACCOUNT_JSON points to {sa_path!r} but the file "
+            f"does not exist. Refusing to start to avoid silent insecure-decode."
+        )
 
     try:
         if not firebase_admin._apps:
@@ -55,13 +64,18 @@ def init_firebase() -> bool:
         _FIREBASE_READY = True
         logger.info("firebase-admin initialized from %s", sa_path)
         return True
-    except Exception as exc:  # pragma: no cover
-        logger.error("Failed to init firebase-admin: %s", exc)
-        return False
+    except Exception as exc:
+        # Service account configured but failed to load — also fail hard.
+        raise RuntimeError(f"Failed to init firebase-admin from {sa_path}: {exc}") from exc
 
 
 def _decode_unverified(token: str) -> dict:
     """Decode the JWT payload without verifying signature (dev mode only)."""
+    if os.environ.get("ENV", "").lower() in {"prod", "production"}:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auth not configured: refusing to accept unverified tokens in production.",
+        )
     try:
         return jwt.decode(token, options={"verify_signature": False})
     except Exception as exc:
