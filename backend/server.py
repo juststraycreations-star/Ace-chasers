@@ -455,7 +455,7 @@ async def post_swipe(payload: SwipeIn, current=Depends(get_current_user)):
 @app.get("/api/likes", response_model=List[LikeOut])
 async def list_likes(current=Depends(get_current_user)):
     db = get_db()
-    cursor = db.swipes.find({"from_uid": current["uid"], "action": "like"}).sort("created_at", -1)
+    cursor = db.swipes.find({"from_uid": current["uid"], "action": "like"}).sort("created_at", -1).limit(200)
     out: list[LikeOut] = []
     async for swipe in cursor:
         target = await db.users.find_one({"uid": swipe["to_uid"]})
