@@ -44,6 +44,18 @@ async def get_friend_uids(uid: str) -> list[str]:
     return out
 
 
+async def get_latest_public_post(author_uid: str) -> Optional[dict]:
+    """Most recent public post by `author_uid`, or None."""
+    db = get_db()
+    doc = await db.posts.find_one(
+        {"author_uid": author_uid, "visibility": "public"},
+        sort=[("created_at", -1)],
+    )
+    if doc:
+        doc.pop("_id", None)
+    return doc
+
+
 async def create_post(
     *,
     author_uid: str,

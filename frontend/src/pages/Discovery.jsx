@@ -87,6 +87,19 @@ export default function Discovery() {
                   </p>
                 )}
 
+                {player.recent_post && (
+                  <div
+                    className="mb-3 bg-white/15 backdrop-blur-sm border border-white/20 rounded-xl px-3 py-2 text-sm"
+                    data-testid={`discovery-recent-post-${player.uid}`}
+                  >
+                    <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/70 mb-1">
+                      <span>📣 Latest post</span>
+                      {player.recent_post.has_image && <span aria-hidden="true">📷</span>}
+                    </div>
+                    <p className="text-white/95 line-clamp-2">{player.recent_post.body || '(photo only)'}</p>
+                  </div>
+                )}
+
                 <div className="text-sm space-y-1 mb-3 text-white/85">
                   {player.location && (
                     <p>

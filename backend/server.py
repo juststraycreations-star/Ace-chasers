@@ -50,6 +50,7 @@ from posts import (  # noqa: E402
     create_post,
     delete_post,
     ensure_indexes as ensure_post_indexes,
+    get_latest_public_post,
     list_feed,
 )
 
@@ -126,6 +127,18 @@ class PostAuthor(BaseModel):
     uid: str
     name: Optional[str] = None
     profilePictureUrl: Optional[str] = None
+
+
+class RecentPost(BaseModel):
+    id: str
+    body: str
+    created_at: str
+    has_image: bool = False
+
+
+class DiscoveryProfile(ProfileOut):
+    """ProfileOut + the player's most recent public post (if any)."""
+    recent_post: Optional[RecentPost] = None
 
 
 class PostOut(BaseModel):
@@ -347,7 +360,7 @@ async def upload_banner(
     return _user_to_profile(doc, email_verified=_claims_email_verified(current.get("claims") or {}))
 
 
-@app.get("/api/discovery", response_model=List[ProfileOut])
+@app.get("/api/discovery", response_model=List[DiscoveryProfile])
 async def discovery(current=Depends(get_current_user)):
     db = get_db()
     # Players already swiped on by the caller
@@ -356,9 +369,19 @@ async def discovery(current=Depends(get_current_user)):
     exclude = set(swiped_uids + [current["uid"]])
 
     cursor = db.users.find({"uid": {"$nin": list(exclude)}}).limit(50)
-    out: list[ProfileOut] = []
+    out: list[DiscoveryProfile] = []
     async for doc in cursor:
-        out.append(_user_to_profile(doc))
+        base = _user_to_profile(doc)
+        post = await get_latest_public_post(doc["uid"])
+        recent = None
+        if post:
+            recent = RecentPost(
+                id=post["id"],
+                body=post.get("body") or "",
+                created_at=post.get("created_at") or "",
+                has_image=bool(post.get("image_path")),
+            )
+        out.append(DiscoveryProfile(**base.model_dump(), recent_post=recent))
     return out
 
 
