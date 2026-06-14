@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../lib/api';
 import { compressImage } from '../lib/compressImage';
@@ -170,14 +171,24 @@ export default function Feed() {
         )}
 
         <div className="flex gap-3">
-          <img
-            src={
-              profile?.profilePictureUrl ||
-              'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop'
-            }
-            alt="You"
-            className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-          />
+          <Link
+            to="/profile"
+            aria-label="Open your profile"
+            className="flex-shrink-0 rounded-full ring-offset-2 hover:ring-2 hover:ring-disc-green transition"
+            data-testid="compose-avatar-link"
+          >
+            <img
+              src={
+                profile?.profilePictureUrl
+                  ? (profile.profilePictureUrl.startsWith('http')
+                      ? profile.profilePictureUrl
+                      : `${BACKEND_URL}${profile.profilePictureUrl}`)
+                  : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop'
+              }
+              alt="You"
+              className="w-12 h-12 rounded-full object-cover"
+            />
+          </Link>
           <div className="flex-1">
             <textarea
               value={body}
@@ -271,14 +282,38 @@ export default function Feed() {
             >
               <header className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <img
-                    src={
-                      post.author.profilePictureUrl ||
-                      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop'
-                    }
-                    alt={post.author.name || 'Player'}
-                    className="w-10 h-10 rounded-full object-cover"
-                  />
+                  {post.is_mine ? (
+                    <Link
+                      to="/profile"
+                      aria-label="Open your profile"
+                      className="rounded-full hover:ring-2 hover:ring-disc-green transition"
+                      data-testid={`post-avatar-link-${post.id}`}
+                    >
+                      <img
+                        src={
+                          post.author.profilePictureUrl
+                            ? (post.author.profilePictureUrl.startsWith('http')
+                                ? post.author.profilePictureUrl
+                                : `${BACKEND_URL}${post.author.profilePictureUrl}`)
+                            : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop'
+                        }
+                        alt={post.author.name || 'Player'}
+                        className="w-10 h-10 rounded-full object-cover"
+                      />
+                    </Link>
+                  ) : (
+                    <img
+                      src={
+                        post.author.profilePictureUrl
+                          ? (post.author.profilePictureUrl.startsWith('http')
+                              ? post.author.profilePictureUrl
+                              : `${BACKEND_URL}${post.author.profilePictureUrl}`)
+                          : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop'
+                      }
+                      alt={post.author.name || 'Player'}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  )}
                   <div>
                     <p className="font-semibold text-gray-800" data-testid={`post-author-${post.id}`}>
                       {post.author.name || 'Player'}
