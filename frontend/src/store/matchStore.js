@@ -55,6 +55,45 @@ export const useMatchStore = create((set, get) => ({
   likePlayer: (player) => get().swipe(player, 'like'),
   passPlayer: (player) => get().swipe(player, 'pass'),
 
+  sendFriendRequest: async (player) => {
+    if (!player) return { matched: false };
+    set((state) => ({ deck: state.deck.filter((p) => p.uid !== player.uid) }));
+    try {
+      const res = await api.post(`/friend-requests/${player.uid}`);
+      await get().fetchLikes();
+      return res.data;
+    } catch (err) {
+      set({ error: err?.response?.data?.detail || err.message });
+      return { matched: false };
+    }
+  },
+
+  inbox: { incoming_likes: [], incoming_friend_requests: [] },
+  fetchInbox: async () => {
+    try {
+      const res = await api.get('/inbox');
+      set({ inbox: res.data });
+    } catch (err) {
+      set({ error: err?.response?.data?.detail || err.message });
+    }
+  },
+  acceptFriendRequest: async (fromUid) => {
+    try {
+      await api.post(`/friend-requests/${fromUid}/accept`);
+      await Promise.all([get().fetchInbox(), get().fetchLikes()]);
+    } catch (err) {
+      set({ error: err?.response?.data?.detail || err.message });
+    }
+  },
+  declineFriendRequest: async (fromUid) => {
+    try {
+      await api.post(`/friend-requests/${fromUid}/decline`);
+      await get().fetchInbox();
+    } catch (err) {
+      set({ error: err?.response?.data?.detail || err.message });
+    }
+  },
+
   addFriend: async (uid) => {
     try {
       await api.post(`/matches/${uid}/friend`);
@@ -74,5 +113,5 @@ export const useMatchStore = create((set, get) => ({
     }
   },
 
-  reset: () => set({ deck: [], likes: [], loading: false, error: null }),
+  reset: () => set({ deck: [], likes: [], inbox: { incoming_likes: [], incoming_friend_requests: [] }, loading: false, error: null }),
 }));

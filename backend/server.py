@@ -45,7 +45,9 @@ from invites import (  # noqa: E402
 )
 from posts import (  # noqa: E402
     ALLOWED_IMAGE_TYPES,
+    ALLOWED_VIDEO_TYPES,
     MAX_IMAGE_BYTES,
+    MAX_VIDEO_BYTES,
     MIME_TO_EXT,
     UPLOAD_DIR,
     create_post,
@@ -54,6 +56,7 @@ from posts import (  # noqa: E402
     get_latest_public_post,
     list_feed,
     sniff_image_mime,
+    sniff_video_mime,
 )
 
 logger = logging.getLogger("server")
@@ -151,10 +154,26 @@ class PostOut(BaseModel):
     id: str
     body: str
     image_url: Optional[str] = None
+    video_url: Optional[str] = None
     visibility: Literal["public", "friends_only"]
     created_at: str
     author: PostAuthor
     is_mine: bool = False
+
+
+class FriendRequestOut(BaseModel):
+    from_user: ProfileOut
+    created_at: str
+
+
+class IncomingLikeOut(BaseModel):
+    from_user: ProfileOut
+    liked_at: str
+
+
+class InboxOut(BaseModel):
+    incoming_likes: List[IncomingLikeOut] = Field(default_factory=list)
+    incoming_friend_requests: List[FriendRequestOut] = Field(default_factory=list)
 
 
 # --- Helpers ----------------------------------------------------------------
@@ -540,10 +559,14 @@ async def _hydrate_post(post: dict, viewer_uid: str) -> PostOut:
     if post.get("image_path"):
         # image_path stored as plain filename; expose via /api/uploads/<file>.
         image_url = f"/api/uploads/{post['image_path']}"
+    video_url = None
+    if post.get("video_path"):
+        video_url = f"/api/uploads/{post['video_path']}"
     return PostOut(
         id=post["id"],
         body=post.get("body", ""),
         image_url=image_url,
+        video_url=video_url,
         visibility=post.get("visibility", "public"),
         created_at=post.get("created_at", ""),
         author=author_obj,
@@ -576,33 +599,51 @@ async def create_post_endpoint(
     body: str = Form(""),
     visibility: Literal["public", "friends_only"] = Form("public"),
     image: Optional[UploadFile] = File(default=None),
+    media: Optional[UploadFile] = File(default=None),
     current=Depends(get_current_user),
 ):
     body = (body or "").strip()
-    if not body and image is None:
-        raise HTTPException(status_code=400, detail="Post must include text or an image")
+    upload = media if (media is not None and media.filename) else image
+    if not body and (upload is None or not upload.filename):
+        raise HTTPException(status_code=400, detail="Post must include text, a photo, or a video")
     if len(body) > POST_BODY_MAX:
         raise HTTPException(status_code=400, detail=f"Post text capped at {POST_BODY_MAX} characters")
 
     image_filename: Optional[str] = None
-    if image is not None and image.filename:
-        data = await image.read()
-        if len(data) > MAX_IMAGE_BYTES:
-            raise HTTPException(status_code=400, detail="Image exceeds 5MB limit")
+    video_filename: Optional[str] = None
+    if upload is not None and upload.filename:
+        data = await upload.read()
+        # Sniff image first (cheap), then video. Reject anything else.
         real_mime = sniff_image_mime(data)
+        is_video = False
         if real_mime is None:
-            raise HTTPException(status_code=400, detail="File is not a supported image (jpeg/png/webp/gif)")
+            real_mime = sniff_video_mime(data)
+            is_video = real_mime is not None
+        if real_mime is None:
+            raise HTTPException(status_code=400, detail="File is not a supported image (jpeg/png/webp/gif) or video (mp4/webm/mov)")
+        if is_video:
+            if len(data) > MAX_VIDEO_BYTES:
+                raise HTTPException(status_code=400, detail="Video exceeds 25MB limit")
+        else:
+            if len(data) > MAX_IMAGE_BYTES:
+                raise HTTPException(status_code=400, detail="Image exceeds 5MB limit")
         ext = MIME_TO_EXT[real_mime]
-        image_filename = f"{current['uid'].replace('/', '_')}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{os.urandom(4).hex()}.{ext}"
-        dest = os.path.join(UPLOAD_DIR, image_filename)
+        prefix = "vid" if is_video else "img"
+        fname = f"{prefix}-{current['uid'].replace('/', '_')}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{os.urandom(4).hex()}.{ext}"
+        dest = os.path.join(UPLOAD_DIR, fname)
         with open(dest, "wb") as f:
             f.write(data)
+        if is_video:
+            video_filename = fname
+        else:
+            image_filename = fname
 
     post = await create_post(
         author_uid=current["uid"],
         body=body,
         visibility=visibility,
         image_path=image_filename,
+        video_path=video_filename,
     )
     return await _hydrate_post(post, current["uid"])
 
@@ -613,3 +654,151 @@ async def delete_post_endpoint(post_id: str, current=Depends(get_current_user)):
     if not ok:
         raise HTTPException(status_code=404, detail="Post not found or not yours")
     return {"ok": True}
+
+
+
+# --- Friend requests + inbox ------------------------------------------------
+
+@app.post("/api/friend-requests/{target_uid}")
+async def send_friend_request(target_uid: str, current=Depends(get_current_user)):
+    """Send a friend request. Also records a 'like' swipe so the existing
+    match flow still works. If the target already has a pending request out
+    to me OR has already liked me, we auto-accept the friendship: a match is
+    created with both users in `friended_by`."""
+    db = get_db()
+    if target_uid == current["uid"]:
+        raise HTTPException(status_code=400, detail="Cannot friend yourself")
+    target = await db.users.find_one({"uid": target_uid})
+    if not target:
+        raise HTTPException(status_code=404, detail="Target user not found")
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Always also record a like swipe (idempotent).
+    await db.swipes.update_one(
+        {"from_uid": current["uid"], "to_uid": target_uid},
+        {"$set": {"from_uid": current["uid"], "to_uid": target_uid, "action": "like", "created_at": now}},
+        upsert=True,
+    )
+
+    # Did THEY already send me a friend request, OR already like me? -> auto-friend.
+    reverse_req = await db.friend_requests.find_one({"from_uid": target_uid, "to_uid": current["uid"]})
+    reverse_like = await db.swipes.find_one(
+        {"from_uid": target_uid, "to_uid": current["uid"], "action": "like"}
+    )
+    auto_accept = reverse_req is not None or reverse_like is not None
+
+    if auto_accept:
+        a, b = _match_key(current["uid"], target_uid)
+        await db.matches.update_one(
+            {"user_a": a, "user_b": b},
+            {
+                "$setOnInsert": {"user_a": a, "user_b": b, "friended_by": [], "created_at": now},
+            },
+            upsert=True,
+        )
+        # Both intent to friend -> both added.
+        if reverse_req is not None:
+            await db.matches.update_one(
+                {"user_a": a, "user_b": b},
+                {"$addToSet": {"friended_by": {"$each": [current["uid"], target_uid]}}},
+            )
+            await db.friend_requests.delete_one({"from_uid": target_uid, "to_uid": current["uid"]})
+        else:
+            # Only I sent a request; just add me.
+            await db.matches.update_one(
+                {"user_a": a, "user_b": b},
+                {"$addToSet": {"friended_by": current["uid"]}},
+            )
+        return {"ok": True, "matched": True, "friended": reverse_req is not None}
+
+    await db.friend_requests.update_one(
+        {"from_uid": current["uid"], "to_uid": target_uid},
+        {"$set": {"from_uid": current["uid"], "to_uid": target_uid, "created_at": now}},
+        upsert=True,
+    )
+    return {"ok": True, "matched": False, "friended": False}
+
+
+@app.post("/api/friend-requests/{from_uid}/accept")
+async def accept_friend_request(from_uid: str, current=Depends(get_current_user)):
+    db = get_db()
+    req = await db.friend_requests.find_one({"from_uid": from_uid, "to_uid": current["uid"]})
+    if not req:
+        raise HTTPException(status_code=404, detail="No pending request from that user")
+
+    now = datetime.now(timezone.utc).isoformat()
+    # Also record a like FROM me so likes/matches stay consistent.
+    await db.swipes.update_one(
+        {"from_uid": current["uid"], "to_uid": from_uid},
+        {"$set": {"from_uid": current["uid"], "to_uid": from_uid, "action": "like", "created_at": now}},
+        upsert=True,
+    )
+
+    a, b = _match_key(current["uid"], from_uid)
+    await db.matches.update_one(
+        {"user_a": a, "user_b": b},
+        {
+            "$setOnInsert": {"user_a": a, "user_b": b, "friended_by": [], "created_at": now},
+        },
+        upsert=True,
+    )
+    await db.matches.update_one(
+        {"user_a": a, "user_b": b},
+        {"$addToSet": {"friended_by": {"$each": [current["uid"], from_uid]}}},
+    )
+    await db.friend_requests.delete_one({"from_uid": from_uid, "to_uid": current["uid"]})
+    return {"ok": True}
+
+
+@app.post("/api/friend-requests/{from_uid}/decline")
+async def decline_friend_request(from_uid: str, current=Depends(get_current_user)):
+    db = get_db()
+    res = await db.friend_requests.delete_one({"from_uid": from_uid, "to_uid": current["uid"]})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="No pending request from that user")
+    return {"ok": True}
+
+
+@app.get("/api/inbox", response_model=InboxOut)
+async def get_inbox(current=Depends(get_current_user)):
+    """Notifications surfaced to the caller: people who liked you (and you
+    haven't liked them back) + pending friend requests sent to you."""
+    db = get_db()
+    me = current["uid"]
+
+    # Pending friend requests TO me.
+    fr_out: list[FriendRequestOut] = []
+    fr_from_uids: set[str] = set()
+    async for req in db.friend_requests.find({"to_uid": me}).sort("created_at", -1).limit(200):
+        sender = await db.users.find_one({"uid": req["from_uid"]})
+        if not sender:
+            continue
+        prof = _user_to_profile(sender)
+        _strip_private_fields(prof)
+        prof.email = None
+        prof.emailVerified = False
+        fr_out.append(FriendRequestOut(from_user=prof, created_at=req.get("created_at", "")))
+        fr_from_uids.add(req["from_uid"])
+
+    # Incoming likes where I haven't liked them back.
+    my_likes_cursor = db.swipes.find({"from_uid": me, "action": "like"}, {"to_uid": 1})
+    my_like_targets = {d["to_uid"] async for d in my_likes_cursor}
+
+    likes_out: list[IncomingLikeOut] = []
+    async for swipe in db.swipes.find({"to_uid": me, "action": "like"}).sort("created_at", -1).limit(200):
+        from_uid = swipe["from_uid"]
+        if from_uid in my_like_targets:
+            continue  # mutual already -> shows up under matches
+        if from_uid in fr_from_uids:
+            continue  # they sent a friend request -> shown in FR section
+        sender = await db.users.find_one({"uid": from_uid})
+        if not sender:
+            continue
+        prof = _user_to_profile(sender)
+        _strip_private_fields(prof)
+        prof.email = None
+        prof.emailVerified = False
+        likes_out.append(IncomingLikeOut(from_user=prof, liked_at=swipe.get("created_at", "")))
+
+    return InboxOut(incoming_likes=likes_out, incoming_friend_requests=fr_out)

@@ -6,7 +6,9 @@ import { compressImage } from '../lib/compressImage';
 import AlphaBanner from '../components/AlphaBanner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const MAX_RAW_BYTES = 30 * 1024 * 1024;
+const MAX_RAW_IMAGE_BYTES = 30 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
+const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
 function fullImageUrl(path) {
   if (!path) return null;
@@ -33,9 +35,12 @@ export default function Feed() {
   const [visibility, setVisibility] = useState('public');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [videoFile, setVideoFile] = useState(null);
+  const [videoPreview, setVideoPreview] = useState(null);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = useRef(null);
+  const videoInputRef = useRef(null);
 
   const fetchFeed = async () => {
     try {
@@ -79,12 +84,16 @@ export default function Feed() {
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
-    if (file.size > MAX_RAW_BYTES) {
+    if (file.size > MAX_RAW_IMAGE_BYTES) {
       setError('Image is huge (>30MB). Pick a smaller file or take a fresh photo.');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
     setError('');
+    // Photo replaces any pending video.
+    setVideoFile(null);
+    setVideoPreview(null);
+    if (videoInputRef.current) videoInputRef.current.value = '';
     try {
       const compressed = await compressImage(file, 'post');
       setImageFile(compressed);
@@ -95,17 +104,49 @@ export default function Feed() {
     }
   };
 
+  const handleVideoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setVideoFile(null);
+      setVideoPreview(null);
+      return;
+    }
+    if (!ACCEPTED_VIDEO_TYPES.includes(file.type) && !file.name.match(/\.(mp4|webm|mov)$/i)) {
+      setError(`Unsupported video format (got ${file.type || 'unknown type'}). Use mp4, webm, or mov.`);
+      if (videoInputRef.current) videoInputRef.current.value = '';
+      return;
+    }
+    if (file.size > MAX_VIDEO_BYTES) {
+      setError(`Video is too large (max ${Math.round(MAX_VIDEO_BYTES / 1024 / 1024)}MB).`);
+      if (videoInputRef.current) videoInputRef.current.value = '';
+      return;
+    }
+    setError('');
+    // Video replaces any pending photo.
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setVideoFile(file);
+    setVideoPreview(URL.createObjectURL(file));
+  };
+
   const clearImage = () => {
     setImageFile(null);
     setImagePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const clearVideo = () => {
+    setVideoFile(null);
+    setVideoPreview(null);
+    if (videoInputRef.current) videoInputRef.current.value = '';
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!body.trim() && !imageFile) {
-      setError('Add some text or a photo first.');
+    if (!body.trim() && !imageFile && !videoFile) {
+      setError('Add some text, a photo, or a video first.');
       return;
     }
     setPosting(true);
@@ -114,6 +155,7 @@ export default function Feed() {
       form.append('body', body);
       form.append('visibility', visibility);
       if (imageFile) form.append('image', imageFile);
+      if (videoFile) form.append('media', videoFile);
       const res = await api.post('/posts', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
@@ -121,6 +163,7 @@ export default function Feed() {
       setBody('');
       setVisibility('public');
       clearImage();
+      clearVideo();
     } catch (err) {
       setError(err?.response?.data?.detail || err.message);
     } finally {
@@ -221,6 +264,25 @@ export default function Feed() {
               </div>
             )}
 
+            {videoPreview && (
+              <div className="relative mt-3 inline-block" data-testid="compose-video-preview">
+                <video
+                  src={videoPreview}
+                  controls
+                  className="max-h-60 rounded-lg border border-gray-200 bg-black"
+                />
+                <button
+                  type="button"
+                  onClick={clearVideo}
+                  className="absolute top-1 right-1 bg-black/70 hover:bg-black text-white rounded-full w-6 h-6 text-xs"
+                  data-testid="compose-remove-video-btn"
+                  aria-label="Remove video"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <input
@@ -238,6 +300,23 @@ export default function Feed() {
                   data-testid="compose-add-photo-btn"
                 >
                   📷 Photo
+                </button>
+
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/mp4,video/webm,video/quicktime"
+                  onChange={handleVideoChange}
+                  className="hidden"
+                  data-testid="compose-video-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => videoInputRef.current?.click()}
+                  className="text-disc-green hover:text-disc-green/80 font-semibold text-sm flex items-center gap-1"
+                  data-testid="compose-add-video-btn"
+                >
+                  🎬 Video
                 </button>
 
                 <select
@@ -345,6 +424,15 @@ export default function Feed() {
                   alt="post"
                   className="rounded-lg max-h-[480px] w-full object-cover"
                   data-testid={`post-image-${post.id}`}
+                />
+              )}
+              {post.video_url && (
+                <video
+                  src={fullImageUrl(post.video_url)}
+                  controls
+                  preload="metadata"
+                  className="rounded-lg max-h-[520px] w-full bg-black"
+                  data-testid={`post-video-${post.id}`}
                 />
               )}
             </article>

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMatchStore } from '../store/matchStore';
 import { resolveImageUrl } from '../lib/images';
@@ -7,21 +7,39 @@ const DEFAULT_AVATAR =
   'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&h=1000&fit=crop';
 
 /**
- * Discovery page — a vertically scrollable feed of player cards.
- * Each card uses the player's profile picture as a full-bleed background;
- * their bio and the rest of their public profile sits on top of the photo
- * inside a darkened gradient panel for legibility.
+ * Discovery — scrollable multi-column grid of player cards.
+ * Each card has two actions:
+ *   ❤️ Like         — just records a like (target gets a "liked you" inbox notification)
+ *   🤝 Add friend   — sends a friend request (target sees it under their Likes inbox)
+ * The legacy "Pass" button has been removed.
  */
 export default function Discovery() {
-  const { deck, loading, fetchDeck, likePlayer, passPlayer } = useMatchStore();
+  const { deck, loading, fetchDeck, likePlayer, sendFriendRequest } = useMatchStore();
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     fetchDeck();
   }, [fetchDeck]);
 
+  const flashToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast((curr) => (curr === msg ? null : curr)), 2200);
+  };
+
+  const handleLike = async (player) => {
+    await likePlayer(player);
+    flashToast(`You liked ${player.name || 'them'} 💚`);
+  };
+
+  const handleFriend = async (player) => {
+    const res = await sendFriendRequest(player);
+    if (res?.friended) flashToast(`You're now friends with ${player.name || 'them'} 🥏`);
+    else flashToast(`Friend request sent to ${player.name || 'them'}`);
+  };
+
   if (loading && deck.length === 0) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-12" data-testid="discovery-loading">
+      <div className="max-w-6xl mx-auto px-4 py-12" data-testid="discovery-loading">
         <p className="text-center text-gray-500">Loading players…</p>
       </div>
     );
@@ -29,7 +47,7 @@ export default function Discovery() {
 
   if (deck.length === 0) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-12" data-testid="discovery-empty">
+      <div className="max-w-6xl mx-auto px-4 py-12" data-testid="discovery-empty">
         <div className="text-center">
           <h2 className="text-3xl font-bold text-gray-800 mb-4">
             No more players to discover! 🎉
@@ -43,51 +61,60 @@ export default function Discovery() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8" data-testid="discovery-view">
+    <div className="max-w-6xl mx-auto px-4 py-8" data-testid="discovery-view">
       <header className="mb-6 text-center">
         <h1 className="text-4xl font-bold text-disc-green mb-1">Find Your Ace Match</h1>
         <p className="text-gray-600">
-          {deck.length} player{deck.length === 1 ? '' : 's'} to discover — scroll to browse, tap ❤️ to like
+          {deck.length} player{deck.length === 1 ? '' : 's'} to discover — tap a card to see their profile
         </p>
       </header>
 
-      <div className="space-y-6">
+      {toast && (
+        <div
+          className="fixed top-20 left-1/2 -translate-x-1/2 bg-disc-green text-white px-5 py-2 rounded-full shadow-lg z-40 text-sm font-semibold"
+          data-testid="discovery-toast"
+        >
+          {toast}
+        </div>
+      )}
+
+      <div
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"
+        data-testid="discovery-grid"
+      >
         {deck.map((player) => {
           const image = resolveImageUrl(player.profilePictureUrl) || DEFAULT_AVATAR;
           return (
             <article
               key={player.uid}
-              className="relative rounded-3xl overflow-hidden shadow-xl bg-gray-900 group"
+              className="relative rounded-2xl overflow-hidden shadow-lg bg-gray-900 group flex flex-col"
               data-testid={`discovery-card-${player.uid}`}
             >
-              {/* Full-bleed profile image — links to player profile */}
               <Link
                 to={`/players/${player.uid}`}
                 aria-label={`Open ${player.name || 'player'}'s profile`}
+                className="block relative"
                 data-testid={`discovery-photo-link-${player.uid}`}
               >
                 <img
                   src={image}
                   alt={player.name || 'Player'}
-                  className="w-full h-[640px] object-cover hover:opacity-95 transition"
+                  className="w-full h-72 object-cover hover:opacity-95 transition"
                   loading="lazy"
                 />
+                <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 via-black/30 to-transparent p-4 text-white pointer-events-none">
+                  <h2 className="text-xl font-bold leading-tight">
+                    {player.name}
+                    {player.age ? `, ${player.age}` : ''}
+                  </h2>
+                  <p className="text-disc-gold text-sm font-semibold">{player.skillLevel}</p>
+                </div>
               </Link>
 
-              {/* Top-of-card identity (subtle gradient so name reads on any photo) */}
-              <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/70 via-black/30 to-transparent p-6 text-white pointer-events-none">
-                <h2 className="text-3xl font-bold">
-                  {player.name}
-                  {player.age ? `, ${player.age}` : ''}
-                </h2>
-                <p className="text-disc-gold font-semibold">{player.skillLevel}</p>
-              </div>
-
-              {/* Bio + shared profile content overlay (bottom) */}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-6 pt-20 text-white">
+              <div className="p-4 bg-gray-900 text-white flex-1 flex flex-col">
                 {player.bio && (
                   <p
-                    className="text-base leading-relaxed mb-3"
+                    className="text-sm text-white/90 mb-2 line-clamp-3"
                     data-testid={`discovery-bio-${player.uid}`}
                   >
                     {player.bio}
@@ -96,46 +123,32 @@ export default function Discovery() {
 
                 {player.recent_post && (
                   <div
-                    className="mb-3 bg-white/15 backdrop-blur-sm border border-white/20 rounded-xl px-3 py-2 text-sm"
+                    className="mb-3 bg-white/10 border border-white/15 rounded-lg px-3 py-2 text-xs"
                     data-testid={`discovery-recent-post-${player.uid}`}
                   >
-                    <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/70 mb-1">
-                      <span>📣 Latest post</span>
+                    <div className="flex items-center gap-2 uppercase tracking-wide text-white/60 mb-1">
+                      <span>📣 Latest</span>
                       {player.recent_post.has_image && <span aria-hidden="true">📷</span>}
                     </div>
-                    <p className="text-white/95 line-clamp-2">{player.recent_post.body || '(photo only)'}</p>
+                    <p className="text-white/95 line-clamp-2">
+                      {player.recent_post.body || '(photo only)'}
+                    </p>
                   </div>
                 )}
 
-                <div className="text-sm space-y-1 mb-3 text-white/85">
-                  {player.location && (
-                    <p>
-                      <span className="font-semibold">📍 Location:</span> {player.location}
-                    </p>
-                  )}
-                  {player.favoriteCourse && (
-                    <p>
-                      <span className="font-semibold">⛳ Favorite Course:</span> {player.favoriteCourse}
-                    </p>
-                  )}
-                  {player.homeCourse && (
-                    <p>
-                      <span className="font-semibold">🏠 Home Course:</span> {player.homeCourse}
-                    </p>
-                  )}
-                  {player.favoriteFrisbee && (
-                    <p>
-                      <span className="font-semibold">🥏 Favorite Frisbee:</span> {player.favoriteFrisbee}
-                    </p>
-                  )}
+                <div className="text-xs space-y-0.5 mb-3 text-white/80">
+                  {player.location && <p>📍 {player.location}</p>}
+                  {player.favoriteCourse && <p>⛳ {player.favoriteCourse}</p>}
+                  {player.homeCourse && <p>🏠 {player.homeCourse}</p>}
+                  {player.favoriteFrisbee && <p>🥏 {player.favoriteFrisbee}</p>}
                 </div>
 
                 {player.interests && player.interests.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {player.interests.map((interest) => (
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {player.interests.slice(0, 4).map((interest) => (
                       <span
                         key={interest}
-                        className="bg-white/15 backdrop-blur-sm border border-white/20 text-white px-3 py-1 rounded-full text-xs"
+                        className="bg-white/10 border border-white/15 text-white/90 px-2 py-0.5 rounded-full text-[10px]"
                       >
                         {interest}
                       </span>
@@ -143,22 +156,22 @@ export default function Discovery() {
                   </div>
                 )}
 
-                <div className="flex gap-3">
+                <div className="mt-auto flex gap-2">
                   <button
                     type="button"
-                    onClick={() => passPlayer(player)}
-                    className="flex-1 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 text-white font-bold py-3 rounded-xl transition"
-                    data-testid={`pass-btn-${player.uid}`}
-                  >
-                    ✕ Pass
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => likePlayer(player)}
-                    className="flex-1 bg-disc-gold hover:bg-disc-gold/90 text-white font-bold py-3 rounded-xl transition shadow-lg"
+                    onClick={() => handleLike(player)}
+                    className="flex-1 bg-disc-gold hover:bg-disc-gold/90 text-white font-bold py-2 rounded-lg transition text-sm"
                     data-testid={`like-btn-${player.uid}`}
                   >
                     ❤️ Like
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleFriend(player)}
+                    className="flex-1 bg-disc-green hover:bg-disc-green/90 text-white font-bold py-2 rounded-lg transition text-sm"
+                    data-testid={`friend-btn-${player.uid}`}
+                  >
+                    🤝 Friend
                   </button>
                 </div>
               </div>

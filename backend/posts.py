@@ -111,6 +111,7 @@ async def create_post(
     body: str,
     visibility: str,
     image_path: Optional[str] = None,
+    video_path: Optional[str] = None,
 ) -> dict:
     db = get_db()
     doc = {
@@ -118,6 +119,7 @@ async def create_post(
         "author_uid": author_uid,
         "body": body.strip(),
         "image_path": image_path,
+        "video_path": video_path,
         "visibility": visibility,
         "created_at": _now_iso(),
     }
