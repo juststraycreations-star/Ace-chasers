@@ -118,6 +118,11 @@ export default function Discovery() {
                       <span className="font-semibold">⛳ Favorite Course:</span> {player.favoriteCourse}
                     </p>
                   )}
+                  {player.homeCourse && (
+                    <p>
+                      <span className="font-semibold">🏠 Home Course:</span> {player.homeCourse}
+                    </p>
+                  )}
                   {player.favoriteFrisbee && (
                     <p>
                       <span className="font-semibold">🥏 Favorite Frisbee:</span> {player.favoriteFrisbee}

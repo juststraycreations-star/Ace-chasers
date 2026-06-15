@@ -59,6 +59,11 @@ export default function PublicProfilePreview({ player }) {
               {player.favoriteCourse}
             </p>
           )}
+          {player.homeCourse && (
+            <p className="text-gray-600 text-sm" data-testid="public-profile-home-course">
+              <span className="font-semibold text-gray-800">Home Course:</span> {player.homeCourse}
+            </p>
+          )}
           {player.favoriteFrisbee && (
             <p className="text-gray-600 text-sm" data-testid="public-profile-favorite-frisbee">
               <span className="font-semibold text-gray-800">Favorite Frisbee:</span>{' '}

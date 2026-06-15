@@ -82,10 +82,12 @@ class ProfileIn(BaseModel):
     location: Optional[str] = Field(default=None, max_length=120)
     favoriteCourse: Optional[str] = Field(default=None, max_length=120)
     favoriteFrisbee: Optional[str] = Field(default=None, max_length=120)
+    homeCourse: Optional[str] = Field(default=None, max_length=120)
     bio: Optional[str] = Field(default=None, max_length=1000)
     interests: Optional[List[str]] = Field(default=None, max_length=20)
     profilePictureUrl: Optional[str] = Field(default=None, max_length=500)
     bannerUrl: Optional[str] = Field(default=None, max_length=500)
+    privacy: Optional[dict] = None  # {favoriteFrisbee, favoriteCourse, homeCourse} -> bool (True = private)
 
 
 class AuthSyncIn(BaseModel):
@@ -111,6 +113,8 @@ class ProfileOut(BaseModel):
     interests: List[str] = Field(default_factory=list)
     profilePictureUrl: Optional[str] = None
     bannerUrl: Optional[str] = None
+    homeCourse: Optional[str] = None
+    privacy: dict = Field(default_factory=dict)
 
 
 class SwipeIn(BaseModel):
@@ -285,7 +289,8 @@ async def get_me(current=Depends(get_current_user)):
 @app.get("/api/users/{uid}", response_model=ProfileOut)
 async def get_user_by_uid(uid: str, current=Depends(get_current_user)):
     """Public profile view of any user. Email is stripped unless it's the
-    caller's own record."""
+    caller's own record. Fields marked private in the user's `privacy` map
+    are also stripped for non-self queries."""
     db = get_db()
     doc = await db.users.find_one({"uid": uid})
     if not doc:
@@ -295,6 +300,7 @@ async def get_user_by_uid(uid: str, current=Depends(get_current_user)):
     if not is_self:
         profile.email = None
         profile.emailVerified = False
+        _strip_private_fields(profile)
     return profile
 
 
@@ -390,6 +396,7 @@ async def discovery(current=Depends(get_current_user)):
     out: list[DiscoveryProfile] = []
     async for doc in cursor:
         base = _user_to_profile(doc)
+        _strip_private_fields(base)
         post = await get_latest_public_post(doc["uid"])
         recent = None
         if post:

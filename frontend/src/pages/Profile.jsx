@@ -77,8 +77,10 @@ export default function Profile() {
         location: draft.location,
         favoriteCourse: draft.favoriteCourse,
         favoriteFrisbee: draft.favoriteFrisbee,
+        homeCourse: draft.homeCourse,
         bio: draft.bio,
         interests: draft.interests,
+        privacy: draft.privacy || {},
       };
       const res = await api.put('/users/me', payload);
       setProfile(res.data);
@@ -295,30 +297,85 @@ export default function Profile() {
               />
             </div>
 
-            <div className="col-span-2">
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Favorite Course</label>
-              <input
-                type="text"
-                name="favoriteCourse"
-                value={draft.favoriteCourse || ''}
-                onChange={handleChange}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
-                data-testid="profile-favorite-course-input"
-              />
-            </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Favorite Course</label>
+                <input
+                  type="text"
+                  name="favoriteCourse"
+                  value={draft.favoriteCourse || ''}
+                  onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
+                  data-testid="profile-favorite-course-input"
+                />
+                <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(draft.privacy?.favoriteCourse)}
+                    onChange={(e) =>
+                      setDraft((p) => ({
+                        ...p,
+                        privacy: { ...(p.privacy || {}), favoriteCourse: e.target.checked },
+                      }))
+                    }
+                    data-testid="profile-favorite-course-private"
+                  />
+                  Keep private (hide from other players)
+                </label>
+              </div>
 
-            <div className="col-span-2">
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Favorite Frisbee</label>
-              <input
-                type="text"
-                name="favoriteFrisbee"
-                value={draft.favoriteFrisbee || ''}
-                onChange={handleChange}
-                placeholder="e.g. Innova Destroyer, Discraft Buzzz"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
-                data-testid="profile-favorite-frisbee-input"
-              />
-            </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Home Course</label>
+                <input
+                  type="text"
+                  name="homeCourse"
+                  value={draft.homeCourse || ''}
+                  onChange={handleChange}
+                  placeholder="The course you play most often"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
+                  data-testid="profile-home-course-input"
+                />
+                <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(draft.privacy?.homeCourse)}
+                    onChange={(e) =>
+                      setDraft((p) => ({
+                        ...p,
+                        privacy: { ...(p.privacy || {}), homeCourse: e.target.checked },
+                      }))
+                    }
+                    data-testid="profile-home-course-private"
+                  />
+                  Keep private (hide from other players)
+                </label>
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Favorite Frisbee</label>
+                <input
+                  type="text"
+                  name="favoriteFrisbee"
+                  value={draft.favoriteFrisbee || ''}
+                  onChange={handleChange}
+                  placeholder="e.g. Innova Destroyer, Discraft Buzzz"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
+                  data-testid="profile-favorite-frisbee-input"
+                />
+                <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(draft.privacy?.favoriteFrisbee)}
+                    onChange={(e) =>
+                      setDraft((p) => ({
+                        ...p,
+                        privacy: { ...(p.privacy || {}), favoriteFrisbee: e.target.checked },
+                      }))
+                    }
+                    data-testid="profile-favorite-frisbee-private"
+                  />
+                  Keep private (hide from other players)
+                </label>
+              </div>
 
             <div className="col-span-2">
               <label className="block text-sm font-semibold text-gray-700 mb-1">Bio</label>
@@ -355,6 +412,7 @@ export default function Profile() {
               location: profile.location,
               favoriteCourse: profile.favoriteCourse,
               favoriteFrisbee: profile.favoriteFrisbee,
+              homeCourse: profile.homeCourse,
               bio: profile.bio,
               interests: profile.interests?.length ? profile.interests : DEFAULT_INTERESTS,
               profilePictureUrl: profile.profilePictureUrl,
