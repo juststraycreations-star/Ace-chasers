@@ -66,10 +66,43 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
    - Reuse of the same code → `Invite already used` error, stays on form.
 5. Admin endpoints: create / list / delete invites via curl with `X-Admin-Key`.
 
+### Session 4 — Feed (Jan 2026)
+- Posts collection (`posts`) with `body`, `image_path`, `visibility ('public'|'friends_only')`.
+- `/api/feed` cursor-paginated; visibility honors mutual-friend matches.
+- Compose UI with client-side canvas compression + magic-byte sniffing backend-side.
+- Discovery card surfaces author's latest public post.
+- Dismissible alpha-banner (localStorage gated).
+
+### Session 5 — Video posts + friend-request flow (Feb 2026)
+- **Video posts**: `/api/posts` now also accepts a `media` field carrying mp4/webm/quicktime up to 25MB. Backend sniffs container magic bytes (`ftyp`, EBML), persists alongside images via a new `video_path` column, and surfaces `video_url` on `PostOut`. Feed compose box gains a 🎬 Video button + inline `<video controls>` preview; existing photo flow untouched.
+- **Friend-request system**: new `friend_requests` Mongo collection with three endpoints —
+  - `POST /api/friend-requests/{target_uid}` (auto-friends if reverse pending / reverse like exists)
+  - `POST /api/friend-requests/{from_uid}/accept`
+  - `POST /api/friend-requests/{from_uid}/decline`
+- **`GET /api/inbox`**: aggregates pending friend requests + incoming likes (de-duped against mutual matches and pending FRs).
+- **Discovery redesign**: now a responsive 1/2/3-column grid. **Pass button removed.** Cards expose ❤️ Like (records a like only) and 🤝 Friend (sends a friend request).
+- **Likes page**: now has three sections — friend requests received (Accept/Decline), people who liked you (notification list with quick "Send friend request"), and your outgoing likes.
+
+## API surface (`/api`) — updated
+- `GET  /health` · `GET /config`
+- `POST /auth/sync`  body: `{invite_code?}`
+- `GET  /users/me` · `PUT /users/me` · `GET /users/{uid}`
+- `POST /users/me/profile-picture` · `POST /users/me/banner`
+- `GET  /discovery`
+- `POST /swipes` · `GET /likes` · `DELETE /likes/{target_uid}` · `POST /matches/{target_uid}/friend`
+- **NEW** `POST /friend-requests/{target_uid}` · `POST /friend-requests/{from_uid}/accept` · `POST /friend-requests/{from_uid}/decline`
+- **NEW** `GET /inbox`
+- `GET  /feed` · `POST /posts` (image OR video) · `DELETE /posts/{id}`
+- **Admin** (X-Admin-Key): `GET/POST/DELETE /admin/invites[/{code}]`
+
 ## Backlog / next steps
-- P0: User pastes Firebase web config + service account JSON to switch off dev mode (instructions in `/app/memory/test_credentials.md`).
-- P1: Replace `ADMIN_API_KEY` with Firebase custom claims (`admin: true`) once an admin user exists, so the curl endpoints can be moved behind real OAuth.
-- P1: Admin web UI for invites (list / create / revoke) instead of curl.
+- P1: Migrate `/app/backend/uploads/` to durable cloud storage (Firebase Storage / S3) — current files don't survive container restarts.
+- P1: Refactor — split server.py (805 lines) into routers/ modules (posts, friends, admin).
+- P1: Replace `ADMIN_API_KEY` with Firebase custom claims (`admin: true`).
+- P1: Admin web UI for invites instead of curl.
+- P2: Discovery pagination (currently up to 50/page).
+- P2: Tighten `sniff_video_mime` to a whitelisted brand set (isom/mp41/mp42/qt) — currently treats unknown ftyp brands as mp4.
 - P2: Invite analytics (who redeemed, when, conversion rate).
-- P2: Wire Messages page to a real conversations API.
-- P3: Real-time match notifications (Firestore listener or websockets).
+- P2: Messages page → real conversations API.
+- P3: Real-time match / friend-request notifications (Firestore listener or websockets).
+
