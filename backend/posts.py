@@ -17,7 +17,9 @@ UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"}
+ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB
+MAX_VIDEO_BYTES = 25 * 1024 * 1024  # 25MB cap for short videos
 
 
 # Validated MIME -> safe extension. The client-supplied filename extension is
@@ -29,6 +31,9 @@ MIME_TO_EXT = {
     "image/png": "png",
     "image/webp": "webp",
     "image/gif": "gif",
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "video/quicktime": "mov",
 }
 
 
@@ -45,6 +50,22 @@ def sniff_image_mime(data: bytes) -> Optional[str]:
         return "image/gif"
     if data[0:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "image/webp"
+    return None
+
+
+def sniff_video_mime(data: bytes) -> Optional[str]:
+    """Detect mp4/webm/mov by inspecting container magic bytes."""
+    if len(data) < 16:
+        return None
+    # mp4/mov - ISO base media file format: bytes 4..8 == 'ftyp'
+    if data[4:8] == b"ftyp":
+        brand = data[8:12]
+        if brand in (b"qt  ", b"moov"):
+            return "video/quicktime"
+        return "video/mp4"
+    # webm/matroska - EBML header 1A 45 DF A3
+    if data[0:4] == b"\x1a\x45\xdf\xa3":
+        return "video/webm"
     return None
 
 
