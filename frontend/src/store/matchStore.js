@@ -11,15 +11,39 @@ import { api } from '../lib/api';
  */
 export const useMatchStore = create((set, get) => ({
   deck: [],
+  deckCursor: null,
+  deckHasMore: true,
   likes: [],
   loading: false,
   error: null,
 
   fetchDeck: async () => {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, deck: [], deckCursor: null, deckHasMore: true });
     try {
       const res = await api.get('/discovery');
-      set({ deck: res.data, loading: false });
+      set({
+        deck: res.data.players || [],
+        deckCursor: res.data.next_cursor || null,
+        deckHasMore: !!res.data.next_cursor,
+        loading: false,
+      });
+    } catch (err) {
+      set({ error: err?.response?.data?.detail || err.message, loading: false });
+    }
+  },
+
+  loadMoreDeck: async () => {
+    const { deckCursor, deckHasMore, loading } = get();
+    if (!deckHasMore || !deckCursor || loading) return;
+    set({ loading: true, error: null });
+    try {
+      const res = await api.get('/discovery', { params: { before: deckCursor } });
+      set((state) => ({
+        deck: [...state.deck, ...(res.data.players || [])],
+        deckCursor: res.data.next_cursor || null,
+        deckHasMore: !!res.data.next_cursor,
+        loading: false,
+      }));
     } catch (err) {
       set({ error: err?.response?.data?.detail || err.message, loading: false });
     }
@@ -113,5 +137,5 @@ export const useMatchStore = create((set, get) => ({
     }
   },
 
-  reset: () => set({ deck: [], likes: [], inbox: { incoming_likes: [], incoming_friend_requests: [] }, loading: false, error: null }),
+  reset: () => set({ deck: [], deckCursor: null, deckHasMore: true, likes: [], inbox: { incoming_likes: [], incoming_friend_requests: [] }, loading: false, error: null }),
 }));

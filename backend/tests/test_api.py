@@ -237,12 +237,30 @@ class TestDiscoveryAndLikes:
             timeout=15,
         )
         assert r.status_code == 200
-        items = r.json()
-        assert isinstance(items, list)
-        uids = {p["uid"] for p in items}
-        assert user_a["uid"] not in uids
-        # Seeded demo users should be present
-        assert "seed-sarah" in uids or "seed-amanda" in uids
+        body = r.json()
+        assert "players" in body and "next_cursor" in body
+        # Walk pages until we find a seed user or exhaust (discovery is
+        # sorted newest-first; with many test signups seeds may be on a
+        # later page).
+        all_uids = set()
+        for p in body["players"]:
+            all_uids.add(p["uid"])
+        cursor = body["next_cursor"]
+        for _ in range(10):
+            if cursor is None or any(u in all_uids for u in ("seed-sarah", "seed-amanda", "seed-jessica")):
+                break
+            r2 = requests.get(
+                f"{BASE_URL}/api/discovery?before={cursor}",
+                headers=_auth_headers(user_a["id_token"]),
+                timeout=15,
+            )
+            assert r2.status_code == 200
+            b2 = r2.json()
+            for p in b2["players"]:
+                all_uids.add(p["uid"])
+            cursor = b2["next_cursor"]
+        assert user_a["uid"] not in all_uids
+        assert any(u in all_uids for u in ("seed-sarah", "seed-amanda", "seed-jessica"))
 
     def test_like_seed_sarah_creates_match(self, user_a):
         r = requests.post(
@@ -413,11 +431,16 @@ class TestPostsAndFeed:
         )
         assert r.status_code == 200, r.text
         body = r.json()
-        assert body["image_url"] and body["image_url"].startswith("/api/uploads/")
+        assert body["image_url"]
+        # Either Cloudinary HTTPS URL OR legacy /api/uploads/ path
+        assert body["image_url"].startswith("https://res.cloudinary.com/") or body["image_url"].startswith("/api/uploads/")
         TestPostsAndFeed.POST_IDS.append(body["id"])
 
         # Verify the image is fetchable
-        ir = requests.get(f"{BASE_URL}{body['image_url']}", timeout=15)
+        if body["image_url"].startswith("http"):
+            ir = requests.get(body["image_url"], timeout=15)
+        else:
+            ir = requests.get(f"{BASE_URL}{body['image_url']}", timeout=15)
         assert ir.status_code == 200
         assert ir.headers.get("content-type", "").startswith("image/")
 
@@ -526,7 +549,7 @@ class TestDiscoveryRecentPost:
             timeout=15,
         )
         assert r.status_code == 200
-        items = r.json()
+        items = r.json()["players"]
         b_card = next((p for p in items if p["uid"] == user_b["uid"]), None)
         if b_card is None:
             pytest.skip("user_b not in user_a's discovery (already swiped)")

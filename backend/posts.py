@@ -54,15 +54,38 @@ def sniff_image_mime(data: bytes) -> Optional[str]:
 
 
 def sniff_video_mime(data: bytes) -> Optional[str]:
-    """Detect mp4/webm/mov by inspecting container magic bytes."""
+    """Detect mp4/webm/mov by inspecting container magic bytes.
+
+    For ISO-BMFF (mp4/mov) we enforce a brand whitelist: the 4 bytes at
+    offset 8 must be one of the known "safe" major brands. This rejects
+    fragmented or container formats that share the `ftyp` header but are
+    not standard mp4/mov (e.g. .3gp, .heic, .heif, .avif, .crx, .f4v).
+    """
     if len(data) < 16:
         return None
     # mp4/mov - ISO base media file format: bytes 4..8 == 'ftyp'
     if data[4:8] == b"ftyp":
         brand = data[8:12]
-        if brand in (b"qt  ", b"moov"):
+        # QuickTime
+        if brand in (b"qt  ",):
             return "video/quicktime"
-        return "video/mp4"
+        # Standard MP4 brands.
+        SAFE_MP4_BRANDS = {
+            b"isom",  # ISO Base Media file format
+            b"iso2",
+            b"iso4",
+            b"iso5",
+            b"iso6",
+            b"mp41",
+            b"mp42",
+            b"avc1",
+            b"M4V ",  # iTunes M4V
+            b"dash",
+            b"mmp4",
+        }
+        if brand in SAFE_MP4_BRANDS:
+            return "video/mp4"
+        return None  # unknown brand -> reject
     # webm/matroska - EBML header 1A 45 DF A3
     if data[0:4] == b"\x1a\x45\xdf\xa3":
         return "video/webm"

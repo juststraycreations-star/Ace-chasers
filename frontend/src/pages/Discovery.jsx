@@ -14,7 +14,7 @@ const DEFAULT_AVATAR =
  * The legacy "Pass" button has been removed.
  */
 export default function Discovery() {
-  const { deck, loading, fetchDeck, likePlayer, sendFriendRequest } = useMatchStore();
+  const { deck, loading, deckHasMore, fetchDeck, loadMoreDeck, likePlayer, sendFriendRequest } = useMatchStore();
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
@@ -179,6 +179,20 @@ export default function Discovery() {
           );
         })}
       </div>
+
+      {deckHasMore && (
+        <div className="flex justify-center pt-8">
+          <button
+            type="button"
+            onClick={loadMoreDeck}
+            disabled={loading}
+            className="border-2 border-disc-green text-disc-green hover:bg-disc-green hover:text-white font-semibold px-6 py-2 rounded-lg transition disabled:opacity-50"
+            data-testid="discovery-load-more-btn"
+          >
+            {loading ? 'Loading…' : 'Load more players'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
