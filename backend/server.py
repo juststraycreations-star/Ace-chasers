@@ -170,11 +170,27 @@ def _user_to_profile(doc: dict, *, email_verified: Optional[bool] = None) -> Pro
         location=doc.get("location"),
         favoriteCourse=doc.get("favoriteCourse"),
         favoriteFrisbee=doc.get("favoriteFrisbee"),
+        homeCourse=doc.get("homeCourse"),
         bio=doc.get("bio"),
         interests=doc.get("interests") or [],
         profilePictureUrl=doc.get("profilePictureUrl"),
         bannerUrl=doc.get("bannerUrl"),
+        privacy=doc.get("privacy") or {},
     )
+
+
+PRIVATE_FIELDS = ("favoriteFrisbee", "favoriteCourse", "homeCourse")
+
+
+def _strip_private_fields(profile: ProfileOut) -> ProfileOut:
+    """Null out any field flagged True in the user's privacy map. Mutates +
+    returns the same instance. Use when serving a profile to anyone other
+    than its owner."""
+    privacy = profile.privacy or {}
+    for field in PRIVATE_FIELDS:
+        if privacy.get(field):
+            setattr(profile, field, None)
+    return profile
 
 
 def _match_key(a: str, b: str) -> tuple[str, str]:
