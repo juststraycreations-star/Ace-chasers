@@ -95,14 +95,21 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - `GET  /feed` · `POST /posts` (image OR video) · `DELETE /posts/{id}`
 - **Admin** (X-Admin-Key): `GET/POST/DELETE /admin/invites[/{code}]`
 
+### Session 6 — Durable storage + refactor + pagination (Feb 2026)
+- **Cloudinary integration**: profile pictures, banners, post images, and post videos now persist on Cloudinary (cloud `bangingchains`). New `/app/backend/cloud_storage.py` helper. Backend uploads bytes directly to Cloudinary *after* magic-byte sniffing. `image_path` / `video_path` in Mongo now store full Cloudinary HTTPS URLs; `_hydrate_post` keeps backward-compat with legacy `/api/uploads/<file>` paths.
+- **`sniff_video_mime` brand whitelist**: only accepts `isom / iso2-6 / mp41 / mp42 / avc1 / M4V  / dash / mmp4 / qt ` ftyp brands. Rejects `.3gp`, `.heic`, `.heif`, `.avif`, `.f4v`.
+- **Discovery cursor pagination**: `/api/discovery` now returns `{ players, next_cursor }`. Page size 24. Frontend gets a "Load more players" button (`data-testid=discovery-load-more-btn`) that appends pages.
+- **Backend refactor**: `server.py` shrunk from 858 → 90 lines. Pydantic models moved to `models.py`, shared helpers to `deps.py`, and all routes split across six modules in `routers/` (auth, admin, media, discovery, social, posts).
+
 ## Backlog / next steps
-- P1: Migrate `/app/backend/uploads/` to durable cloud storage (Firebase Storage / S3) — current files don't survive container restarts.
-- P1: Refactor — split server.py (805 lines) into routers/ modules (posts, friends, admin).
-- P1: Replace `ADMIN_API_KEY` with Firebase custom claims (`admin: true`).
-- P1: Admin web UI for invites instead of curl.
-- P2: Discovery pagination (currently up to 50/page).
-- P2: Tighten `sniff_video_mime` to a whitelisted brand set (isom/mp41/mp42/qt) — currently treats unknown ftyp brands as mp4.
+- P2: Optional one-shot migration of `/app/backend/uploads/` legacy files to Cloudinary, then drop the StaticFiles mount.
+- P2: Wrap `cloud_storage.upload_bytes` in `asyncio.to_thread()` for true non-blocking uploads (current SDK is sync).
+- P2: DRY the "upload to cloud OR disk" branching between `media_router` and `posts_router` into a single helper in `cloud_storage.py`.
+- P2: Replace `ADMIN_API_KEY` with Firebase custom claims (`admin: true`).
+- P2: Admin web UI for invites instead of curl.
 - P2: Invite analytics (who redeemed, when, conversion rate).
 - P2: Messages page → real conversations API.
 - P3: Real-time match / friend-request notifications (Firestore listener or websockets).
+- P3: Push / email notifications on friend request & match.
+
 
