@@ -3,18 +3,12 @@ import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../lib/api';
 import { compressImage } from '../lib/compressImage';
+import { resolveImageUrl as fullImageUrl } from '../lib/images';
 import AlphaBanner from '../components/AlphaBanner';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const MAX_RAW_IMAGE_BYTES = 30 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
 const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
-
-function fullImageUrl(path) {
-  if (!path) return null;
-  if (path.startsWith('http')) return path;
-  return `${BACKEND_URL}${path}`;
-}
 
 function timeAgo(iso) {
   if (!iso) return '';
