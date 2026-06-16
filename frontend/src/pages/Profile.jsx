@@ -26,7 +26,7 @@ export default function Profile() {
 
   useEffect(() => {
     if (profile) setDraft(profile);
-  }, [profile]);
+  }, [profile, setDraft]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;

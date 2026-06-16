@@ -63,7 +63,11 @@ export default function Feed() {
   };
 
   useEffect(() => {
+    // Intentionally runs once on mount. `fetchFeed` is declared inside the
+    // component (recreated each render) so listing it in deps would cause
+    // an infinite refetch loop.
     fetchFeed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleFileChange = async (e) => {
@@ -221,7 +225,7 @@ export default function Feed() {
                 profile?.profilePictureUrl
                   ? (profile.profilePictureUrl.startsWith('http')
                       ? profile.profilePictureUrl
-                      : `${BACKEND_URL}${profile.profilePictureUrl}`)
+                      : fullImageUrl(profile.profilePictureUrl))
                   : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop'
               }
               alt="You"
@@ -368,7 +372,7 @@ export default function Feed() {
                         post.author.profilePictureUrl
                           ? (post.author.profilePictureUrl.startsWith('http')
                               ? post.author.profilePictureUrl
-                              : `${BACKEND_URL}${post.author.profilePictureUrl}`)
+                              : fullImageUrl(post.author.profilePictureUrl))
                           : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop'
                       }
                       alt={post.author.name || 'Player'}
