@@ -8,6 +8,22 @@ import { useAuthStore } from '../store/authStore';
 import { firebaseConfigured, getFirebaseAuth, googleProvider } from '../lib/firebase';
 import { clearDevSession, makeDevSession } from '../lib/devAuth';
 import { api } from '../lib/api';
+import CacheNotice from '../components/CacheNotice';
+
+/**
+ * Surface a friendlier hint when Firebase or our backend throws a generic
+ * "network error" — these almost always mean stale cache or an interrupted
+ * sign-in popup. Without this hint users assume the site itself is broken.
+ */
+function friendlyError(err) {
+  const code = err?.code || '';
+  const raw = err?.message || err?.response?.data?.detail || '';
+  const text = `${code} ${raw}`.toLowerCase();
+  if (text.includes('network') || text.includes('failed to fetch')) {
+    return 'Network error. Your browser may be caching an older version of the site — try an incognito window, or clear site data and reload. If that still fails, give it a minute and try again.';
+  }
+  return raw || 'Login failed';
+}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -73,7 +89,7 @@ export default function Login() {
         await commitSession(user);
       }
     } catch (err) {
-      setError(err?.message || 'Login failed');
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -96,7 +112,7 @@ export default function Login() {
         photoURL: cred.user.photoURL,
       });
     } catch (err) {
-      setError(err?.message || 'Google sign-in failed');
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -111,6 +127,7 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleEmailLogin} className="space-y-4" data-testid="login-form">
+          <CacheNotice />
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" data-testid="login-error">
               {error}

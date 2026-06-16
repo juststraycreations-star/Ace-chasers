@@ -10,6 +10,17 @@ import { useAuthStore } from '../store/authStore';
 import { firebaseConfigured, getFirebaseAuth, googleProvider } from '../lib/firebase';
 import { clearDevSession, makeDevSession } from '../lib/devAuth';
 import { api } from '../lib/api';
+import CacheNotice from '../components/CacheNotice';
+
+function friendlyError(err) {
+  const code = err?.code || '';
+  const raw = err?.message || err?.response?.data?.detail || '';
+  const text = `${code} ${raw}`.toLowerCase();
+  if (text.includes('network') || text.includes('failed to fetch')) {
+    return 'Network error. Your browser may be caching an older version of the site — try an incognito window, or clear site data and reload. If that still fails, give it a minute and try again.';
+  }
+  return raw || 'Sign up failed';
+}
 
 export default function SignUp() {
   const navigate = useNavigate();
@@ -112,7 +123,7 @@ export default function SignUp() {
         await commitSession(user);
       }
     } catch (err) {
-      setError(err?.message || 'Sign up failed');
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -135,7 +146,7 @@ export default function SignUp() {
         photoURL: cred.user.photoURL,
       });
     } catch (err) {
-      setError(err?.message || 'Google sign-in failed');
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -150,6 +161,7 @@ export default function SignUp() {
         </div>
 
         <form onSubmit={handleEmailSignup} className="space-y-4" data-testid="signup-form">
+          <CacheNotice />
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" data-testid="signup-error">
               {error}
