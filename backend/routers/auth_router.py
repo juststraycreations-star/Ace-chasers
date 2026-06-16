@@ -62,6 +62,8 @@ async def auth_sync(
         update["$setOnInsert"]["profilePictureUrl"] = current["picture"]
 
     await db.users.update_one({"uid": current["uid"]}, update, upsert=True)
+    # Seed users + auto-likes are disabled in production; ensure_inbound_likes_for
+    # is a no-op when no seed players have auto_like=True.
     await ensure_inbound_likes_for(current["uid"])
 
     doc = await db.users.find_one({"uid": current["uid"]})

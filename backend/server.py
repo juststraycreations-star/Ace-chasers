@@ -68,7 +68,9 @@ async def on_startup() -> None:
     cloud_storage.init()
     await ensure_indexes()
     await ensure_post_indexes()
-    await seed_demo_users()
+    # Demo seed users (Sarah, Jessica, Amanda) and auto-likes intentionally
+    # disabled — production goes live with real users only.
+    # await seed_demo_users()
 
 
 @app.get("/api/health")
