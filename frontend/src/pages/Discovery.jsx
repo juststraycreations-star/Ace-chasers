@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMatchStore } from '../store/matchStore';
 import { resolveImageUrl } from '../lib/images';
 
@@ -8,13 +8,22 @@ const DEFAULT_AVATAR =
 
 /**
  * Discovery — scrollable multi-column grid of player cards.
- * Each card has two actions:
- *   ❤️ Like         — just records a like (target gets a "liked you" inbox notification)
- *   🤝 Add friend   — sends a friend request (target sees it under their Likes inbox)
- * The legacy "Pass" button has been removed.
+ *
+ * Whole card is clickable to /players/<uid> (the public profile view).
+ * The Like + Friend buttons sit *above* that via z-index and stop the click
+ * from propagating so they fire their own action instead of navigating.
  */
 export default function Discovery() {
-  const { deck, loading, deckHasMore, fetchDeck, loadMoreDeck, likePlayer, sendFriendRequest } = useMatchStore();
+  const {
+    deck,
+    loading,
+    deckHasMore,
+    fetchDeck,
+    loadMoreDeck,
+    likePlayer,
+    sendFriendRequest,
+  } = useMatchStore();
+  const navigate = useNavigate();
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
@@ -26,16 +35,22 @@ export default function Discovery() {
     setTimeout(() => setToast((curr) => (curr === msg ? null : curr)), 2200);
   };
 
-  const handleLike = async (player) => {
+  const handleLike = async (e, player) => {
+    e.stopPropagation();
+    e.preventDefault();
     await likePlayer(player);
     flashToast(`You liked ${player.name || 'them'} 💚`);
   };
 
-  const handleFriend = async (player) => {
+  const handleFriend = async (e, player) => {
+    e.stopPropagation();
+    e.preventDefault();
     const res = await sendFriendRequest(player);
     if (res?.friended) flashToast(`You're now friends with ${player.name || 'them'} 🥏`);
     else flashToast(`Friend request sent to ${player.name || 'them'}`);
   };
+
+  const openProfile = (uid) => navigate(`/players/${uid}`);
 
   if (loading && deck.length === 0) {
     return (
@@ -53,7 +68,8 @@ export default function Discovery() {
             No more players to discover! 🎉
           </h2>
           <p className="text-gray-600">
-            Check your <span className="font-semibold">Likes</span> tab to see who you matched with.
+            Check your <span className="font-semibold">Likes</span> tab to see who you
+            matched with.
           </p>
         </div>
       </div>
@@ -65,7 +81,7 @@ export default function Discovery() {
       <header className="mb-6 text-center">
         <h1 className="text-4xl font-bold text-disc-green mb-1">Find Your Ace Match</h1>
         <p className="text-gray-600">
-          {deck.length} player{deck.length === 1 ? '' : 's'} to discover — tap a card to see their profile
+          {deck.length} player{deck.length === 1 ? '' : 's'} to discover — tap a card to see their full profile
         </p>
       </header>
 
@@ -87,19 +103,24 @@ export default function Discovery() {
           return (
             <article
               key={player.uid}
-              className="relative rounded-2xl overflow-hidden shadow-lg bg-gray-900 group flex flex-col"
+              role="button"
+              tabIndex={0}
+              onClick={() => openProfile(player.uid)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openProfile(player.uid);
+                }
+              }}
+              className="relative rounded-2xl overflow-hidden shadow-lg bg-gray-900 group flex flex-col cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-disc-gold transition"
               data-testid={`discovery-card-${player.uid}`}
+              aria-label={`Open ${player.name || 'player'}'s full profile`}
             >
-              <Link
-                to={`/players/${player.uid}`}
-                aria-label={`Open ${player.name || 'player'}'s profile`}
-                className="block relative"
-                data-testid={`discovery-photo-link-${player.uid}`}
-              >
+              <div className="block relative" data-testid={`discovery-photo-${player.uid}`}>
                 <img
                   src={image}
                   alt={player.name || 'Player'}
-                  className="w-full h-72 object-cover hover:opacity-95 transition"
+                  className="w-full h-72 object-cover group-hover:opacity-95 transition"
                   loading="lazy"
                 />
                 <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 via-black/30 to-transparent p-4 text-white pointer-events-none">
@@ -109,7 +130,7 @@ export default function Discovery() {
                   </h2>
                   <p className="text-disc-gold text-sm font-semibold">{player.skillLevel}</p>
                 </div>
-              </Link>
+              </div>
 
               <div className="p-4 bg-gray-900 text-white flex-1 flex flex-col">
                 {player.bio && (
@@ -156,10 +177,10 @@ export default function Discovery() {
                   </div>
                 )}
 
-                <div className="mt-auto flex gap-2">
+                <div className="mt-auto flex gap-2" onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
-                    onClick={() => handleLike(player)}
+                    onClick={(e) => handleLike(e, player)}
                     className="flex-1 bg-disc-gold hover:bg-disc-gold/90 text-white font-bold py-2 rounded-lg transition text-sm"
                     data-testid={`like-btn-${player.uid}`}
                   >
@@ -167,13 +188,22 @@ export default function Discovery() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleFriend(player)}
+                    onClick={(e) => handleFriend(e, player)}
                     className="flex-1 bg-disc-green hover:bg-disc-green/90 text-white font-bold py-2 rounded-lg transition text-sm"
                     data-testid={`friend-btn-${player.uid}`}
                   >
                     🤝 Friend
                   </button>
                 </div>
+
+                <Link
+                  to={`/players/${player.uid}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="mt-3 text-center text-xs uppercase tracking-wider text-disc-gold/90 hover:text-disc-gold font-semibold"
+                  data-testid={`discovery-view-profile-link-${player.uid}`}
+                >
+                  View full profile →
+                </Link>
               </div>
             </article>
           );
