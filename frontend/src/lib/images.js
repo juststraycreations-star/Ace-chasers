@@ -1,14 +1,17 @@
-// Hostname-aware backend URL resolution — see lib/api.js for the rationale.
+// Hostname-aware backend URL resolution.
+// On *.acechasers.net we ALWAYS route to the Emergent production host
+// regardless of any (possibly misconfigured) build-time env var. See
+// lib/api.js for the full rationale.
 function resolveBackendUrl() {
-  const fromEnv = process.env.REACT_APP_BACKEND_URL;
-  if (fromEnv) return fromEnv;
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     if (host.endsWith('acechasers.net')) {
       return 'https://frisbee-favorites.emergent.host';
     }
-    return window.location.origin;
   }
+  const fromEnv = process.env.REACT_APP_BACKEND_URL;
+  if (fromEnv) return fromEnv;
+  if (typeof window !== 'undefined') return window.location.origin;
   return '';
 }
 

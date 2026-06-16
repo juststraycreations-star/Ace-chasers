@@ -2,22 +2,22 @@ import axios from 'axios';
 import { getFirebaseAuth, firebaseConfigured } from './firebase';
 
 // Hostname-aware backend URL resolution.
-//   1. If REACT_APP_BACKEND_URL is set at build time, honor it.
-//   2. Otherwise, when running on the public custom domain
-//      (www.acechasers.net / acechasers.net) hit the Emergent production
-//      host directly so the app keeps working even if the build was made
-//      without env vars set.
-//   3. As a last resort, hit the same origin — useful for localhost dev.
+// PRIORITY ORDER (intentional — do not reorder without thinking about it):
+//   1. If we're running on the public custom domain (*.acechasers.net),
+//      always route to the Emergent production host. This wins over env
+//      vars so a misconfigured deployment can't break sign-in.
+//   2. If REACT_APP_BACKEND_URL is set at build time, honor it.
+//   3. Otherwise fall back to same-origin (useful for localhost dev).
 function resolveBackendUrl() {
-  const fromEnv = process.env.REACT_APP_BACKEND_URL;
-  if (fromEnv) return fromEnv;
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     if (host.endsWith('acechasers.net')) {
       return 'https://frisbee-favorites.emergent.host';
     }
-    return window.location.origin;
   }
+  const fromEnv = process.env.REACT_APP_BACKEND_URL;
+  if (fromEnv) return fromEnv;
+  if (typeof window !== 'undefined') return window.location.origin;
   return '';
 }
 
