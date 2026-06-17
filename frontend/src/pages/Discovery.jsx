@@ -45,8 +45,8 @@ export default function Discovery() {
     e.preventDefault();
     const res = await sendFriendRequest(player);
     if (res?.error) flashToast(`Friend request failed: ${res.error}`);
-    else if (res?.friended) flashToast(`You're now friends with ${player.name || 'them'} 🥏`);
-    else flashToast(`Friend request sent to ${player.name || 'them'}`);
+    else if (res?.friended) flashToast(`✅ You're now friends with ${player.name || 'them'} 🥏`);
+    else flashToast(`✅ Friend request sent to ${player.name || 'them'}`);
   };
 
   const openProfile = (uid) => navigate(`/players/${uid}`);

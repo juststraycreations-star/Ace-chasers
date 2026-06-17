@@ -1,13 +1,33 @@
+import { useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { useAuthStore } from '../store/authStore';
+import { useMatchStore } from '../store/matchStore';
 import { firebaseConfigured, getFirebaseAuth } from '../lib/firebase';
 import { clearDevSession } from '../lib/devAuth';
+
+const INBOX_POLL_MS = 60_000;
 
 export default function Navigation() {
   const location = useLocation();
   const navigate = useNavigate();
   const reset = useAuthStore((s) => s.reset);
+  const user = useAuthStore((s) => s.user);
+  const inbox = useMatchStore((s) => s.inbox);
+  const fetchInbox = useMatchStore((s) => s.fetchInbox);
+
+  // Poll the inbox so the bell badge stays roughly up to date without
+  // websockets. 60s is enough for an alpha; tighten if it ever matters.
+  useEffect(() => {
+    if (!user) return undefined;
+    fetchInbox();
+    const id = setInterval(fetchInbox, INBOX_POLL_MS);
+    return () => clearInterval(id);
+  }, [user, fetchInbox]);
+
+  const pendingCount =
+    (inbox?.incoming_friend_requests?.length || 0) +
+    (inbox?.incoming_likes?.length || 0);
 
   const isActive = (path) => location.pathname === path;
   const linkClasses = (path) =>
@@ -41,8 +61,21 @@ export default function Navigation() {
           <Link to="/discovery" className={linkClasses('/discovery')} data-testid="nav-discovery">
             Discovery
           </Link>
-          <Link to="/likes" className={linkClasses('/likes')} data-testid="nav-likes">
+          <Link
+            to="/likes"
+            className={`relative ${linkClasses('/likes')}`}
+            data-testid="nav-likes"
+          >
             Likes
+            {pendingCount > 0 && (
+              <span
+                className="absolute -top-2 -right-3 bg-disc-gold text-disc-green text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shadow"
+                data-testid="nav-likes-badge"
+                aria-label={`${pendingCount} pending notification${pendingCount === 1 ? '' : 's'}`}
+              >
+                {pendingCount > 9 ? '9+' : pendingCount}
+              </span>
+            )}
           </Link>
           <Link to="/messages" className={linkClasses('/messages')} data-testid="nav-messages">
             Messages
