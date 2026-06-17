@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { api } from '../lib/api';
 import { compressImage } from '../lib/compressImage';
 import { resolveImageUrl as fullImageUrl } from '../lib/images';
+import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
 import AlphaBanner from '../components/AlphaBanner';
 
 const MAX_RAW_IMAGE_BYTES = 30 * 1024 * 1024;
@@ -226,7 +227,7 @@ export default function Feed() {
                   ? (profile.profilePictureUrl.startsWith('http')
                       ? profile.profilePictureUrl
                       : fullImageUrl(profile.profilePictureUrl))
-                  : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop'
+                  : DEFAULT_AVATAR
               }
               alt="You"
               className="w-12 h-12 rounded-full object-cover"
@@ -373,7 +374,7 @@ export default function Feed() {
                           ? (post.author.profilePictureUrl.startsWith('http')
                               ? post.author.profilePictureUrl
                               : fullImageUrl(post.author.profilePictureUrl))
-                          : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop'
+                          : DEFAULT_AVATAR
                       }
                       alt={post.author.name || 'Player'}
                       className="w-10 h-10 rounded-full object-cover"

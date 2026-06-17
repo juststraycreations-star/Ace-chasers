@@ -87,8 +87,12 @@ export const useMatchStore = create((set, get) => ({
       await get().fetchLikes();
       return res.data;
     } catch (err) {
-      set({ error: err?.response?.data?.detail || err.message });
-      return { matched: false };
+      const message = err?.response?.data?.detail || err?.message || 'Friend request failed';
+      console.error('sendFriendRequest failed:', err);
+      set({ error: message });
+      // Put the player back so they can retry instead of silently vanishing.
+      set((state) => ({ deck: state.deck.find((p) => p.uid === player.uid) ? state.deck : [player, ...state.deck] }));
+      return { matched: false, error: message };
     }
   },
 

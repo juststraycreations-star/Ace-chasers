@@ -112,11 +112,13 @@ export default function SignUp() {
         if (ok) {
           // Fire the verification email (best-effort; soft banner handles
           // the rest of the lifecycle).
-          try {
-            await sendEmailVerification(cred.user);
-          } catch (err) {
-            console.warn('sendEmailVerification failed:', err?.message);
-          }
+          // Email verification disabled — users sign in immediately.
+          // To re-enable: uncomment the block below.
+          // try {
+          //   await sendEmailVerification(cred.user);
+          // } catch (err) {
+          //   console.warn('sendEmailVerification failed:', err?.message);
+          // }
         }
       } else {
         const { user } = makeDevSession({ email: formData.email, name: formData.name });

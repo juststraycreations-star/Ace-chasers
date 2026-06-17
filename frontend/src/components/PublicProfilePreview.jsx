@@ -1,7 +1,5 @@
 import { resolveImageUrl } from '../lib/images';
-
-const DEFAULT_AVATAR =
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop';
+import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
 
 /**
  * PublicProfilePreview

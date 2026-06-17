@@ -3,11 +3,10 @@ import { useAuthStore } from '../store/authStore';
 import { api } from '../lib/api';
 import { compressImage } from '../lib/compressImage';
 import { resolveImageUrl } from '../lib/images';
+import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
 import PublicProfilePreview from '../components/PublicProfilePreview';
 
 const DEFAULT_INTERESTS = ['tournaments', 'hiking', 'casual play'];
-const DEFAULT_AVATAR =
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop';
 const MAX_RAW_BYTES = 30 * 1024 * 1024;
 
 export default function Profile() {

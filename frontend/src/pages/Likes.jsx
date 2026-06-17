@@ -2,9 +2,7 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useMatchStore } from '../store/matchStore';
 import { resolveImageUrl } from '../lib/images';
-
-const DEFAULT_AVATAR =
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&h=1000&fit=crop';
+import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
 
 /**
  * Likes page — three sections:

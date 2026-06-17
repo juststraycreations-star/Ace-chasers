@@ -2,9 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMatchStore } from '../store/matchStore';
 import { resolveImageUrl } from '../lib/images';
-
-const DEFAULT_AVATAR =
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&h=1000&fit=crop';
+import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
 
 /**
  * Discovery — scrollable multi-column grid of player cards.
@@ -46,7 +44,8 @@ export default function Discovery() {
     e.stopPropagation();
     e.preventDefault();
     const res = await sendFriendRequest(player);
-    if (res?.friended) flashToast(`You're now friends with ${player.name || 'them'} 🥏`);
+    if (res?.error) flashToast(`Friend request failed: ${res.error}`);
+    else if (res?.friended) flashToast(`You're now friends with ${player.name || 'them'} 🥏`);
     else flashToast(`Friend request sent to ${player.name || 'them'}`);
   };
 
