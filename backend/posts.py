@@ -108,7 +108,7 @@ async def get_friend_uids(uid: str) -> list[str]:
     `friended_by` array."""
     db = get_db()
     out: list[str] = []
-    async for m in db.matches.find({"friended_by": uid}):
+    async for m in db.matches.find({"friended_by": uid}).limit(500):
         friended = m.get("friended_by") or []
         other = m["user_b"] if m["user_a"] == uid else m["user_a"]
         if other in friended:

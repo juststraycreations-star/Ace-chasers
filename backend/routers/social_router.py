@@ -315,7 +315,7 @@ async def get_inbox(current=Depends(get_current_user)):
         fr_from_uids.add(req["from_uid"])
 
     # --- Incoming likes (de-duped). One batch users query. -------------
-    my_likes_cursor = db.swipes.find({"from_uid": me, "action": "like"}, {"to_uid": 1})
+    my_likes_cursor = db.swipes.find({"from_uid": me, "action": "like"}, {"to_uid": 1}).limit(500)
     my_like_targets = {d["to_uid"] async for d in my_likes_cursor}
 
     incoming_swipes = await (
