@@ -11,6 +11,44 @@ import PublicProfilePreview from '../components/PublicProfilePreview';
 const DEFAULT_INTERESTS = ['tournaments', 'hiking', 'casual play'];
 const MAX_RAW_BYTES = 30 * 1024 * 1024;
 
+// Must stay in sync with INTEREST_OPTIONS on Discovery.jsx. The Discovery
+// chip filter does a case-insensitive substring match on `interestedIn`, so
+// the values stored here ("casual", "doubles"…) are exactly the keywords
+// the filter looks for.
+const INTEREST_TAG_OPTIONS = [
+  { label: 'Casual rounds', value: 'casual' },
+  { label: 'Doubles', value: 'doubles' },
+  { label: 'League', value: 'league' },
+  { label: 'Tournaments', value: 'tournament' },
+  { label: 'Putting', value: 'putt' },
+];
+
+/** Return the active tag values inferred from a free-text interestedIn string. */
+function activeTags(text) {
+  const haystack = (text || '').toLowerCase();
+  return new Set(
+    INTEREST_TAG_OPTIONS.filter((opt) => haystack.includes(opt.value)).map(
+      (opt) => opt.value,
+    ),
+  );
+}
+
+/** Toggle a tag inside a free-text interestedIn string. Preserves the user's
+ *  custom prose by only appending the label when adding and removing whole
+ *  label occurrences when removing. */
+function toggleTag(text, opt) {
+  const current = text || '';
+  const set = activeTags(current);
+  if (set.has(opt.value)) {
+    // Remove any case-insensitive whole-word occurrences of the label.
+    const pattern = new RegExp(`\\b${opt.label}\\b[,;]?\\s*`, 'gi');
+    return current.replace(pattern, '').replace(/^[,;\\s]+|[,;\\s]+$/g, '').trim();
+  }
+  return current.trim().length
+    ? `${current.trim()}, ${opt.label}`
+    : opt.label;
+}
+
 export default function Profile() {
   const profile = useAuthStore((s) => s.profile);
   const setProfile = useAuthStore((s) => s.setProfile);
@@ -440,16 +478,49 @@ export default function Profile() {
 
             <div className="col-span-2">
               <label className="block text-sm font-semibold text-gray-700 mb-1">Interested in</label>
+              <div
+                className="flex flex-wrap gap-2 mb-2"
+                data-testid="profile-interested-in-tags"
+              >
+                {INTEREST_TAG_OPTIONS.map((opt) => {
+                  const active = activeTags(draft.interestedIn).has(opt.value);
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() =>
+                        setDraft((p) => ({
+                          ...p,
+                          interestedIn: toggleTag(p.interestedIn, opt),
+                        }))
+                      }
+                      className={
+                        active
+                          ? 'bg-disc-gold text-white font-bold text-sm px-3 py-1.5 rounded-full shadow'
+                          : 'border border-disc-gold text-disc-gold hover:bg-disc-gold/10 font-semibold text-sm px-3 py-1.5 rounded-full'
+                      }
+                      data-testid={`profile-interested-in-tag-${opt.value}`}
+                      aria-pressed={active}
+                    >
+                      {active ? '✓ ' : '+ '}
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
               <input
                 type="text"
                 name="interestedIn"
                 value={draft.interestedIn || ''}
                 onChange={handleChange}
-                placeholder="e.g. casual rounds, league play, tournament partners, doubles"
+                placeholder="Tap a chip above, or write your own (e.g. early-morning rounds)"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
                 data-testid="profile-interested-in-input"
                 maxLength={200}
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Pick what you&apos;re looking for so the Discovery filter can match you with players who want the same thing.
+              </p>
               <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600">
                 <input
                   type="checkbox"
