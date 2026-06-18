@@ -20,6 +20,7 @@ class ProfileIn(BaseModel):
     favoriteCourse: Optional[str] = Field(default=None, max_length=120)
     favoriteFrisbee: Optional[str] = Field(default=None, max_length=120)
     homeCourse: Optional[str] = Field(default=None, max_length=120)
+    interestedIn: Optional[str] = Field(default=None, max_length=200)
     bio: Optional[str] = Field(default=None, max_length=1000)
     interests: Optional[List[str]] = Field(default=None, max_length=20)
     profilePictureUrl: Optional[str] = Field(default=None, max_length=500)
@@ -51,6 +52,7 @@ class ProfileOut(BaseModel):
     profilePictureUrl: Optional[str] = None
     bannerUrl: Optional[str] = None
     homeCourse: Optional[str] = None
+    interestedIn: Optional[str] = None
     privacy: dict = Field(default_factory=dict)
 
 

@@ -90,6 +90,7 @@ export default function Profile() {
         favoriteCourse: draft.favoriteCourse,
         favoriteFrisbee: draft.favoriteFrisbee,
         homeCourse: draft.homeCourse,
+        interestedIn: draft.interestedIn,
         bio: draft.bio,
         interests: draft.interests,
         privacy: draft.privacy || {},
@@ -438,6 +439,34 @@ export default function Profile() {
               </div>
 
             <div className="col-span-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Interested in</label>
+              <input
+                type="text"
+                name="interestedIn"
+                value={draft.interestedIn || ''}
+                onChange={handleChange}
+                placeholder="e.g. casual rounds, league play, tournament partners, doubles"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
+                data-testid="profile-interested-in-input"
+                maxLength={200}
+              />
+              <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.privacy?.interestedIn)}
+                  onChange={(e) =>
+                    setDraft((p) => ({
+                      ...p,
+                      privacy: { ...(p.privacy || {}), interestedIn: e.target.checked },
+                    }))
+                  }
+                  data-testid="profile-interested-in-private"
+                />
+                Keep private (hide from other players)
+              </label>
+            </div>
+
+            <div className="col-span-2">
               <label className="block text-sm font-semibold text-gray-700 mb-1">Bio</label>
               <textarea
                 name="bio"
@@ -473,6 +502,7 @@ export default function Profile() {
               favoriteCourse: profile.favoriteCourse,
               favoriteFrisbee: profile.favoriteFrisbee,
               homeCourse: profile.homeCourse,
+              interestedIn: profile.interestedIn,
               bio: profile.bio,
               interests: profile.interests?.length ? profile.interests : DEFAULT_INTERESTS,
               profilePictureUrl: profile.profilePictureUrl,
