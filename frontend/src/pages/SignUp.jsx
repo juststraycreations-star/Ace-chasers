@@ -158,7 +158,7 @@ export default function SignUp() {
     <div className="min-h-screen bg-gradient-to-br from-disc-green via-disc-purple to-disc-gold flex items-center justify-center px-4 py-8">
       <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-disc-green mb-2">⛳ Ace Chasers</h1>
+          <h1 className="text-4xl font-bold text-disc-green mb-2">🥏 Ace Chasers</h1>
           <p className="text-gray-600">Create your account</p>
         </div>
 

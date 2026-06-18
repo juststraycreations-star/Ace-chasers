@@ -5,12 +5,10 @@ import { resolveImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
 
 /**
- * Discovery — compact picture-first grid.
- *
- * Each card is mostly a profile photo with the name/age overlaid and two
- * tiny action buttons. The whole card is clickable -> /players/<uid>.
- * Players stay on the deck after "Player" (friend request) until they
- * become real friends, so users don't lose track of who they pinged.
+ * Discovery — info-box cards with a small circular avatar tucked into the
+ * lower-left corner. Shows every non-private field the API returns so
+ * players get a real sense of someone before they tap into the full
+ * profile. Three-action bar at the bottom: Nice / Player request / Message.
  */
 export default function Discovery() {
   const {
@@ -52,6 +50,12 @@ export default function Discovery() {
     if (res?.error) flashToast(`Request failed: ${res.error}`);
     else if (res?.friended) flashToast(`✅ You're now players with ${player.name || 'them'} 🥏`);
     else flashToast(`✅ Player request sent to ${player.name || 'them'}`);
+  };
+
+  const handleMessage = (e, player) => {
+    e.stopPropagation();
+    e.preventDefault();
+    navigate('/messages', { state: { withUid: player.uid, name: player.name } });
   };
 
   const openProfile = (uid) => navigate(`/players/${uid}`);
@@ -96,7 +100,7 @@ export default function Discovery() {
       )}
 
       <div
-        className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
         data-testid="discovery-grid"
       >
         {deck.map((player) => {
@@ -115,61 +119,99 @@ export default function Discovery() {
                   openProfile(player.uid);
                 }
               }}
-              className="relative rounded-xl overflow-hidden shadow-md bg-gray-900 cursor-pointer hover:shadow-xl hover:ring-2 hover:ring-disc-gold transition aspect-[3/4] flex flex-col"
+              className="relative bg-white rounded-2xl shadow-md hover:shadow-xl hover:ring-2 hover:ring-disc-green transition cursor-pointer overflow-hidden flex flex-col"
               data-testid={`discovery-card-${player.uid}`}
               aria-label={`Open ${player.name || 'player'}'s full profile`}
             >
-              <img
-                src={image}
-                alt={player.name || 'Player'}
-                className="absolute inset-0 w-full h-full object-cover"
-                loading="lazy"
-              />
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/60 to-transparent p-3 text-white">
-                <h2 className="text-base font-bold leading-tight truncate">
-                  {player.name}
+              {/* Information box */}
+              <div className="px-4 pt-4 pb-2 text-sm text-gray-700 space-y-1 min-h-[180px]">
+                <h2 className="text-lg font-bold text-disc-green leading-tight">
+                  {player.name || 'Player'}
                   {player.age ? `, ${player.age}` : ''}
                 </h2>
                 {player.skillLevel && (
-                  <p className="text-disc-gold text-[11px] font-semibold truncate">
+                  <p className="text-xs uppercase tracking-wide text-disc-gold font-semibold">
                     {player.skillLevel}
                   </p>
                 )}
+                {player.bio && (
+                  <p
+                    className="text-sm text-gray-700 line-clamp-3 pt-1"
+                    data-testid={`discovery-bio-${player.uid}`}
+                  >
+                    {player.bio}
+                  </p>
+                )}
+                <ul className="text-xs text-gray-600 space-y-0.5 pt-1">
+                  {player.location && <li>📍 {player.location}</li>}
+                  {player.favoriteCourse && <li>⛳ Fav course: {player.favoriteCourse}</li>}
+                  {player.homeCourse && <li>🏠 Home course: {player.homeCourse}</li>}
+                  {player.favoriteFrisbee && <li>🥏 Fav frisbee: {player.favoriteFrisbee}</li>}
+                </ul>
+                {player.interests && player.interests.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {player.interests.slice(0, 5).map((interest) => (
+                      <span
+                        key={interest}
+                        className="bg-disc-green/10 border border-disc-green/30 text-disc-green px-2 py-0.5 rounded-full text-[10px] font-medium"
+                      >
+                        {interest}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Avatar circle, lower-left */}
+              <div className="px-4 pb-3 flex items-end justify-between gap-2">
+                <img
+                  src={image}
+                  alt={player.name || 'Player'}
+                  className="w-14 h-14 rounded-full object-cover border-2 border-white shadow ring-2 ring-disc-green/30 flex-shrink-0"
+                  loading="lazy"
+                  data-testid={`discovery-avatar-${player.uid}`}
+                />
                 <div
-                  className="mt-2 flex gap-1.5"
+                  className="flex gap-1.5 flex-1 justify-end"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
                     type="button"
                     onClick={(e) => handleNice(e, player)}
-                    className="flex-1 bg-disc-gold/95 hover:bg-disc-gold text-white text-[11px] font-bold py-1 rounded-md transition"
+                    className="bg-disc-gold/95 hover:bg-disc-gold text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md transition"
                     data-testid={`nice-btn-${player.uid}`}
                     aria-label={`Mark ${player.name || 'player'} as nice`}
+                    title="Nice"
                   >
-                    👍 Nice
+                    👍
                   </button>
                   {isFriend ? (
-                    <span
-                      className="flex-1 bg-emerald-700/90 text-white text-[11px] font-bold py-1 rounded-md text-center"
-                      data-testid={`player-status-friends-${player.uid}`}
+                    <button
+                      type="button"
+                      onClick={(e) => handleMessage(e, player)}
+                      className="bg-disc-green hover:bg-disc-green/90 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md transition"
+                      data-testid={`message-btn-${player.uid}`}
+                      title="Message"
                     >
-                      ✓ Player
-                    </span>
+                      💬
+                    </button>
                   ) : sent ? (
                     <span
-                      className="flex-1 bg-gray-500/90 text-white text-[11px] font-bold py-1 rounded-md text-center"
+                      className="bg-gray-500/90 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md text-center"
                       data-testid={`player-status-sent-${player.uid}`}
+                      title="Player request sent"
                     >
-                      ⏳ Sent
+                      ⏳
                     </span>
                   ) : (
                     <button
                       type="button"
                       onClick={(e) => handlePlayer(e, player)}
-                      className="flex-1 bg-disc-green/95 hover:bg-disc-green text-white text-[11px] font-bold py-1 rounded-md transition"
+                      className="bg-disc-green/95 hover:bg-disc-green text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md transition"
                       data-testid={`player-btn-${player.uid}`}
+                      title="Send player request"
                     >
-                      🤝 Player
+                      🤝
                     </button>
                   )}
                 </div>

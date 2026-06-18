@@ -51,7 +51,7 @@ export default function Navigation() {
     <nav className="bg-disc-green text-white shadow-lg sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
         <Link to="/feed" className="text-2xl font-bold" data-testid="nav-logo">
-          ⛳ Ace Chasers
+          🥏 Ace Chasers
         </Link>
 
         <div className="flex gap-6 items-center">
