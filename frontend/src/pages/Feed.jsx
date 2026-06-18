@@ -6,6 +6,7 @@ import { compressImage } from '../lib/compressImage';
 import { resolveImageUrl as fullImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
 import AlphaBanner from '../components/AlphaBanner';
+import DismissibleBanner from '../components/DismissibleBanner';
 import PostInteractions from '../components/PostInteractions';
 
 const MAX_RAW_IMAGE_BYTES = 30 * 1024 * 1024;
@@ -184,6 +185,12 @@ export default function Feed() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-8" data-testid="feed-view">
       <AlphaBanner />
+      <DismissibleBanner
+        storageKey="ace_welcome_v2_dismissed"
+        title="We've upgraded! Let's get you re-connected:"
+        body={'Update your location for local matching, drop in a profile photo, and share a quick "hi" on the feed.'}
+        testId="feed-welcome-banner"
+      />
       <h1 className="text-4xl font-bold text-disc-green mb-6">Feed</h1>
 
       {/* Compose box */}

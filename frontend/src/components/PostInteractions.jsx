@@ -23,6 +23,9 @@ export default function PostInteractions({ post }) {
   const [commentText, setCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [count, setCount] = useState(post.comment_count || 0);
+  // Server-supplied preview of up to 3 latest comments — drives the inline
+  // teaser that's visible without expanding the full thread.
+  const [preview, setPreview] = useState(post.recent_comments || []);
 
   const sendReaction = async (value) => {
     const prev = react;
@@ -86,6 +89,8 @@ export default function PostInteractions({ post }) {
       setComments((prev) => [...(prev || []), res.data]);
       setCommentText('');
       setCount((c) => c + 1);
+      // Keep the preview in sync (keep last 3 chronological).
+      setPreview((prev) => [...prev, res.data].slice(-3));
     } catch (err) {
       console.error('add comment failed', err);
       alert(err?.response?.data?.detail || 'Could not post comment');
@@ -99,6 +104,7 @@ export default function PostInteractions({ post }) {
       await api.delete(`/posts/${post.id}/comments/${commentId}`);
       setComments((prev) => (prev || []).filter((c) => c.id !== commentId));
       setCount((c) => Math.max(0, c - 1));
+      setPreview((prev) => prev.filter((c) => c.id !== commentId));
     } catch (err) {
       console.error('delete comment failed', err);
     }
@@ -106,6 +112,54 @@ export default function PostInteractions({ post }) {
 
   return (
     <div className="mt-3 border-t border-gray-100 pt-3">
+      {/* Inline preview of up to 3 most recent comments (server-provided).
+          Hidden once the full thread is expanded so we don't render twice. */}
+      {preview.length > 0 && !showComments && (
+        <ul
+          className="space-y-2 mb-3"
+          data-testid={`comments-preview-${post.id}`}
+        >
+          {preview.map((c) => (
+            <li
+              key={c.id}
+              className="flex items-start gap-2 text-sm"
+              data-testid={`comment-preview-${c.id}`}
+            >
+              <Link to={`/players/${c.author.uid}`} className="flex-shrink-0">
+                <img
+                  src={resolveImageUrl(c.author.profilePictureUrl) || DEFAULT_AVATAR}
+                  alt={c.author.name || 'Player'}
+                  className="w-7 h-7 rounded-full object-cover"
+                />
+              </Link>
+              <div className="flex-1 bg-gray-100 rounded-2xl px-3 py-1.5">
+                <Link
+                  to={`/players/${c.author.uid}`}
+                  className="font-semibold text-gray-800 hover:text-disc-green text-xs"
+                >
+                  {c.author.name || 'Player'}
+                </Link>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
+                  {c.body}
+                </p>
+              </div>
+            </li>
+          ))}
+          {count > preview.length && (
+            <li>
+              <button
+                type="button"
+                onClick={openComments}
+                className="text-xs text-disc-green font-semibold hover:underline"
+                data-testid={`comments-view-more-${post.id}`}
+              >
+                View all {count} comments
+              </button>
+            </li>
+          )}
+        </ul>
+      )}
+
       <div className="flex items-center gap-4 text-sm">
         <button
           type="button"

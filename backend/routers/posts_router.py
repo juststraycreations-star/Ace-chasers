@@ -92,8 +92,70 @@ async def get_feed(
     limit = max(1, min(limit, 50))
     raw_posts = await list_feed(current["uid"], limit=limit, before=before, kind=kind)
     hydrated = [await _hydrate_post(p, current["uid"]) for p in raw_posts]
+    # Batch-fetch up to 3 most recent comments per post in this page.
+    if hydrated:
+        await _attach_recent_comments(hydrated, current["uid"])
     next_cursor = raw_posts[-1]["created_at"] if len(raw_posts) == limit else None
     return {"posts": hydrated, "next_cursor": next_cursor}
+
+
+async def _attach_recent_comments(
+    posts: list[PostOut], viewer_uid: str, per_post: int = 3
+) -> None:
+    """Mutates `posts` in place, populating `recent_comments` (oldest of the
+    N newest first, so they read naturally under the post). One aggregation
+    query covers every post on the page."""
+    if not posts:
+        return
+    db = get_db()
+    post_ids = [p.id for p in posts]
+    pipeline = [
+        {"$match": {"post_id": {"$in": post_ids}}},
+        {"$sort": {"created_at": -1}},
+        {
+            "$group": {
+                "_id": "$post_id",
+                "comments": {"$push": "$$ROOT"},
+            }
+        },
+        {
+            "$project": {
+                "_id": 1,
+                "comments": {"$slice": ["$comments", per_post]},
+            }
+        },
+    ]
+    grouped: dict[str, list[dict]] = {}
+    author_uids: set[str] = set()
+    async for row in db.post_comments.aggregate(pipeline):
+        # Reverse so the oldest of the slice is first (chronological under post).
+        comments = list(reversed(row.get("comments") or []))
+        grouped[row["_id"]] = comments
+        for c in comments:
+            author_uids.add(c["author_uid"])
+    authors_by_uid: dict[str, dict] = {}
+    if author_uids:
+        async for u in db.users.find({"uid": {"$in": list(author_uids)}}):
+            authors_by_uid[u["uid"]] = u
+    for post in posts:
+        bucket = grouped.get(post.id) or []
+        post.recent_comments = [
+            CommentOut(
+                id=c["id"],
+                post_id=c["post_id"],
+                body=c["body"],
+                created_at=c["created_at"],
+                author=PostAuthor(
+                    uid=c["author_uid"],
+                    name=(authors_by_uid.get(c["author_uid"]) or {}).get("name"),
+                    profilePictureUrl=(authors_by_uid.get(c["author_uid"]) or {}).get(
+                        "profilePictureUrl"
+                    ),
+                ),
+                is_mine=c["author_uid"] == viewer_uid,
+            )
+            for c in bucket
+        ]
 
 
 @router.post("/api/posts", response_model=PostOut)
@@ -187,7 +249,9 @@ async def get_user_posts(author_uid: str, current=Depends(get_current_user)):
     """All posts authored by the given user that the caller can see. Used by
     the Profile page (their own posts) and PlayerProfile (someone else's)."""
     raw = await list_user_posts(author_uid, current["uid"])
-    return [await _hydrate_post(p, current["uid"]) for p in raw]
+    hydrated = [await _hydrate_post(p, current["uid"]) for p in raw]
+    await _attach_recent_comments(hydrated, current["uid"])
+    return hydrated
 
 
 # --- Nice (likes) + comments -----------------------------------------------

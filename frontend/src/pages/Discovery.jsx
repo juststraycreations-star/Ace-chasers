@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { useMatchStore } from '../store/matchStore';
 import { resolveImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
+import DismissibleBanner from '../components/DismissibleBanner';
 
 const RADIUS_OPTIONS = [
   { label: 'Anywhere', value: null },
@@ -147,6 +148,12 @@ export default function Discovery() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8" data-testid="discovery-view">
+      <DismissibleBanner
+        storageKey="ace_invite_friends_dismissed"
+        title="Loving the app? Bring your friends!"
+        body="Share the link with your favorite people and suggest us to your circle today."
+        testId="discovery-invite-banner"
+      />
       <header className="mb-4 text-center">
         <h1 className="text-4xl font-bold text-disc-green mb-1">Find Your Ace Match</h1>
         <p className="text-gray-600 text-sm">

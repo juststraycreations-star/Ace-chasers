@@ -126,6 +126,7 @@ class PostOut(BaseModel):
     liked_by_me: bool = False
     disliked_by_me: bool = False
     comment_count: int = 0
+    recent_comments: List["CommentOut"] = Field(default_factory=list)
 
 
 class CommentIn(BaseModel):
@@ -139,3 +140,7 @@ class CommentOut(BaseModel):
     created_at: str
     author: PostAuthor
     is_mine: bool = False
+
+
+# Resolve the forward reference now that CommentOut is defined.
+PostOut.model_rebuild()
