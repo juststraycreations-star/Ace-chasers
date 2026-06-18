@@ -14,9 +14,11 @@ export default function Likes() {
   const {
     likes,
     inbox,
+    friends,
     loading,
     fetchLikes,
     fetchInbox,
+    fetchFriends,
     addFriend,
     removeLike,
     acceptFriendRequest,
@@ -27,13 +29,18 @@ export default function Likes() {
   useEffect(() => {
     fetchLikes();
     fetchInbox();
-  }, [fetchLikes, fetchInbox]);
+    fetchFriends();
+  }, [fetchLikes, fetchInbox, fetchFriends]);
 
   const incomingLikes = inbox?.incoming_likes || [];
   const friendRequests = inbox?.incoming_friend_requests || [];
-  const matchCount = likes.filter((l) => l.matched).length;
+  const sentSet = new Set(inbox?.sent_friend_request_uids || []);
+  const friendCount = friends?.length || 0;
   const isEmpty =
-    likes.length === 0 && incomingLikes.length === 0 && friendRequests.length === 0;
+    likes.length === 0 &&
+    incomingLikes.length === 0 &&
+    friendRequests.length === 0 &&
+    friendCount === 0;
 
   if (loading && isEmpty) {
     return (
@@ -46,23 +53,57 @@ export default function Likes() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-12" data-testid="likes-view">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold text-disc-green mb-2">Your Likes</h1>
+        <h1 className="text-4xl font-bold text-disc-green mb-2">Your Network</h1>
         <p className="text-gray-600">
-          {likes.length} liked profile{likes.length === 1 ? '' : 's'} ·{' '}
-          <span className="text-disc-gold font-semibold">
-            {matchCount} mutual match{matchCount === 1 ? '' : 'es'}
+          <span className="text-disc-green font-semibold">
+            {friendCount} friend{friendCount === 1 ? '' : 's'}
           </span>
+          {' · '}
+          {likes.length} liked profile{likes.length === 1 ? '' : 's'}
           {friendRequests.length > 0 && (
             <>
               {' · '}
-              <span className="text-disc-green font-semibold">
-                {friendRequests.length} friend request
+              <span className="text-disc-gold font-semibold">
+                {friendRequests.length} pending request
                 {friendRequests.length === 1 ? '' : 's'}
               </span>
             </>
           )}
         </p>
       </div>
+
+      {/* ===== Friends (confirmed) ===== */}
+      {friendCount > 0 && (
+        <section className="mb-10" data-testid="friends-section">
+          <h2 className="text-xl font-bold text-gray-800 mb-3">
+            🥏 Friends <span className="text-disc-green">({friendCount})</span>
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {friends.map((f) => (
+              <Link
+                key={f.uid}
+                to={`/players/${f.uid}`}
+                className="bg-white rounded-2xl shadow hover:shadow-lg transition flex flex-col items-center p-3 group"
+                data-testid={`friend-${f.uid}`}
+              >
+                <img
+                  src={resolveImageUrl(f.profilePictureUrl) || DEFAULT_AVATAR}
+                  alt={f.name || 'Friend'}
+                  className="w-16 h-16 rounded-full object-cover mb-2 group-hover:ring-2 group-hover:ring-disc-green"
+                />
+                <span className="text-sm font-semibold text-gray-800 text-center truncate w-full">
+                  {f.name || 'Player'}
+                </span>
+                {f.location && (
+                  <span className="text-[10px] text-gray-500 truncate w-full text-center">
+                    📍 {f.location}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ===== Pending Friend Requests ===== */}
       {friendRequests.length > 0 && (
@@ -243,24 +284,29 @@ export default function Likes() {
                   </div>
 
                   <div className="mt-auto flex items-center justify-between gap-2">
-                    {matched ? (
-                      friended ? (
-                        <span
-                          className="text-disc-green font-semibold text-sm"
-                          data-testid={`friended-label-${player.uid}`}
-                        >
-                          ✓ Friend added
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => addFriend(player.uid)}
-                          className="text-disc-green hover:text-disc-green/80 font-semibold text-sm underline underline-offset-2"
-                          data-testid={`add-friend-link-${player.uid}`}
-                        >
-                          + Add friend
-                        </button>
-                      )
+                    {friended ? (
+                      <span
+                        className="text-disc-green font-semibold text-sm"
+                        data-testid={`friended-label-${player.uid}`}
+                      >
+                        ✓ Friend added
+                      </span>
+                    ) : matched ? (
+                      <button
+                        type="button"
+                        onClick={() => addFriend(player.uid)}
+                        className="text-disc-green hover:text-disc-green/80 font-semibold text-sm underline underline-offset-2"
+                        data-testid={`add-friend-link-${player.uid}`}
+                      >
+                        + Add friend
+                      </button>
+                    ) : sentSet.has(player.uid) ? (
+                      <span
+                        className="text-disc-gold font-semibold text-sm"
+                        data-testid={`request-sent-label-${player.uid}`}
+                      >
+                        ⏳ Friend request sent
+                      </span>
                     ) : (
                       <span className="text-gray-400 text-sm italic">
                         Waiting for them to like back…

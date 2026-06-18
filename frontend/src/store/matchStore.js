@@ -81,22 +81,49 @@ export const useMatchStore = create((set, get) => ({
 
   sendFriendRequest: async (player) => {
     if (!player) return { matched: false };
-    set((state) => ({ deck: state.deck.filter((p) => p.uid !== player.uid) }));
+    // Optimistic: mark as "request sent" so the UI updates immediately. Do
+    // NOT remove from deck — user explicitly asked to keep them visible
+    // until they're actual friends.
+    set((state) => ({
+      inbox: {
+        ...state.inbox,
+        sent_friend_request_uids: Array.from(
+          new Set([...(state.inbox?.sent_friend_request_uids || []), player.uid])
+        ),
+      },
+    }));
     try {
       const res = await api.post(`/friend-requests/${player.uid}`);
-      await get().fetchLikes();
+      await Promise.all([get().fetchInbox(), get().fetchLikes()]);
       return res.data;
     } catch (err) {
       const message = err?.response?.data?.detail || err?.message || 'Friend request failed';
       console.error('sendFriendRequest failed:', err);
-      set({ error: message });
-      // Put the player back so they can retry instead of silently vanishing.
-      set((state) => ({ deck: state.deck.find((p) => p.uid === player.uid) ? state.deck : [player, ...state.deck] }));
+      // Roll back the optimistic update on failure.
+      set((state) => ({
+        inbox: {
+          ...state.inbox,
+          sent_friend_request_uids: (state.inbox?.sent_friend_request_uids || []).filter(
+            (u) => u !== player.uid
+          ),
+        },
+        error: message,
+      }));
       return { matched: false, error: message };
     }
   },
 
-  inbox: { incoming_likes: [], incoming_friend_requests: [] },
+  friends: [],
+  fetchFriends: async () => {
+    try {
+      const res = await api.get('/friends');
+      set({ friends: res.data });
+    } catch (err) {
+      console.error('fetchFriends failed:', err);
+    }
+  },
+
+  inbox: { incoming_likes: [], incoming_friend_requests: [], sent_friend_request_uids: [], friend_uids: [] },
   fetchInbox: async () => {
     try {
       const res = await api.get('/inbox');
@@ -141,5 +168,5 @@ export const useMatchStore = create((set, get) => ({
     }
   },
 
-  reset: () => set({ deck: [], deckCursor: null, deckHasMore: true, likes: [], inbox: { incoming_likes: [], incoming_friend_requests: [] }, loading: false, error: null }),
+  reset: () => set({ deck: [], deckCursor: null, deckHasMore: true, likes: [], friends: [], inbox: { incoming_likes: [], incoming_friend_requests: [], sent_friend_request_uids: [], friend_uids: [] }, loading: false, error: null }),
 }));

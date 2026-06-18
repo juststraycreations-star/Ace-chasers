@@ -98,6 +98,8 @@ class IncomingLikeOut(BaseModel):
 class InboxOut(BaseModel):
     incoming_likes: List[IncomingLikeOut] = Field(default_factory=list)
     incoming_friend_requests: List[FriendRequestOut] = Field(default_factory=list)
+    sent_friend_request_uids: List[str] = Field(default_factory=list)
+    friend_uids: List[str] = Field(default_factory=list)
 
 
 # --- Posts -----------------------------------------------------------------
@@ -114,6 +116,22 @@ class PostOut(BaseModel):
     image_url: Optional[str] = None
     video_url: Optional[str] = None
     visibility: Literal["public", "friends_only"]
+    created_at: str
+    author: PostAuthor
+    is_mine: bool = False
+    nice_count: int = 0
+    liked_by_me: bool = False
+    comment_count: int = 0
+
+
+class CommentIn(BaseModel):
+    body: str = Field(min_length=1, max_length=500)
+
+
+class CommentOut(BaseModel):
+    id: str
+    post_id: str
+    body: str
     created_at: str
     author: PostAuthor
     is_mine: bool = False

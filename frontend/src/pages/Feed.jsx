@@ -6,6 +6,7 @@ import { compressImage } from '../lib/compressImage';
 import { resolveImageUrl as fullImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
 import AlphaBanner from '../components/AlphaBanner';
+import PostInteractions from '../components/PostInteractions';
 
 const MAX_RAW_IMAGE_BYTES = 30 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
@@ -434,6 +435,7 @@ export default function Feed() {
                   data-testid={`post-video-${post.id}`}
                 />
               )}
+              <PostInteractions post={post} />
             </article>
           ))}
 

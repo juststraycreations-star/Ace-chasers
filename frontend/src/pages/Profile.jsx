@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useMatchStore } from '../store/matchStore';
 import { api } from '../lib/api';
 import { compressImage } from '../lib/compressImage';
 import { resolveImageUrl } from '../lib/images';
@@ -12,6 +14,10 @@ const MAX_RAW_BYTES = 30 * 1024 * 1024;
 export default function Profile() {
   const profile = useAuthStore((s) => s.profile);
   const setProfile = useAuthStore((s) => s.setProfile);
+  const friends = useMatchStore((s) => s.friends);
+  const inbox = useMatchStore((s) => s.inbox);
+  const fetchFriends = useMatchStore((s) => s.fetchFriends);
+  const fetchInbox = useMatchStore((s) => s.fetchInbox);
 
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(null);
@@ -26,6 +32,13 @@ export default function Profile() {
   useEffect(() => {
     if (profile) setDraft(profile);
   }, [profile, setDraft]);
+
+  useEffect(() => {
+    fetchFriends();
+    fetchInbox();
+  }, [fetchFriends, fetchInbox]);
+
+  const pendingRequestsCount = inbox?.incoming_friend_requests?.length || 0;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -136,6 +149,25 @@ export default function Profile() {
         </div>
       )}
 
+      {pendingRequestsCount > 0 && (
+        <div
+          className="mb-4 bg-disc-gold/15 border border-disc-gold/40 rounded-lg px-4 py-3 flex items-center justify-between"
+          data-testid="profile-pending-requests-notice"
+        >
+          <div className="text-sm text-disc-green font-semibold">
+            🤝 You have <span className="font-bold">{pendingRequestsCount}</span> pending friend request
+            {pendingRequestsCount === 1 ? '' : 's'}.
+          </div>
+          <Link
+            to="/likes"
+            className="text-xs uppercase tracking-wide font-bold text-disc-green hover:text-disc-green/80"
+            data-testid="profile-view-requests-link"
+          >
+            View →
+          </Link>
+        </div>
+      )}
+
       {uploadError && (
         <div
           className="mb-4 flex items-start gap-3 bg-red-50 border-2 border-red-300 rounded-lg px-4 py-3 text-sm text-red-800"
@@ -231,6 +263,20 @@ export default function Profile() {
               </>
             )}
           </div>
+
+          {isEditing && !profile.profilePictureUrl && (
+            <div
+              className="mt-3 bg-disc-gold/15 border border-disc-gold/40 rounded-lg px-3 py-2 text-sm text-gray-800 flex items-start gap-2"
+              data-testid="profile-avatar-prompt"
+            >
+              <span aria-hidden="true">📸</span>
+              <p className="flex-1">
+                <strong className="font-semibold">Add a profile picture!</strong> Players are
+                4× more likely to make friends when your profile has a photo. Tap the green 📷
+                button on your avatar above.
+              </p>
+            </div>
+          )}
 
           <h2 className="mt-3 text-2xl font-bold text-gray-800">
             {profile.name || 'Your name'}
@@ -420,6 +466,58 @@ export default function Profile() {
           />
         </>
       )}
+
+      <section
+        className="mt-8 bg-white rounded-2xl shadow-lg p-6"
+        data-testid="profile-friends-section"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-disc-green">
+            🥏 Your Friends
+            <span className="ml-2 text-sm text-gray-500 font-normal">
+              ({friends?.length || 0})
+            </span>
+          </h2>
+          {(friends?.length || 0) > 0 && (
+            <Link
+              to="/likes"
+              className="text-xs uppercase tracking-wide font-bold text-disc-green hover:text-disc-green/80"
+              data-testid="profile-see-all-friends"
+            >
+              See all →
+            </Link>
+          )}
+        </div>
+        {(friends?.length || 0) === 0 ? (
+          <p className="text-sm text-gray-500">
+            No friends yet. Head to{' '}
+            <Link to="/discovery" className="text-disc-green font-semibold hover:underline">
+              Discovery
+            </Link>{' '}
+            and tap 🤝 Friend on someone to send a request.
+          </p>
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+            {friends.slice(0, 12).map((f) => (
+              <Link
+                key={f.uid}
+                to={`/players/${f.uid}`}
+                className="flex flex-col items-center group"
+                data-testid={`profile-friend-${f.uid}`}
+              >
+                <img
+                  src={resolveImageUrl(f.profilePictureUrl) || DEFAULT_AVATAR}
+                  alt={f.name || 'Friend'}
+                  className="w-14 h-14 rounded-full object-cover mb-1 group-hover:ring-2 group-hover:ring-disc-green transition"
+                />
+                <span className="text-xs font-semibold text-gray-700 text-center truncate w-full">
+                  {f.name || 'Player'}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

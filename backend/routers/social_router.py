@@ -19,6 +19,7 @@ from models import (
     InboxOut,
     IncomingLikeOut,
     LikeOut,
+    ProfileOut,
     SwipeIn,
 )
 
@@ -122,6 +123,30 @@ async def remove_like(target_uid: str, current=Depends(get_current_user)):
     a, b = match_key(current["uid"], target_uid)
     await db.matches.delete_one({"user_a": a, "user_b": b})
     return {"ok": True}
+
+
+@router.get("/api/friends", response_model=List[ProfileOut])
+async def list_my_friends(current=Depends(get_current_user)):
+    """All confirmed friends of the current user (both sides clicked friend
+    or both sent friend requests). Strips private fields + email for the
+    same reason `/api/users/{uid}` does."""
+    db = get_db()
+    me = current["uid"]
+    out: list[ProfileOut] = []
+    async for m in db.matches.find({"friended_by": me}):
+        friended = m.get("friended_by") or []
+        other = m["user_b"] if m["user_a"] == me else m["user_a"]
+        if other not in friended:
+            continue
+        doc = await db.users.find_one({"uid": other})
+        if not doc:
+            continue
+        prof = user_to_profile(doc)
+        strip_private_fields(prof)
+        prof.email = None
+        prof.emailVerified = False
+        out.append(prof)
+    return out
 
 
 # --- Friend requests + inbox ------------------------------------------------
@@ -261,4 +286,20 @@ async def get_inbox(current=Depends(get_current_user)):
         prof.emailVerified = False
         likes_out.append(IncomingLikeOut(from_user=prof, liked_at=swipe.get("created_at", "")))
 
-    return InboxOut(incoming_likes=likes_out, incoming_friend_requests=fr_out)
+    sent_uids: list[str] = []
+    async for d in db.friend_requests.find({"from_uid": me}, {"to_uid": 1}):
+        sent_uids.append(d["to_uid"])
+
+    friend_uids: list[str] = []
+    async for m in db.matches.find({"friended_by": me}):
+        friended = m.get("friended_by") or []
+        other = m["user_b"] if m["user_a"] == me else m["user_a"]
+        if other in friended:
+            friend_uids.append(other)
+
+    return InboxOut(
+        incoming_likes=likes_out,
+        incoming_friend_requests=fr_out,
+        sent_friend_request_uids=sent_uids,
+        friend_uids=friend_uids,
+    )

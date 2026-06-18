@@ -91,6 +91,10 @@ async def ensure_indexes() -> None:
     await db.matches.create_index("user_b")
     await db.friend_requests.create_index([("from_uid", 1), ("to_uid", 1)], unique=True)
     await db.friend_requests.create_index("to_uid")
+    await db.post_likes.create_index([("post_id", 1), ("user_uid", 1)], unique=True)
+    await db.post_likes.create_index("post_id")
+    await db.post_comments.create_index("post_id")
+    await db.post_comments.create_index("created_at")
 
 
 async def seed_demo_users() -> None:

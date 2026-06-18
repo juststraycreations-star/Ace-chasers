@@ -1,7 +1,9 @@
-"""Feed / Posts routes: GET /api/feed, POST /api/posts, DELETE /api/posts/{id}."""
+"""Feed / Posts routes: GET /api/feed, POST /api/posts, DELETE /api/posts/{id},
+POST /api/posts/{id}/nice (toggle), GET/POST /api/posts/{id}/comments."""
 from __future__ import annotations
 
 import os
+import secrets
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
@@ -10,7 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 import cloud_storage
 from db import get_db
 from firebase_auth import get_current_user
-from models import PostAuthor, PostOut
+from models import CommentIn, CommentOut, PostAuthor, PostOut
 from posts import (
     MAX_IMAGE_BYTES,
     MAX_VIDEO_BYTES,
@@ -42,13 +44,16 @@ async def _hydrate_post(post: dict, viewer_uid: str) -> PostOut:
     image_url = None
     if post.get("image_path"):
         img = post["image_path"]
-        # Cloudinary URLs are stored verbatim; legacy disk uploads are bare
-        # filenames that need the StaticFiles mount prefix.
         image_url = img if img.startswith("http") else f"/api/uploads/{img}"
     video_url = None
     if post.get("video_path"):
         vid = post["video_path"]
         video_url = vid if vid.startswith("http") else f"/api/uploads/{vid}"
+    nice_count = await db.post_likes.count_documents({"post_id": post["id"]})
+    liked_by_me = (
+        await db.post_likes.find_one({"post_id": post["id"], "user_uid": viewer_uid}) is not None
+    )
+    comment_count = await db.post_comments.count_documents({"post_id": post["id"]})
     return PostOut(
         id=post["id"],
         body=post.get("body", ""),
@@ -58,6 +63,9 @@ async def _hydrate_post(post: dict, viewer_uid: str) -> PostOut:
         created_at=post.get("created_at", ""),
         author=author_obj,
         is_mine=post["author_uid"] == viewer_uid,
+        nice_count=nice_count,
+        liked_by_me=liked_by_me,
+        comment_count=comment_count,
     )
 
 
@@ -158,4 +166,97 @@ async def delete_post_endpoint(post_id: str, current=Depends(get_current_user)):
     ok = await delete_post(post_id, current["uid"])
     if not ok:
         raise HTTPException(status_code=404, detail="Post not found or not yours")
+    return {"ok": True}
+
+
+
+# --- Nice (likes) + comments -----------------------------------------------
+
+@router.post("/api/posts/{post_id}/nice")
+async def toggle_nice(post_id: str, current=Depends(get_current_user)):
+    """Toggle a 'Nice' on a post. Returns the new state + total count."""
+    db = get_db()
+    existing = await db.post_likes.find_one(
+        {"post_id": post_id, "user_uid": current["uid"]}
+    )
+    if existing:
+        await db.post_likes.delete_one({"_id": existing["_id"]})
+        liked = False
+    else:
+        await db.post_likes.insert_one(
+            {
+                "post_id": post_id,
+                "user_uid": current["uid"],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        liked = True
+    count = await db.post_likes.count_documents({"post_id": post_id})
+    return {"liked_by_me": liked, "nice_count": count}
+
+
+@router.get("/api/posts/{post_id}/comments", response_model=list[CommentOut])
+async def list_comments(post_id: str, current=Depends(get_current_user)):
+    db = get_db()
+    out: list[CommentOut] = []
+    async for c in db.post_comments.find({"post_id": post_id}).sort("created_at", 1).limit(500):
+        author = await db.users.find_one({"uid": c["author_uid"]})
+        out.append(
+            CommentOut(
+                id=c["id"],
+                post_id=c["post_id"],
+                body=c["body"],
+                created_at=c["created_at"],
+                author=PostAuthor(
+                    uid=c["author_uid"],
+                    name=(author or {}).get("name"),
+                    profilePictureUrl=(author or {}).get("profilePictureUrl"),
+                ),
+                is_mine=c["author_uid"] == current["uid"],
+            )
+        )
+    return out
+
+
+@router.post("/api/posts/{post_id}/comments", response_model=CommentOut)
+async def add_comment(
+    post_id: str, payload: CommentIn, current=Depends(get_current_user)
+):
+    db = get_db()
+    body = payload.body.strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="Comment cannot be empty")
+    doc = {
+        "id": secrets.token_urlsafe(10),
+        "post_id": post_id,
+        "author_uid": current["uid"],
+        "body": body,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.post_comments.insert_one(doc)
+    author = await db.users.find_one({"uid": current["uid"]})
+    return CommentOut(
+        id=doc["id"],
+        post_id=post_id,
+        body=body,
+        created_at=doc["created_at"],
+        author=PostAuthor(
+            uid=current["uid"],
+            name=(author or {}).get("name"),
+            profilePictureUrl=(author or {}).get("profilePictureUrl"),
+        ),
+        is_mine=True,
+    )
+
+
+@router.delete("/api/posts/{post_id}/comments/{comment_id}")
+async def delete_comment(
+    post_id: str, comment_id: str, current=Depends(get_current_user)
+):
+    db = get_db()
+    res = await db.post_comments.delete_one(
+        {"id": comment_id, "post_id": post_id, "author_uid": current["uid"]}
+    )
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Comment not found or not yours")
     return {"ok": True}
