@@ -238,9 +238,20 @@ async def _set_reaction(post_id: str, user_uid: str, value: str) -> dict:
 @router.get("/api/posts/{post_id}/comments", response_model=list[CommentOut])
 async def list_comments(post_id: str, current=Depends(get_current_user)):
     db = get_db()
+    comments = await (
+        db.post_comments.find({"post_id": post_id})
+        .sort("created_at", 1)
+        .limit(500)
+        .to_list(length=500)
+    )
+    author_uids = list({c["author_uid"] for c in comments})
+    authors_by_uid: dict[str, dict] = {}
+    if author_uids:
+        async for u in db.users.find({"uid": {"$in": author_uids}}):
+            authors_by_uid[u["uid"]] = u
     out: list[CommentOut] = []
-    async for c in db.post_comments.find({"post_id": post_id}).sort("created_at", 1).limit(500):
-        author = await db.users.find_one({"uid": c["author_uid"]})
+    for c in comments:
+        author = authors_by_uid.get(c["author_uid"])
         out.append(
             CommentOut(
                 id=c["id"],

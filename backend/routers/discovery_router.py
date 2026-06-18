@@ -42,11 +42,27 @@ async def discovery(
     async for doc in cursor:
         docs.append(doc)
 
+    # Batch-fetch latest public post per user (1 query instead of N).
+    uids = [d["uid"] for d in docs]
+    latest_post_by_uid: dict[str, dict] = {}
+    if uids:
+        posts_cursor = db.posts.find(
+            {
+                "author_uid": {"$in": uids},
+                "visibility": "public",
+                "kind": {"$ne": "disc_review"},
+            }
+        ).sort("created_at", -1)
+        async for p in posts_cursor:
+            uid = p["author_uid"]
+            if uid not in latest_post_by_uid:
+                latest_post_by_uid[uid] = p
+
     out: list[DiscoveryProfile] = []
     for doc in docs:
         base = user_to_profile(doc)
         strip_private_fields(base)
-        post = await get_latest_public_post(doc["uid"])
+        post = latest_post_by_uid.get(doc["uid"])
         recent = None
         if post:
             recent = RecentPost(

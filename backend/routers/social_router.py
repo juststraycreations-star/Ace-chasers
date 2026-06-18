@@ -80,14 +80,34 @@ async def post_swipe(payload: SwipeIn, current=Depends(get_current_user)):
 @router.get("/api/likes", response_model=List[LikeOut])
 async def list_likes(current=Depends(get_current_user)):
     db = get_db()
-    cursor = db.swipes.find({"from_uid": current["uid"], "action": "like"}).sort("created_at", -1).limit(200)
+    swipes = await (
+        db.swipes.find({"from_uid": current["uid"], "action": "like"})
+        .sort("created_at", -1)
+        .limit(200)
+        .to_list(length=200)
+    )
+    target_uids = [s["to_uid"] for s in swipes]
+    # Batch-fetch users + matches in one round-trip each.
+    users_by_uid: dict[str, dict] = {}
+    if target_uids:
+        async for u in db.users.find({"uid": {"$in": target_uids}}):
+            users_by_uid[u["uid"]] = u
+    match_keys = [match_key(current["uid"], t) for t in target_uids]
+    matches_by_key: dict[tuple[str, str], dict] = {}
+    if match_keys:
+        # Mongo can't easily query tuples; fetch all matches involving me.
+        async for m in db.matches.find(
+            {"$or": [{"user_a": current["uid"]}, {"user_b": current["uid"]}]}
+        ):
+            matches_by_key[(m["user_a"], m["user_b"])] = m
+
     out: list[LikeOut] = []
-    async for swipe in cursor:
-        target = await db.users.find_one({"uid": swipe["to_uid"]})
+    for swipe in swipes:
+        target = users_by_uid.get(swipe["to_uid"])
         if not target:
             continue
-        a, b = match_key(current["uid"], swipe["to_uid"])
-        match_doc = await db.matches.find_one({"user_a": a, "user_b": b})
+        key = match_key(current["uid"], swipe["to_uid"])
+        match_doc = matches_by_key.get(key)
         friended = bool(match_doc and current["uid"] in (match_doc.get("friended_by") or []))
         out.append(
             LikeOut(
@@ -139,13 +159,21 @@ async def list_user_friends(uid: str, current=Depends(get_current_user)):
 
 async def _friends_for(uid: str) -> list[ProfileOut]:
     db = get_db()
-    out: list[ProfileOut] = []
-    async for m in db.matches.find({"friended_by": uid}):
+    matches = await db.matches.find({"friended_by": uid}).to_list(length=None)
+    other_uids: list[str] = []
+    for m in matches:
         friended = m.get("friended_by") or []
         other = m["user_b"] if m["user_a"] == uid else m["user_a"]
-        if other not in friended:
-            continue
-        doc = await db.users.find_one({"uid": other})
+        if other in friended:
+            other_uids.append(other)
+    if not other_uids:
+        return []
+    users_by_uid: dict[str, dict] = {}
+    async for u in db.users.find({"uid": {"$in": other_uids}}):
+        users_by_uid[u["uid"]] = u
+    out: list[ProfileOut] = []
+    for ouid in other_uids:
+        doc = users_by_uid.get(ouid)
         if not doc:
             continue
         prof = user_to_profile(doc)
@@ -261,10 +289,22 @@ async def get_inbox(current=Depends(get_current_user)):
     db = get_db()
     me = current["uid"]
 
+    # --- Pending friend requests to me (1 batch users query). -----------
+    fr_docs = await (
+        db.friend_requests.find({"to_uid": me})
+        .sort("created_at", -1)
+        .limit(200)
+        .to_list(length=200)
+    )
+    fr_sender_uids = [r["from_uid"] for r in fr_docs]
+    senders_by_uid: dict[str, dict] = {}
+    if fr_sender_uids:
+        async for u in db.users.find({"uid": {"$in": fr_sender_uids}}):
+            senders_by_uid[u["uid"]] = u
     fr_out: list[FriendRequestOut] = []
     fr_from_uids: set[str] = set()
-    async for req in db.friend_requests.find({"to_uid": me}).sort("created_at", -1).limit(200):
-        sender = await db.users.find_one({"uid": req["from_uid"]})
+    for req in fr_docs:
+        sender = senders_by_uid.get(req["from_uid"])
         if not sender:
             continue
         prof = user_to_profile(sender)
@@ -274,17 +314,28 @@ async def get_inbox(current=Depends(get_current_user)):
         fr_out.append(FriendRequestOut(from_user=prof, created_at=req.get("created_at", "")))
         fr_from_uids.add(req["from_uid"])
 
+    # --- Incoming likes (de-duped). One batch users query. -------------
     my_likes_cursor = db.swipes.find({"from_uid": me, "action": "like"}, {"to_uid": 1})
     my_like_targets = {d["to_uid"] async for d in my_likes_cursor}
 
+    incoming_swipes = await (
+        db.swipes.find({"to_uid": me, "action": "like"})
+        .sort("created_at", -1)
+        .limit(200)
+        .to_list(length=200)
+    )
+    relevant_swipes = [
+        s for s in incoming_swipes
+        if s["from_uid"] not in my_like_targets and s["from_uid"] not in fr_from_uids
+    ]
+    like_sender_uids = list({s["from_uid"] for s in relevant_swipes})
+    like_senders_by_uid: dict[str, dict] = {}
+    if like_sender_uids:
+        async for u in db.users.find({"uid": {"$in": like_sender_uids}}):
+            like_senders_by_uid[u["uid"]] = u
     likes_out: list[IncomingLikeOut] = []
-    async for swipe in db.swipes.find({"to_uid": me, "action": "like"}).sort("created_at", -1).limit(200):
-        from_uid = swipe["from_uid"]
-        if from_uid in my_like_targets:
-            continue  # mutual already -> shows up under matches
-        if from_uid in fr_from_uids:
-            continue  # they sent a friend request -> shown in FR section
-        sender = await db.users.find_one({"uid": from_uid})
+    for swipe in relevant_swipes:
+        sender = like_senders_by_uid.get(swipe["from_uid"])
         if not sender:
             continue
         prof = user_to_profile(sender)
