@@ -29,7 +29,7 @@ async def discovery(
     Players the caller has already swiped on are filtered server-side."""
     limit = max(1, min(limit, 50))
     db = get_db()
-    swiped_cursor = db.swipes.find({"from_uid": current["uid"]}, {"to_uid": 1})
+    swiped_cursor = db.swipes.find({"from_uid": current["uid"]}, {"to_uid": 1}).limit(10000)
     swiped_uids = [d["to_uid"] async for d in swiped_cursor]
     exclude = set(swiped_uids + [current["uid"]])
 
