@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
 import { resolveImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
+import MessageComposeModal from '../components/MessageComposeModal';
 
 function timeAgo(iso) {
   if (!iso) return '';
@@ -26,6 +27,7 @@ export default function Messages() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [composeOpen, setComposeOpen] = useState(false);
   const scrollRef = useRef(null);
 
   const refreshThreads = async () => {
@@ -109,15 +111,33 @@ export default function Messages() {
           className="bg-white rounded-lg shadow overflow-hidden flex flex-col"
           data-testid="messages-threads"
         >
-          <div className="bg-disc-green text-white p-4">
+          <div className="bg-disc-green text-white p-4 flex items-center justify-between gap-3">
             <h2 className="text-2xl font-bold">Messages</h2>
+            <button
+              type="button"
+              onClick={() => setComposeOpen(true)}
+              className="bg-white text-disc-green font-bold text-sm px-3 py-1.5 rounded-full hover:bg-disc-gold hover:text-white transition flex items-center gap-1"
+              data-testid="messages-new-btn"
+              title="Start a new message"
+            >
+              ✏️ New
+            </button>
           </div>
           <div className="overflow-y-auto flex-1">
             {loadingThreads ? (
               <p className="p-4 text-sm text-gray-500">Loading conversations…</p>
             ) : threads.length === 0 ? (
               <div className="p-4 text-sm text-gray-500">
-                No conversations yet. Visit a player&apos;s{' '}
+                No conversations yet. Tap{' '}
+                <button
+                  type="button"
+                  className="text-disc-green font-semibold hover:underline"
+                  onClick={() => setComposeOpen(true)}
+                  data-testid="messages-empty-new-btn"
+                >
+                  ✏️ New
+                </button>{' '}
+                above or visit a player&apos;s{' '}
                 <Link to="/discovery" className="text-disc-green font-semibold hover:underline">
                   profile
                 </Link>{' '}
@@ -259,10 +279,37 @@ export default function Messages() {
             className="md:col-span-2 bg-white rounded-lg shadow flex items-center justify-center"
             data-testid="messages-empty"
           >
-            <p className="text-gray-500 text-lg">Select a conversation to start messaging</p>
+            <div className="text-center">
+              <p className="text-gray-500 text-lg mb-3">Select a conversation to start messaging</p>
+              <button
+                type="button"
+                onClick={() => setComposeOpen(true)}
+                className="bg-disc-green hover:bg-disc-green/90 text-white font-bold px-5 py-2 rounded-lg transition"
+                data-testid="messages-empty-compose-btn"
+              >
+                ✏️ Start a new message
+              </button>
+            </div>
           </div>
         )}
       </div>
+
+      {composeOpen && (
+        <MessageComposeModal
+          pickFromFriends
+          onClose={() => setComposeOpen(false)}
+          onSent={(recipient, message) => {
+            // Drop the user straight into the new thread and refresh.
+            setSelected({
+              uid: recipient.uid,
+              name: recipient.name,
+              profilePictureUrl: recipient.profilePictureUrl,
+            });
+            setMessages((prev) => [...prev, message]);
+            refreshThreads();
+          }}
+        />
+      )}
     </div>
   );
 }

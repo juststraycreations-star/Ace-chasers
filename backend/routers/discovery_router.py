@@ -1,6 +1,7 @@
 """GET /api/discovery — cursor-paginated list of swipe candidates."""
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends
@@ -48,6 +49,7 @@ async def discovery(
     before: Optional[str] = None,
     limit: int = DISCOVERY_PAGE_SIZE,
     radius_miles: Optional[float] = None,
+    interested_in: Optional[str] = None,
     current=Depends(get_current_user),
 ):
     """Cursor-paginated list of candidate players.
@@ -57,6 +59,9 @@ async def discovery(
     - `radius_miles`: if set, restrict to players whose geocoded location is
       within this radius of the caller. Players without coordinates are
       excluded when the filter is active.
+    - `interested_in`: if set, only match players whose `interestedIn` field
+      contains the keyword (case-insensitive substring match). Players who
+      have flagged `privacy.interestedIn=true` are excluded.
     """
     limit = max(1, min(limit, 50))
     db = get_db()
@@ -67,6 +72,18 @@ async def discovery(
     query: dict = {"uid": {"$nin": list(exclude)}}
     if before:
         query["created_at"] = {"$lt": before}
+
+    kw = (interested_in or "").strip()
+    if kw:
+        # Case-insensitive substring match. Escape regex metacharacters so
+        # a user typing "tournaments (doubles)" doesn't blow up the engine.
+        pattern = re.escape(kw)
+        query["interestedIn"] = {"$regex": pattern, "$options": "i"}
+        # Hide players who explicitly marked the field private.
+        query["$or"] = [
+            {"privacy.interestedIn": {"$ne": True}},
+            {"privacy.interestedIn": {"$exists": False}},
+        ]
 
     viewer_coords: Optional[tuple[float, float]] = None
     if radius_miles is not None and radius_miles > 0:

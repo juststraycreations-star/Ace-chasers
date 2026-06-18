@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { useMatchStore } from '../store/matchStore';
 import DismissibleBanner from '../components/DismissibleBanner';
 import PublicProfilePreview from '../components/PublicProfilePreview';
+import MessageComposeModal from '../components/MessageComposeModal';
 
 const RADIUS_OPTIONS = [
   { label: 'Anywhere', value: null },
@@ -12,6 +13,15 @@ const RADIUS_OPTIONS = [
   { label: '50 mi', value: 50 },
   { label: '100 mi', value: 100 },
   { label: '250 mi', value: 250 },
+];
+
+const INTEREST_OPTIONS = [
+  { label: 'Any', value: null },
+  { label: 'Casual rounds', value: 'casual' },
+  { label: 'Doubles', value: 'doubles' },
+  { label: 'League', value: 'league' },
+  { label: 'Tournaments', value: 'tournament' },
+  { label: 'Putting', value: 'putt' },
 ];
 
 /**
@@ -26,15 +36,18 @@ export default function Discovery() {
     loading,
     deckHasMore,
     deckRadius,
+    deckInterestedIn,
     inbox,
     fetchDeck,
     loadMoreDeck,
     setDeckRadius,
+    setDeckInterestedIn,
     likePlayer,
     sendFriendRequest,
   } = useMatchStore();
   const navigate = useNavigate();
   const [toast, setToast] = useState(null);
+  const [composeRecipient, setComposeRecipient] = useState(null);
 
   const sentSet = new Set(inbox?.sent_friend_request_uids || []);
   const friendSet = new Set(inbox?.friend_uids || []);
@@ -69,14 +82,18 @@ export default function Discovery() {
   const handleMessage = (e, player) => {
     e.stopPropagation();
     e.preventDefault();
-    navigate('/messages', { state: { withUid: player.uid, name: player.name } });
+    setComposeRecipient({
+      uid: player.uid,
+      name: player.name,
+      profilePictureUrl: player.profilePictureUrl,
+    });
   };
 
   const openProfile = (uid) => navigate(`/players/${uid}`);
 
   const radiusBar = (
     <div
-      className="flex flex-wrap items-center justify-center gap-2 mb-5"
+      className="flex flex-wrap items-center justify-center gap-2 mb-3"
       data-testid="discovery-radius-bar"
     >
       <span className="text-sm font-semibold text-gray-700 mr-1">📍 Within:</span>
@@ -101,10 +118,38 @@ export default function Discovery() {
     </div>
   );
 
+  const interestBar = (
+    <div
+      className="flex flex-wrap items-center justify-center gap-2 mb-5"
+      data-testid="discovery-interest-bar"
+    >
+      <span className="text-sm font-semibold text-gray-700 mr-1">🥏 Interested in:</span>
+      {INTEREST_OPTIONS.map((opt) => {
+        const active = (deckInterestedIn ?? null) === opt.value;
+        return (
+          <button
+            key={opt.label}
+            type="button"
+            onClick={() => setDeckInterestedIn(opt.value)}
+            className={
+              active
+                ? 'bg-disc-gold text-white font-bold text-sm px-3 py-1.5 rounded-full shadow'
+                : 'border border-disc-gold text-disc-gold hover:bg-disc-gold/10 font-semibold text-sm px-3 py-1.5 rounded-full'
+            }
+            data-testid={`interest-option-${opt.value ?? 'any'}`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   if (loading && deck.length === 0) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-12" data-testid="discovery-loading">
         {radiusBar}
+        {interestBar}
         <p className="text-center text-gray-500">Loading players…</p>
       </div>
     );
@@ -114,23 +159,27 @@ export default function Discovery() {
     return (
       <div className="max-w-6xl mx-auto px-4 py-12" data-testid="discovery-empty">
         {radiusBar}
+        {interestBar}
         <div className="text-center">
           <h2 className="text-3xl font-bold text-gray-800 mb-4">
-            {deckRadius
-              ? `No players within ${deckRadius} miles 📍`
+            {deckRadius || deckInterestedIn
+              ? 'No players match those filters 📍'
               : 'No more players to discover! 🎉'}
           </h2>
           <p className="text-gray-600">
-            {deckRadius ? (
+            {deckRadius || deckInterestedIn ? (
               <>
-                Try widening your radius or set it to{' '}
+                Try widening your filters or{' '}
                 <button
                   type="button"
                   className="text-disc-green font-bold underline"
-                  onClick={() => setDeckRadius(null)}
+                  onClick={() => {
+                    setDeckRadius(null);
+                    setDeckInterestedIn(null);
+                  }}
                   data-testid="discovery-reset-radius"
                 >
-                  Anywhere
+                  reset to Anywhere · Any
                 </button>
                 .
               </>
@@ -161,6 +210,7 @@ export default function Discovery() {
       </header>
 
       {radiusBar}
+      {interestBar}
 
       {showLocationHint && (
         <div
@@ -287,6 +337,14 @@ export default function Discovery() {
             {loading ? 'Loading…' : 'Load more players'}
           </button>
         </div>
+      )}
+
+      {composeRecipient && (
+        <MessageComposeModal
+          recipient={composeRecipient}
+          onClose={() => setComposeRecipient(null)}
+          onSent={(r) => flashToast(`✅ Message sent to ${r.name || 'them'}`)}
+        />
       )}
     </div>
   );

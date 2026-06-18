@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useMatchStore } from '../store/matchStore';
 import { resolveImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
 import PublicProfilePreview from '../components/PublicProfilePreview';
+import MessageComposeModal from '../components/MessageComposeModal';
 
 /**
  * Public read-only view of any user's profile, reached via /players/:uid.
@@ -12,7 +13,6 @@ import PublicProfilePreview from '../components/PublicProfilePreview';
  */
 export default function PlayerProfile() {
   const { uid } = useParams();
-  const navigate = useNavigate();
   const inbox = useMatchStore((s) => s.inbox);
   const sendFriendRequest = useMatchStore((s) => s.sendFriendRequest);
   const [profile, setProfile] = useState(null);
@@ -20,6 +20,7 @@ export default function PlayerProfile() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState('');
+  const [composeOpen, setComposeOpen] = useState(false);
 
   const isFriend = (inbox?.friend_uids || []).includes(uid);
   const requestSent = (inbox?.sent_friend_request_uids || []).includes(uid);
@@ -51,9 +52,7 @@ export default function PlayerProfile() {
   }, [uid]);
 
   const handleMessage = () => {
-    // Messages page doesn't currently support deep-linking to a thread,
-    // so for now we just take the user there with the target uid in state.
-    navigate('/messages', { state: { withUid: uid, name: profile?.name } });
+    setComposeOpen(true);
   };
 
   const handleAddPlayer = async () => {
@@ -165,6 +164,18 @@ export default function PlayerProfile() {
           )}
         </>
       ) : null}
+
+      {composeOpen && profile && (
+        <MessageComposeModal
+          recipient={{
+            uid: profile.uid,
+            name: profile.name,
+            profilePictureUrl: profile.profilePictureUrl,
+          }}
+          onClose={() => setComposeOpen(false)}
+          onSent={() => setActionMsg('✅ Message sent')}
+        />
+      )}
     </div>
   );
 }

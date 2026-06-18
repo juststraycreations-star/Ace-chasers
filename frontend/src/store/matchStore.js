@@ -14,6 +14,7 @@ export const useMatchStore = create((set, get) => ({
   deckCursor: null,
   deckHasMore: true,
   deckRadius: null, // null = no filter, number = miles
+  deckInterestedIn: null, // null = no filter, string = keyword
   likes: [],
   loading: false,
   error: null,
@@ -23,12 +24,18 @@ export const useMatchStore = create((set, get) => ({
     get().fetchDeck();
   },
 
+  setDeckInterestedIn: (kw) => {
+    set({ deckInterestedIn: kw });
+    get().fetchDeck();
+  },
+
   fetchDeck: async () => {
-    const { deckRadius } = get();
+    const { deckRadius, deckInterestedIn } = get();
     set({ loading: true, error: null, deck: [], deckCursor: null, deckHasMore: true });
     try {
       const params = {};
       if (deckRadius && deckRadius > 0) params.radius_miles = deckRadius;
+      if (deckInterestedIn) params.interested_in = deckInterestedIn;
       const res = await api.get('/discovery', { params });
       set({
         deck: res.data.players || [],
@@ -42,12 +49,13 @@ export const useMatchStore = create((set, get) => ({
   },
 
   loadMoreDeck: async () => {
-    const { deckCursor, deckHasMore, loading, deckRadius } = get();
+    const { deckCursor, deckHasMore, loading, deckRadius, deckInterestedIn } = get();
     if (!deckHasMore || !deckCursor || loading) return;
     set({ loading: true, error: null });
     try {
       const params = { before: deckCursor };
       if (deckRadius && deckRadius > 0) params.radius_miles = deckRadius;
+      if (deckInterestedIn) params.interested_in = deckInterestedIn;
       const res = await api.get('/discovery', { params });
       set((state) => ({
         deck: [...state.deck, ...(res.data.players || [])],
