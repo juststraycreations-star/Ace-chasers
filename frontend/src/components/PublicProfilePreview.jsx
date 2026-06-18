@@ -44,10 +44,12 @@ export default function PublicProfilePreview({ player, actions, compact = false 
           data-testid="public-profile-thumbnail"
         />
         <div className="mt-2">
-          <h2 className={`${nameSize} font-bold text-gray-800`}>
-            {player.name}
-            {player.age ? `, ${player.age}` : ''}
-          </h2>
+          {(player.name || player.age) && (
+            <h2 className={`${nameSize} font-bold text-gray-800`}>
+              {player.name}
+              {player.age ? `, ${player.age}` : ''}
+            </h2>
+          )}
           {player.skillLevel && (
             <p className="text-disc-gold font-semibold">{player.skillLevel}</p>
           )}

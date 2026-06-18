@@ -120,6 +120,12 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Invite banner on Discovery**: "Loving the app? Bring your friends!" — encourages sharing.
 - **Tests**: 3 new tests (`test_iteration5.py`) — all green. Full suite: 80 pass, 3 skip, 5 pre-existing seed failures unchanged.
 
+### Session 9 — Discovery template unification + Interested-in field (Feb 2026)
+- **Discovery card template = "How others see you" card.** Discovery grid cards now reuse the exact `<PublicProfilePreview>` component used on the Profile page, including the full banner + overlapping circular avatar + bio fields. Action buttons (Nice / Message / Player) are passed in via a new optional `actions` slot.
+- **Responsive grid**: 1 col mobile / 2 col md (≥768px) / 3 col xl (≥1280px).
+- **New `interestedIn` profile field**: free-text (max 200 chars), with a privacy toggle behaving identically to the existing private fields. Backend `PRIVATE_FIELDS` extended in `deps.py`; `ProfileIn`/`ProfileOut` updated; `DiscoveryProfile` inherits the field automatically.
+- **Tests**: 3 new tests (`test_iteration6.py`) — all green. Full suite: 83 pass, 3 skip, 5 pre-existing seed failures unchanged.
+
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
 - P2: Re-enable seed_demo_users behind a DEV-only env flag so the 5 carry-over seed tests in test_api.py go green.
