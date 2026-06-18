@@ -5,6 +5,7 @@ import Navigation from './components/Navigation';
 import EmailVerificationBanner from './components/EmailVerificationBanner';
 import Discovery from './pages/Discovery';
 import Feed from './pages/Feed';
+import BagCheck from './pages/BagCheck';
 import Messages from './pages/Messages';
 import Profile from './pages/Profile';
 import PlayerProfile from './pages/PlayerProfile';
@@ -39,6 +40,7 @@ function AppRoutes() {
         ) : (
           <>
             <Route path="/feed" element={<Feed />} />
+            <Route path="/bagcheck" element={<BagCheck />} />
             <Route path="/discovery" element={<Discovery />} />
             <Route path="/likes" element={<Likes />} />
             <Route path="/messages" element={<Messages />} />

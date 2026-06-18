@@ -135,6 +135,7 @@ async def create_post(
     visibility: str,
     image_path: Optional[str] = None,
     video_path: Optional[str] = None,
+    kind: str = "post",
 ) -> dict:
     db = get_db()
     doc = {
@@ -144,6 +145,7 @@ async def create_post(
         "image_path": image_path,
         "video_path": video_path,
         "visibility": visibility,
+        "kind": kind,
         "created_at": _now_iso(),
     }
     await db.posts.insert_one(doc)
@@ -155,9 +157,12 @@ async def list_feed(
     viewer_uid: str,
     limit: int = 20,
     before: Optional[str] = None,
+    kind: Optional[str] = None,
 ) -> list[dict]:
     """Return posts visible to the viewer, newest first, paginated by an
-    ISO `created_at` cursor (`before` excluded)."""
+    ISO `created_at` cursor (`before` excluded). Pass `kind="disc_review"`
+    to filter the Bag Check feed; pass `kind="post"` (or None) for the
+    regular social feed."""
     db = get_db()
     friends = await get_friend_uids(viewer_uid)
 
@@ -168,6 +173,11 @@ async def list_feed(
             {"visibility": "friends_only", "author_uid": {"$in": friends}},
         ]
     }
+    if kind == "disc_review":
+        query["kind"] = "disc_review"
+    else:
+        # Legacy rows have no `kind` field; treat them as regular posts.
+        query["kind"] = {"$ne": "disc_review"}
     if before:
         query["created_at"] = {"$lt": before}
 

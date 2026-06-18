@@ -58,6 +58,9 @@ export default function Navigation() {
           <Link to="/feed" className={linkClasses('/feed')} data-testid="nav-feed">
             Feed
           </Link>
+          <Link to="/bagcheck" className={linkClasses('/bagcheck')} data-testid="nav-bagcheck">
+            Bag Check
+          </Link>
           <Link to="/discovery" className={linkClasses('/discovery')} data-testid="nav-discovery">
             Discovery
           </Link>

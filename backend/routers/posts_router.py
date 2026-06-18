@@ -49,10 +49,17 @@ async def _hydrate_post(post: dict, viewer_uid: str) -> PostOut:
     if post.get("video_path"):
         vid = post["video_path"]
         video_url = vid if vid.startswith("http") else f"/api/uploads/{vid}"
-    nice_count = await db.post_likes.count_documents({"post_id": post["id"]})
-    liked_by_me = (
-        await db.post_likes.find_one({"post_id": post["id"], "user_uid": viewer_uid}) is not None
+    nice_count = await db.post_likes.count_documents(
+        {"post_id": post["id"], "value": {"$ne": "down"}}
     )
+    down_count = await db.post_likes.count_documents(
+        {"post_id": post["id"], "value": "down"}
+    )
+    my_reaction = await db.post_likes.find_one(
+        {"post_id": post["id"], "user_uid": viewer_uid}
+    )
+    liked_by_me = bool(my_reaction and my_reaction.get("value") != "down")
+    disliked_by_me = bool(my_reaction and my_reaction.get("value") == "down")
     comment_count = await db.post_comments.count_documents({"post_id": post["id"]})
     return PostOut(
         id=post["id"],
@@ -60,11 +67,14 @@ async def _hydrate_post(post: dict, viewer_uid: str) -> PostOut:
         image_url=image_url,
         video_url=video_url,
         visibility=post.get("visibility", "public"),
+        kind=post.get("kind", "post"),
         created_at=post.get("created_at", ""),
         author=author_obj,
         is_mine=post["author_uid"] == viewer_uid,
         nice_count=nice_count,
+        down_count=down_count,
         liked_by_me=liked_by_me,
+        disliked_by_me=disliked_by_me,
         comment_count=comment_count,
     )
 
@@ -73,14 +83,13 @@ async def _hydrate_post(post: dict, viewer_uid: str) -> PostOut:
 async def get_feed(
     before: Optional[str] = None,
     limit: int = FEED_PAGE_SIZE,
+    kind: Optional[Literal["post", "disc_review"]] = None,
     current=Depends(get_current_user),
 ):
-    """Cursor-paginated feed. `before` is the ISO `created_at` of the last
-    item from the previous page; omit on first call. Response shape:
-    `{ posts, next_cursor }` where `next_cursor` is null when there are no
-    more posts."""
+    """Cursor-paginated feed. Pass `kind=disc_review` for the Bag Check
+    feed, otherwise returns the regular social feed."""
     limit = max(1, min(limit, 50))
-    raw_posts = await list_feed(current["uid"], limit=limit, before=before)
+    raw_posts = await list_feed(current["uid"], limit=limit, before=before, kind=kind)
     hydrated = [await _hydrate_post(p, current["uid"]) for p in raw_posts]
     next_cursor = raw_posts[-1]["created_at"] if len(raw_posts) == limit else None
     return {"posts": hydrated, "next_cursor": next_cursor}
@@ -90,6 +99,7 @@ async def get_feed(
 async def create_post_endpoint(
     body: str = Form(""),
     visibility: Literal["public", "friends_only"] = Form("public"),
+    kind: Literal["post", "disc_review"] = Form("post"),
     image: Optional[UploadFile] = File(default=None),
     media: Optional[UploadFile] = File(default=None),
     current=Depends(get_current_user),
@@ -157,6 +167,7 @@ async def create_post_endpoint(
         visibility=visibility,
         image_path=image_filename,
         video_path=video_filename,
+        kind=kind,
     )
     return await _hydrate_post(post, current["uid"])
 
@@ -174,25 +185,54 @@ async def delete_post_endpoint(post_id: str, current=Depends(get_current_user)):
 
 @router.post("/api/posts/{post_id}/nice")
 async def toggle_nice(post_id: str, current=Depends(get_current_user)):
-    """Toggle a 'Nice' on a post. Returns the new state + total count."""
+    """Legacy toggle: switches a 'nice' (up) reaction on/off. Kept for the
+    regular feed posts."""
+    return await _set_reaction(post_id, current["uid"], "up")
+
+
+@router.post("/api/posts/{post_id}/react")
+async def react(
+    post_id: str,
+    value: Literal["up", "down"],
+    current=Depends(get_current_user),
+):
+    """Set a thumbs-up or thumbs-down reaction. Clicking the same value
+    again removes it; clicking the opposite value switches it."""
+    return await _set_reaction(post_id, current["uid"], value)
+
+
+async def _set_reaction(post_id: str, user_uid: str, value: str) -> dict:
     db = get_db()
-    existing = await db.post_likes.find_one(
-        {"post_id": post_id, "user_uid": current["uid"]}
-    )
-    if existing:
+    existing = await db.post_likes.find_one({"post_id": post_id, "user_uid": user_uid})
+    if existing and existing.get("value", "up") == value:
+        # Same value tapped twice -> remove.
         await db.post_likes.delete_one({"_id": existing["_id"]})
-        liked = False
+    elif existing:
+        await db.post_likes.update_one(
+            {"_id": existing["_id"]}, {"$set": {"value": value}}
+        )
     else:
         await db.post_likes.insert_one(
             {
                 "post_id": post_id,
-                "user_uid": current["uid"],
+                "user_uid": user_uid,
+                "value": value,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
         )
-        liked = True
-    count = await db.post_likes.count_documents({"post_id": post_id})
-    return {"liked_by_me": liked, "nice_count": count}
+    nice_count = await db.post_likes.count_documents(
+        {"post_id": post_id, "value": {"$ne": "down"}}
+    )
+    down_count = await db.post_likes.count_documents(
+        {"post_id": post_id, "value": "down"}
+    )
+    my = await db.post_likes.find_one({"post_id": post_id, "user_uid": user_uid})
+    return {
+        "liked_by_me": bool(my and my.get("value") != "down"),
+        "disliked_by_me": bool(my and my.get("value") == "down"),
+        "nice_count": nice_count,
+        "down_count": down_count,
+    }
 
 
 @router.get("/api/posts/{post_id}/comments", response_model=list[CommentOut])

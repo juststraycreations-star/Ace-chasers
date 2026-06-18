@@ -116,11 +116,14 @@ class PostOut(BaseModel):
     image_url: Optional[str] = None
     video_url: Optional[str] = None
     visibility: Literal["public", "friends_only"]
+    kind: Literal["post", "disc_review"] = "post"
     created_at: str
     author: PostAuthor
     is_mine: bool = False
     nice_count: int = 0
+    down_count: int = 0
     liked_by_me: bool = False
+    disliked_by_me: bool = False
     comment_count: int = 0
 
 

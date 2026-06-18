@@ -11,31 +11,56 @@ import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
  * if the server rejects. Comments expand on first click and lazy-load.
  */
 export default function PostInteractions({ post }) {
-  const [nice, setNice] = useState({
+  const isReview = post.kind === 'disc_review';
+  const [react, setReact] = useState({
     liked: !!post.liked_by_me,
-    count: post.nice_count || 0,
+    disliked: !!post.disliked_by_me,
+    up: post.nice_count || 0,
+    down: post.down_count || 0,
   });
   const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState(null); // null = not loaded yet
+  const [comments, setComments] = useState(null);
   const [commentText, setCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [count, setCount] = useState(post.comment_count || 0);
 
-  const toggleNice = async () => {
-    const prev = nice;
-    const optimistic = {
-      liked: !prev.liked,
-      count: prev.count + (prev.liked ? -1 : 1),
-    };
-    setNice(optimistic);
+  const sendReaction = async (value) => {
+    const prev = react;
+    // Optimistic: compute the next state locally.
+    const next = { ...prev };
+    if (value === 'up') {
+      if (prev.liked) { next.liked = false; next.up = Math.max(0, prev.up - 1); }
+      else {
+        next.liked = true; next.up = prev.up + 1;
+        if (prev.disliked) { next.disliked = false; next.down = Math.max(0, prev.down - 1); }
+      }
+    } else { // down
+      if (prev.disliked) { next.disliked = false; next.down = Math.max(0, prev.down - 1); }
+      else {
+        next.disliked = true; next.down = prev.down + 1;
+        if (prev.liked) { next.liked = false; next.up = Math.max(0, prev.up - 1); }
+      }
+    }
+    setReact(next);
     try {
-      const res = await api.post(`/posts/${post.id}/nice`);
-      setNice({ liked: res.data.liked_by_me, count: res.data.nice_count });
+      const url = isReview
+        ? `/posts/${post.id}/react?value=${value}`
+        : `/posts/${post.id}/nice`;
+      const res = await api.post(url);
+      setReact({
+        liked: !!res.data.liked_by_me,
+        disliked: !!res.data.disliked_by_me,
+        up: res.data.nice_count,
+        down: res.data.down_count ?? 0,
+      });
     } catch (err) {
-      console.error('toggleNice failed', err);
-      setNice(prev);
+      console.error('reaction failed', err);
+      setReact(prev);
     }
   };
+
+  const toggleUp = () => sendReaction('up');
+  const toggleDown = () => sendReaction('down');
 
   const openComments = async () => {
     setShowComments((v) => !v);
@@ -84,21 +109,40 @@ export default function PostInteractions({ post }) {
       <div className="flex items-center gap-4 text-sm">
         <button
           type="button"
-          onClick={toggleNice}
+          onClick={toggleUp}
           className={`flex items-center gap-1 font-semibold transition ${
-            nice.liked
-              ? 'text-disc-gold hover:text-disc-gold/80'
-              : 'text-gray-500 hover:text-disc-gold'
+            react.liked
+              ? 'text-disc-green hover:text-disc-green/80'
+              : 'text-gray-500 hover:text-disc-green'
           }`}
           data-testid={`nice-btn-${post.id}`}
-          aria-pressed={nice.liked}
+          aria-pressed={react.liked}
         >
-          <span aria-hidden="true">{nice.liked ? '👍' : '👍🏻'}</span>
-          <span>{nice.liked ? 'Nice ✓' : 'Nice'}</span>
-          {nice.count > 0 && (
-            <span className="text-xs text-gray-500 font-normal">({nice.count})</span>
+          <span aria-hidden="true">👍</span>
+          <span>{isReview ? 'Up' : (react.liked ? 'Nice ✓' : 'Nice')}</span>
+          {react.up > 0 && (
+            <span className="text-xs text-gray-500 font-normal">({react.up})</span>
           )}
         </button>
+        {isReview && (
+          <button
+            type="button"
+            onClick={toggleDown}
+            className={`flex items-center gap-1 font-semibold transition ${
+              react.disliked
+                ? 'text-red-600 hover:text-red-500'
+                : 'text-gray-500 hover:text-red-600'
+            }`}
+            data-testid={`down-btn-${post.id}`}
+            aria-pressed={react.disliked}
+          >
+            <span aria-hidden="true">👎</span>
+            <span>Down</span>
+            {react.down > 0 && (
+              <span className="text-xs text-gray-500 font-normal">({react.down})</span>
+            )}
+          </button>
+        )}
         <button
           type="button"
           onClick={openComments}

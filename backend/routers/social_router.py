@@ -127,15 +127,22 @@ async def remove_like(target_uid: str, current=Depends(get_current_user)):
 
 @router.get("/api/friends", response_model=List[ProfileOut])
 async def list_my_friends(current=Depends(get_current_user)):
-    """All confirmed friends of the current user (both sides clicked friend
-    or both sent friend requests). Strips private fields + email for the
-    same reason `/api/users/{uid}` does."""
+    """All confirmed friends of the current user."""
+    return await _friends_for(current["uid"])
+
+
+@router.get("/api/users/{uid}/friends", response_model=List[ProfileOut])
+async def list_user_friends(uid: str, current=Depends(get_current_user)):
+    """Public friends list for any user (used by their public profile page)."""
+    return await _friends_for(uid)
+
+
+async def _friends_for(uid: str) -> list[ProfileOut]:
     db = get_db()
-    me = current["uid"]
     out: list[ProfileOut] = []
-    async for m in db.matches.find({"friended_by": me}):
+    async for m in db.matches.find({"friended_by": uid}):
         friended = m.get("friended_by") or []
-        other = m["user_b"] if m["user_a"] == me else m["user_a"]
+        other = m["user_b"] if m["user_a"] == uid else m["user_a"]
         if other not in friended:
             continue
         doc = await db.users.find_one({"uid": other})
