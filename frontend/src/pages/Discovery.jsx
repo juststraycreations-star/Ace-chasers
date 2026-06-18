@@ -4,6 +4,15 @@ import { useMatchStore } from '../store/matchStore';
 import { resolveImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
 
+const RADIUS_OPTIONS = [
+  { label: 'Anywhere', value: null },
+  { label: '10 mi', value: 10 },
+  { label: '25 mi', value: 25 },
+  { label: '50 mi', value: 50 },
+  { label: '100 mi', value: 100 },
+  { label: '250 mi', value: 250 },
+];
+
 /**
  * Discovery — info-box cards with a small circular avatar tucked into the
  * lower-left corner. Shows every non-private field the API returns so
@@ -15,9 +24,11 @@ export default function Discovery() {
     deck,
     loading,
     deckHasMore,
+    deckRadius,
     inbox,
     fetchDeck,
     loadMoreDeck,
+    setDeckRadius,
     likePlayer,
     sendFriendRequest,
   } = useMatchStore();
@@ -60,9 +71,37 @@ export default function Discovery() {
 
   const openProfile = (uid) => navigate(`/players/${uid}`);
 
+  const radiusBar = (
+    <div
+      className="flex flex-wrap items-center justify-center gap-2 mb-5"
+      data-testid="discovery-radius-bar"
+    >
+      <span className="text-sm font-semibold text-gray-700 mr-1">📍 Within:</span>
+      {RADIUS_OPTIONS.map((opt) => {
+        const active = (deckRadius ?? null) === opt.value;
+        return (
+          <button
+            key={opt.label}
+            type="button"
+            onClick={() => setDeckRadius(opt.value)}
+            className={
+              active
+                ? 'bg-disc-green text-white font-bold text-sm px-3 py-1.5 rounded-full shadow'
+                : 'border border-disc-green text-disc-green hover:bg-disc-green/10 font-semibold text-sm px-3 py-1.5 rounded-full'
+            }
+            data-testid={`radius-option-${opt.value ?? 'any'}`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   if (loading && deck.length === 0) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-12" data-testid="discovery-loading">
+        {radiusBar}
         <p className="text-center text-gray-500">Loading players…</p>
       </div>
     );
@@ -71,10 +110,32 @@ export default function Discovery() {
   if (deck.length === 0) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-12" data-testid="discovery-empty">
+        {radiusBar}
         <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-800 mb-4">No more players to discover! 🎉</h2>
+          <h2 className="text-3xl font-bold text-gray-800 mb-4">
+            {deckRadius
+              ? `No players within ${deckRadius} miles 📍`
+              : 'No more players to discover! 🎉'}
+          </h2>
           <p className="text-gray-600">
-            Check your <span className="font-semibold">Likes</span> tab to see who you matched with.
+            {deckRadius ? (
+              <>
+                Try widening your radius or set it to{' '}
+                <button
+                  type="button"
+                  className="text-disc-green font-bold underline"
+                  onClick={() => setDeckRadius(null)}
+                  data-testid="discovery-reset-radius"
+                >
+                  Anywhere
+                </button>
+                .
+              </>
+            ) : (
+              <>
+                Check your <span className="font-semibold">Likes</span> tab to see who you matched with.
+              </>
+            )}
           </p>
         </div>
       </div>
@@ -83,12 +144,14 @@ export default function Discovery() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8" data-testid="discovery-view">
-      <header className="mb-6 text-center">
+      <header className="mb-4 text-center">
         <h1 className="text-4xl font-bold text-disc-green mb-1">Find Your Ace Match</h1>
         <p className="text-gray-600 text-sm">
           {deck.length} player{deck.length === 1 ? '' : 's'} to discover — tap a card to view their full profile
         </p>
       </header>
+
+      {radiusBar}
 
       {toast && (
         <div
@@ -143,7 +206,19 @@ export default function Discovery() {
                   </p>
                 )}
                 <ul className="text-[11px] text-gray-600 mt-1 space-y-px">
-                  {player.location && <li className="truncate">📍 {player.location}</li>}
+                  {player.location && (
+                    <li className="truncate">
+                      📍 {player.location}
+                      {typeof player.distance_miles === 'number' && (
+                        <span
+                          className="ml-1 text-disc-green font-semibold"
+                          data-testid={`discovery-distance-${player.uid}`}
+                        >
+                          · {player.distance_miles} mi away
+                        </span>
+                      )}
+                    </li>
+                  )}
                   {player.favoriteCourse && (
                     <li className="truncate">⛳ {player.favoriteCourse}</li>
                   )}
@@ -178,52 +253,52 @@ export default function Discovery() {
                   data-testid={`discovery-avatar-${player.uid}`}
                 />
                 <div
-                  className="flex gap-1 flex-1 justify-end"
+                  className="flex flex-wrap gap-x-3 gap-y-1 flex-1 justify-end items-center"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
                     type="button"
                     onClick={(e) => handleNice(e, player)}
-                    className="bg-disc-green hover:bg-disc-green/90 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md shadow-sm transition flex items-center gap-1"
+                    className="text-disc-green hover:text-disc-green/80 font-semibold text-sm flex items-center gap-1"
                     data-testid={`nice-btn-${player.uid}`}
                     title="Nice"
                   >
-                    👍 <span>Nice</span>
+                    👍 Nice
                   </button>
                   <button
                     type="button"
                     onClick={(e) => handleMessage(e, player)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md shadow-sm transition"
+                    className="text-disc-green hover:text-disc-green/80 font-semibold text-sm flex items-center gap-1"
                     data-testid={`message-btn-${player.uid}`}
                     title="Message"
                   >
-                    💬
+                    💬 Message
                   </button>
                   {isFriend ? (
                     <span
-                      className="bg-emerald-600 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md text-center"
+                      className="text-emerald-600 font-semibold text-sm flex items-center gap-1"
                       data-testid={`player-status-friends-${player.uid}`}
                       title="You are players"
                     >
-                      ✓
+                      ✓ Players
                     </span>
                   ) : sent ? (
                     <span
-                      className="bg-gray-500 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md text-center"
+                      className="text-gray-500 font-semibold text-sm flex items-center gap-1"
                       data-testid={`player-status-sent-${player.uid}`}
                       title="Player request sent"
                     >
-                      ⏳
+                      ⏳ Sent
                     </span>
                   ) : (
                     <button
                       type="button"
                       onClick={(e) => handlePlayer(e, player)}
-                      className="bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md shadow-sm transition ring-2 ring-red-300"
+                      className="text-disc-green hover:text-disc-green/80 font-semibold text-sm flex items-center gap-1"
                       data-testid={`player-btn-${player.uid}`}
                       title="Send player request"
                     >
-                      🤝
+                      🤝 Player
                     </button>
                   )}
                 </div>

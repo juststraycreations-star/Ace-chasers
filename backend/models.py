@@ -78,6 +78,7 @@ class RecentPost(BaseModel):
 class DiscoveryProfile(ProfileOut):
     """ProfileOut + the player's most recent public post (if any)."""
     recent_post: Optional[RecentPost] = None
+    distance_miles: Optional[float] = None
 
 
 class DiscoveryPage(BaseModel):

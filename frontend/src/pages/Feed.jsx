@@ -319,6 +319,21 @@ export default function Feed() {
                   🎬 Video
                 </button>
 
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBody((curr) => {
+                      const tag = curr.trim().length === 0 ? 'Nice! 🥏' : `${curr.trimEnd()} Nice! 🥏`;
+                      return tag.slice(0, 1000);
+                    });
+                  }}
+                  className="text-disc-green hover:text-disc-green/80 font-semibold text-sm flex items-center gap-1"
+                  data-testid="compose-add-nice-btn"
+                  title="Insert a quick Nice! tag"
+                >
+                  👍 Nice
+                </button>
+
                 <select
                   value={visibility}
                   onChange={(e) => setVisibility(e.target.value)}

@@ -13,6 +13,7 @@ from deps import (
     user_to_profile,
 )
 from firebase_auth import get_current_user
+from geocode import geocode_location
 from invites import redeem_invite
 from models import AuthSyncIn, ProfileIn, ProfileOut
 
@@ -84,6 +85,22 @@ async def get_me(current=Depends(get_current_user)):
 async def update_me(payload: ProfileIn, current=Depends(get_current_user)):
     db = get_db()
     updates = {k: v for k, v in payload.model_dump(exclude_none=True).items()}
+    # Geocode whenever the location field is explicitly included in the
+    # payload. Empty string clears the coords; resolvable text stores them.
+    if "location" in updates:
+        loc = (updates.get("location") or "").strip()
+        if not loc:
+            updates["lat"] = None
+            updates["lng"] = None
+        else:
+            coords = await geocode_location(loc)
+            if coords is not None:
+                updates["lat"], updates["lng"] = coords
+            else:
+                # Unresolvable text -> drop stale coords so distance filter
+                # doesn't return a wrong result.
+                updates["lat"] = None
+                updates["lng"] = None
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.users.update_one({"uid": current["uid"]}, {"$set": updates}, upsert=True)
     doc = await db.users.find_one({"uid": current["uid"]})
