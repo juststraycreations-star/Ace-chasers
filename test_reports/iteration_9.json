@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 9 (Friend-request notifications — bell + badge + popover + toast + session modal) end-to-end verified in the UI on the public preview URL. Backend untouched per scope. Created TEST_i9a/b/c/d_* Firebase users via Identity Toolkit, synced them via /api/auth/sync, set names via PUT /api/users/me, and had B/C/D each POST /api/friend-requests/{a.uid} to drive scenarios. Then logged into the UI as A and asserted every selector + flow listed in the review request.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "NotificationsBell.jsx: new-arrival useEffect depends on [requests] (which is useMemo'd off inbox?.incoming_friend_requests). Good — won't loop. Seen-uid set persists across polls in localStorage so reloads don't re-toast already-seen requests. Confirmed: after Accept-then-new-arrival in same session, only the NEW uid produced a toast.",
+    "SessionRequestsModal.jsx: useEffect dep is [requests.length] only. Edge case: if length stays the same but the set of uids changes (rare — one request accepted concurrently while another arrives), the modal would still respect the sessionStorage flag and not reappear. That matches the spec ('one-shot per session'). Acceptable.",
+    "Both components handle Notification API absence gracefully (browserPermission = 'unsupported') and only render the enable-browser-btn when permission==='default' — in headless Chromium Notification.permission is 'denied', so the button correctly does NOT render (this also avoids a permission-denied popup loop).",
+    "Minor: SHOWN_KEY guard sets sessionStorage on first render, so even if user immediately closes the modal via overlay/ESC/X/Decide-later, it won't reappear on remount. This is the intended behavior — verified by remounting via navigation to /feed → modal stayed closed.",
+    "Minor (no action): the popover panel uses absolute positioning (right-0 mt-3); on very narrow viewports it could overflow. Desktop 1920×1080 (the spec viewport) is fine. Not testing mobile here.",
+    "Polling: INBOX_POLL_MS=30_000 confirmed in Navigation.jsx; the bell relies on this poll, no socket required. Manual navigation to /feed triggers an immediate fetchInbox via the route's useEffect, which is how the toast for C surfaced within ~3s instead of waiting 30s."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (no backend changes this iteration; setup endpoints /api/auth/sync, PUT /api/users/me, POST /api/friend-requests/{uid}, GET /api/inbox, POST /api/friend-requests/{uid}/accept|decline all returned 200 as expected)",
+    "frontend": "100% — all 11 review-request selectors / flows verified"
+  },
+  "test_credentials": "Ephemeral Firebase Identity Toolkit signups: TEST_i9a_<hex>@example.com / demo1234 (viewer), TEST_i9b/c/d_<hex>@example.com / demo1234 (senders). All 4 deleted at end of run.",
+  "seed_data_creation": "None persistent. 4 ephemeral Firebase users + their mongo records created and torn down within the playwright run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter-9 new selectors verified live on https://frisbee-favorites.preview.emergentagent.com: notifications-bell-btn, notifications-bell-badge (text='1' or '9+', element absent when count==0), notifications-panel, notifications-panel-count, notifications-empty, notifications-request-{uid}, notifications-accept-{uid}, notifications-ignore-{uid}, notifications-view-all (→ /likes), notifications-enable-browser-btn (only when Notification.permission==='default' — headless Chromium has 'denied' so this won't appear without Notification.permission override). notifications-toast + notifications-toast-open + notifications-toast-dismiss appear top-right for 5s on a NEW friend-request uid not in localStorage 'ace_seen_friend_request_uids_v1'. session-requests-modal + session-requests-overlay + session-requests-close + session-requests-later + session-requests-view-all + session-request-{uid} + session-accept-{uid} + session-ignore-{uid} fire ONCE per session controlled by sessionStorage 'ace_friend_requests_session_modal_shown'. INBOX_POLL_MS=30_000 in Navigation.jsx; to force a refresh in tests, navigate to /feed (route remount calls fetchInbox immediately) instead of waiting 30s.",
+  "rca of the issue": "User-reported issue ('There is no notification for friend request received — should ask Add Player?') is FULLY RESOLVED. Verified scenario: signed up A and B as Firebase users; B POSTed /api/friend-requests/{a.uid}; A logged in via UI and immediately saw (1) red bell badge with count 1, (2) blocking 'Add Player?' session modal with B's row + ✓ Add / ✕ Ignore buttons, (3) on opening the bell popover, the same request rendered with inline Add/Ignore + 'View all on Likes page →' link. Clicking ✓ Add called /api/friend-requests/{b.uid}/accept, refreshed inbox, badge dropped to 0, row removed, empty state shown. Then C sent a new request; on /feed remount the toast 'Sender C Player wants to add you' flashed top-right with dismiss + review controls, badge popped back to 1. Session modal correctly did NOT reappear on remount (sessionStorage guard). Ignore flow called /decline, badge dropped to 0. Click-outside closed the popover. View-all link navigated to /likes. Combined nav-likes-badge regression (counting friend-requests + likes) visible in the final screenshot as 'Likes 2' badge — both items counted. All requested behaviors observed end-to-end against the live preview URL."
+}

@@ -6,8 +6,10 @@ import { useMatchStore } from '../store/matchStore';
 import { firebaseConfigured, getFirebaseAuth } from '../lib/firebase';
 import { clearDevSession } from '../lib/devAuth';
 import DiscIcon from './DiscIcon';
+import NotificationsBell from './NotificationsBell';
+import SessionRequestsModal from './SessionRequestsModal';
 
-const INBOX_POLL_MS = 60_000;
+const INBOX_POLL_MS = 30_000;
 
 export default function Navigation() {
   const location = useLocation();
@@ -88,6 +90,7 @@ export default function Navigation() {
           <Link to="/profile" className={linkClasses('/profile')} data-testid="nav-profile">
             Profile
           </Link>
+          <NotificationsBell />
           <button
             onClick={handleLogout}
             className="bg-disc-purple hover:bg-disc-purple/80 px-4 py-2 rounded-lg font-semibold transition"
@@ -97,6 +100,7 @@ export default function Navigation() {
           </button>
         </div>
       </div>
+      <SessionRequestsModal />
     </nav>
   );
 }
