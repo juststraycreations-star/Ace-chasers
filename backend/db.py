@@ -95,6 +95,8 @@ async def ensure_indexes() -> None:
     await db.post_likes.create_index("post_id")
     await db.post_comments.create_index("post_id")
     await db.post_comments.create_index("created_at")
+    await db.messages.create_index([("pair_key", 1), ("created_at", -1)])
+    await db.messages.create_index("to_uid")
 
 
 async def seed_demo_users() -> None:

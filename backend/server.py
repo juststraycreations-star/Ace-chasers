@@ -40,6 +40,7 @@ from routers import (  # noqa: E402
     auth_router,
     discovery_router,
     media_router,
+    messages_router,
     posts_router,
     social_router,
 )
@@ -90,3 +91,4 @@ app.include_router(media_router.router)
 app.include_router(discovery_router.router)
 app.include_router(social_router.router)
 app.include_router(posts_router.router)
+app.include_router(messages_router.router)
