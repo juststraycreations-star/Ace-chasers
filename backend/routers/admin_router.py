@@ -39,7 +39,7 @@ async def admin_cleanup_seeds(dry_run: bool = True, _: bool = Depends(require_ad
     returns counts so you can sanity-check first."""
     db = get_db()
     example_re = re.compile(r"@example\.(com|org|net)$", re.IGNORECASE)
-    seed_users = await db.users.find({"is_seed": True}).to_list(length=None)
+    seed_users = await db.users.find({"is_seed": True}).limit(1000).to_list(length=1000)
     test_users = []
     async for u in db.users.find({}):
         if example_re.search(u.get("email") or ""):

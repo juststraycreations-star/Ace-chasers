@@ -159,7 +159,7 @@ async def list_user_friends(uid: str, current=Depends(get_current_user)):
 
 async def _friends_for(uid: str) -> list[ProfileOut]:
     db = get_db()
-    matches = await db.matches.find({"friended_by": uid}).to_list(length=None)
+    matches = await db.matches.find({"friended_by": uid}).limit(500).to_list(length=500)
     other_uids: list[str] = []
     for m in matches:
         friended = m.get("friended_by") or []
