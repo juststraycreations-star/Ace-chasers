@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useMatchStore } from '../store/matchStore';
+import { DISCOVERY_INTEREST_OPTIONS } from '../lib/interestTags';
 import DismissibleBanner from '../components/DismissibleBanner';
 import PublicProfilePreview from '../components/PublicProfilePreview';
 import MessageComposeModal from '../components/MessageComposeModal';
@@ -15,14 +16,7 @@ const RADIUS_OPTIONS = [
   { label: '250 mi', value: 250 },
 ];
 
-const INTEREST_OPTIONS = [
-  { label: 'Any', value: null },
-  { label: 'Casual rounds', value: 'casual' },
-  { label: 'Doubles', value: 'doubles' },
-  { label: 'League', value: 'league' },
-  { label: 'Tournaments', value: 'tournament' },
-  { label: 'Putting', value: 'putt' },
-];
+const INTEREST_OPTIONS = DISCOVERY_INTEREST_OPTIONS;
 
 /**
  * Discovery — info-box cards with a small circular avatar tucked into the

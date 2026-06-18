@@ -6,48 +6,15 @@ import { api } from '../lib/api';
 import { compressImage } from '../lib/compressImage';
 import { resolveImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
+import {
+  INTEREST_TAG_OPTIONS,
+  activeInterestTags,
+  toggleInterestTag,
+} from '../lib/interestTags';
 import PublicProfilePreview from '../components/PublicProfilePreview';
 
 const DEFAULT_INTERESTS = ['tournaments', 'hiking', 'casual play'];
 const MAX_RAW_BYTES = 30 * 1024 * 1024;
-
-// Must stay in sync with INTEREST_OPTIONS on Discovery.jsx. The Discovery
-// chip filter does a case-insensitive substring match on `interestedIn`, so
-// the values stored here ("casual", "doubles"…) are exactly the keywords
-// the filter looks for.
-const INTEREST_TAG_OPTIONS = [
-  { label: 'Casual rounds', value: 'casual' },
-  { label: 'Doubles', value: 'doubles' },
-  { label: 'League', value: 'league' },
-  { label: 'Tournaments', value: 'tournament' },
-  { label: 'Putting', value: 'putt' },
-];
-
-/** Return the active tag values inferred from a free-text interestedIn string. */
-function activeTags(text) {
-  const haystack = (text || '').toLowerCase();
-  return new Set(
-    INTEREST_TAG_OPTIONS.filter((opt) => haystack.includes(opt.value)).map(
-      (opt) => opt.value,
-    ),
-  );
-}
-
-/** Toggle a tag inside a free-text interestedIn string. Preserves the user's
- *  custom prose by only appending the label when adding and removing whole
- *  label occurrences when removing. */
-function toggleTag(text, opt) {
-  const current = text || '';
-  const set = activeTags(current);
-  if (set.has(opt.value)) {
-    // Remove any case-insensitive whole-word occurrences of the label.
-    const pattern = new RegExp(`\\b${opt.label}\\b[,;]?\\s*`, 'gi');
-    return current.replace(pattern, '').replace(/^[,;\\s]+|[,;\\s]+$/g, '').trim();
-  }
-  return current.trim().length
-    ? `${current.trim()}, ${opt.label}`
-    : opt.label;
-}
 
 export default function Profile() {
   const profile = useAuthStore((s) => s.profile);
@@ -483,7 +450,7 @@ export default function Profile() {
                 data-testid="profile-interested-in-tags"
               >
                 {INTEREST_TAG_OPTIONS.map((opt) => {
-                  const active = activeTags(draft.interestedIn).has(opt.value);
+                  const active = activeInterestTags(draft.interestedIn).has(opt.value);
                   return (
                     <button
                       key={opt.value}
@@ -491,7 +458,7 @@ export default function Profile() {
                       onClick={() =>
                         setDraft((p) => ({
                           ...p,
-                          interestedIn: toggleTag(p.interestedIn, opt),
+                          interestedIn: toggleInterestTag(p.interestedIn, opt),
                         }))
                       }
                       className={
