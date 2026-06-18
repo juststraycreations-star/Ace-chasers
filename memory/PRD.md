@@ -112,6 +112,22 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 ## API surface (`/api`) — updated
 - `GET  /discovery?radius_miles=N` — now also returns `distance_miles` per player when filter is active.
 
+### Session 8 — Comment previews + re-engagement banners (Feb 2026)
+- **`recent_comments` on posts**: `/api/feed` and `/api/users/{uid}/posts` now return up to 3 newest comments per post (chronological), batched via a single Mongo aggregation per page — no N+1.
+- **Inline comment preview**: each post card on the Feed shows the 3-comment preview without expanding the full thread. "View all N comments" link appears when the count exceeds 3. Preview hides while the full thread is open.
+- **DismissibleBanner component**: new reusable `<DismissibleBanner>` with `localStorage`-backed lazy-init dismissal (no flicker).
+- **Welcome banner on Feed**: "We've upgraded! Let's get you re-connected:" — prompts users to set location, add a profile photo, and post a hi.
+- **Invite banner on Discovery**: "Loving the app? Bring your friends!" — encourages sharing.
+- **Tests**: 3 new tests (`test_iteration5.py`) — all green. Full suite: 80 pass, 3 skip, 5 pre-existing seed failures unchanged.
+
+## Backlog / next steps (current)
+- P2: Native Web Share / copy-link CTA on the Discovery invite banner.
+- P2: Re-enable seed_demo_users behind a DEV-only env flag so the 5 carry-over seed tests in test_api.py go green.
+- P2: Wrap `cloud_storage.upload_bytes` in `asyncio.to_thread()` for true non-blocking uploads.
+- P2: DRY the "upload to cloud OR disk" branching between media_router and posts_router.
+- P2: Replace ADMIN_API_KEY with Firebase custom claims (`admin: true`).
+- P3: Real-time notifications (Firestore listener / websockets).
+
 ## Backlog / next steps
 - P2: Optional one-shot migration of `/app/backend/uploads/` legacy files to Cloudinary, then drop the StaticFiles mount.
 - P2: Wrap `cloud_storage.upload_bytes` in `asyncio.to_thread()` for true non-blocking uploads (current SDK is sync).

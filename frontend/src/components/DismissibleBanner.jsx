@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 /**
  * Dismissible top-of-page banner.
@@ -11,15 +11,14 @@ export default function DismissibleBanner({
   body,
   testId,
 }) {
-  const [hidden, setHidden] = useState(true);
-
-  useEffect(() => {
+  // Lazy-init from localStorage so the banner never flickers on first paint.
+  const [hidden, setHidden] = useState(() => {
     try {
-      setHidden(localStorage.getItem(storageKey) === '1');
+      return localStorage.getItem(storageKey) === '1';
     } catch (_e) {
-      setHidden(false);
+      return false;
     }
-  }, [storageKey]);
+  });
 
   if (hidden) return null;
 
