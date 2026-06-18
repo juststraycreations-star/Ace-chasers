@@ -23,6 +23,7 @@ export default function Likes() {
     removeLike,
     acceptFriendRequest,
     declineFriendRequest,
+    ignoreIncomingLike,
     sendFriendRequest,
   } = useMatchStore();
 
@@ -154,8 +155,9 @@ export default function Likes() {
                     onClick={() => declineFriendRequest(u.uid)}
                     className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold px-3 py-2 rounded-lg"
                     data-testid={`decline-friend-${u.uid}`}
+                    title="Hide this request from your inbox"
                   >
-                    Decline
+                    Ignore
                   </button>
                 </div>
               </div>
@@ -198,15 +200,26 @@ export default function Likes() {
                   </Link>
                   <p className="text-xs text-gray-500 truncate">liked your profile</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => sendFriendRequest(u)}
-                  className="bg-disc-green hover:bg-disc-green/90 text-white text-xs font-bold px-3 py-2 rounded-lg"
-                  data-testid={`send-friend-from-like-${u.uid}`}
-                  title="Send a friend request"
-                >
-                  🤝 Friend
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => sendFriendRequest(u)}
+                    className="bg-disc-green hover:bg-disc-green/90 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                    data-testid={`send-friend-from-like-${u.uid}`}
+                    title="Send a friend request"
+                  >
+                    🤝 Player
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => ignoreIncomingLike(u.uid)}
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold px-3 py-2 rounded-lg"
+                    data-testid={`ignore-incoming-like-${u.uid}`}
+                    title="Hide this notification"
+                  >
+                    Ignore
+                  </button>
+                </div>
               </div>
             ))}
           </div>

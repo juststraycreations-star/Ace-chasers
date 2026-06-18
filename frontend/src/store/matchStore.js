@@ -148,6 +148,14 @@ export const useMatchStore = create((set, get) => ({
       set({ error: err?.response?.data?.detail || err.message });
     }
   },
+  ignoreIncomingLike: async (fromUid) => {
+    try {
+      await api.delete(`/incoming-likes/${fromUid}`);
+      await get().fetchInbox();
+    } catch (err) {
+      set({ error: err?.response?.data?.detail || err.message });
+    }
+  },
 
   addFriend: async (uid) => {
     try {

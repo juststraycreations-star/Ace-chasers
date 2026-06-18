@@ -184,6 +184,19 @@ async def _friends_for(uid: str) -> list[ProfileOut]:
     return out
 
 
+@router.delete("/api/incoming-likes/{from_uid}")
+async def ignore_incoming_like(from_uid: str, current=Depends(get_current_user)):
+    """Hide an incoming like from your inbox. Deletes the sender's like row
+    so it stops showing up under 'People who liked you'."""
+    db = get_db()
+    res = await db.swipes.delete_one(
+        {"from_uid": from_uid, "to_uid": current["uid"], "action": "like"}
+    )
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="No incoming like from that user")
+    return {"ok": True}
+
+
 # --- Friend requests + inbox ------------------------------------------------
 
 @router.post("/api/friend-requests/{target_uid}")

@@ -9,7 +9,7 @@ from fastapi import Depends, Header, HTTPException
 from models import ProfileOut
 
 
-PRIVATE_FIELDS = ("favoriteFrisbee", "favoriteCourse", "homeCourse")
+PRIVATE_FIELDS = ("favoriteFrisbee", "favoriteCourse", "homeCourse", "location")
 
 
 def user_to_profile(doc: dict, *, email_verified: Optional[bool] = None) -> ProfileOut:

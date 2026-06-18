@@ -337,9 +337,24 @@ export default function Profile() {
                 name="location"
                 value={draft.location || ''}
                 onChange={handleChange}
+                placeholder="e.g. Seattle, WA"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
                 data-testid="profile-location-input"
               />
+              <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.privacy?.location)}
+                  onChange={(e) =>
+                    setDraft((p) => ({
+                      ...p,
+                      privacy: { ...(p.privacy || {}), location: e.target.checked },
+                    }))
+                  }
+                  data-testid="profile-location-private-toggle"
+                />
+                <span>Keep my location private (won&apos;t appear on Discovery)</span>
+              </label>
             </div>
 
               <div className="col-span-2">
