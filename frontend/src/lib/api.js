@@ -4,15 +4,16 @@ import { getFirebaseAuth, firebaseConfigured } from './firebase';
 // Hostname-aware backend URL resolution.
 // PRIORITY ORDER (intentional — do not reorder without thinking about it):
 //   1. If we're running on the public custom domain (*.acechasers.net),
-//      always route to the Emergent production host. This wins over env
-//      vars so a misconfigured deployment can't break sign-in.
+//      use window.location.origin so /api/* hits the same ingress that
+//      serves the SPA. This wins over env vars so a misconfigured
+//      deployment can't break sign-in.
 //   2. If REACT_APP_BACKEND_URL is set at build time, honor it.
 //   3. Otherwise fall back to same-origin (useful for localhost dev).
 function resolveBackendUrl() {
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     if (host.endsWith('acechasers.net')) {
-      return 'https://frisbee-favorites.emergent.host';
+      return window.location.origin;
     }
   }
   const fromEnv = process.env.REACT_APP_BACKEND_URL;
