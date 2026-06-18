@@ -9,6 +9,7 @@ import { firebaseConfigured, getFirebaseAuth, googleProvider } from '../lib/fire
 import { clearDevSession, makeDevSession } from '../lib/devAuth';
 import { api } from '../lib/api';
 import CacheNotice from '../components/CacheNotice';
+import DiscIcon from '../components/DiscIcon';
 
 /**
  * Surface a friendlier hint when Firebase or our backend throws a generic
@@ -122,7 +123,10 @@ export default function Login() {
     <div className="min-h-screen bg-gradient-to-br from-disc-green via-disc-purple to-disc-gold flex items-center justify-center px-4">
       <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-disc-green mb-2">🥏 Ace Chasers</h1>
+          <h1 className="text-4xl font-bold text-disc-green mb-2 flex items-center justify-center gap-2">
+            <DiscIcon className="h-9 w-9" />
+            <span>Ace Chasers</span>
+          </h1>
           <p className="text-gray-600">Connect with local players</p>
         </div>
 

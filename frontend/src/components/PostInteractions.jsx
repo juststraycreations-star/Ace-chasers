@@ -110,10 +110,10 @@ export default function PostInteractions({ post }) {
         <button
           type="button"
           onClick={toggleUp}
-          className={`flex items-center gap-1 font-semibold transition ${
+          className={`flex items-center gap-1.5 font-bold transition rounded-full px-3 py-1 ${
             react.liked
-              ? 'text-disc-green hover:text-disc-green/80'
-              : 'text-gray-500 hover:text-disc-green'
+              ? 'bg-disc-green text-white shadow-sm hover:bg-disc-green/90'
+              : 'bg-gray-100 text-gray-700 hover:bg-disc-green hover:text-white'
           }`}
           data-testid={`nice-btn-${post.id}`}
           aria-pressed={react.liked}
@@ -121,7 +121,9 @@ export default function PostInteractions({ post }) {
           <span aria-hidden="true">👍</span>
           <span>{isReview ? 'Up' : (react.liked ? 'Nice ✓' : 'Nice')}</span>
           {react.up > 0 && (
-            <span className="text-xs text-gray-500 font-normal">({react.up})</span>
+            <span className={`text-xs font-normal ${react.liked ? 'text-white/80' : 'text-gray-500'}`}>
+              ({react.up})
+            </span>
           )}
         </button>
         {isReview && (

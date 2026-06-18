@@ -100,7 +100,7 @@ export default function Discovery() {
       )}
 
       <div
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
         data-testid="discovery-grid"
       >
         {deck.map((player) => {
@@ -119,41 +119,47 @@ export default function Discovery() {
                   openProfile(player.uid);
                 }
               }}
-              className="relative bg-white rounded-2xl shadow-md hover:shadow-xl hover:ring-2 hover:ring-disc-green transition cursor-pointer overflow-hidden flex flex-col"
+              className="relative bg-white rounded-2xl shadow-sm hover:shadow-md hover:ring-2 hover:ring-disc-green/60 transition cursor-pointer overflow-hidden flex flex-col"
               data-testid={`discovery-card-${player.uid}`}
               aria-label={`Open ${player.name || 'player'}'s full profile`}
             >
-              {/* Information box */}
-              <div className="px-4 pt-4 pb-2 text-sm text-gray-700 space-y-1 min-h-[180px]">
-                <h2 className="text-lg font-bold text-disc-green leading-tight">
+              {/* Compact information box */}
+              <div className="px-3 pt-3 pb-1.5 text-xs text-gray-700 leading-snug">
+                <h2 className="text-base font-bold text-disc-green leading-tight truncate">
                   {player.name || 'Player'}
                   {player.age ? `, ${player.age}` : ''}
                 </h2>
                 {player.skillLevel && (
-                  <p className="text-xs uppercase tracking-wide text-disc-gold font-semibold">
+                  <p className="text-[10px] uppercase tracking-wide text-disc-gold font-bold mt-0.5">
                     {player.skillLevel}
                   </p>
                 )}
                 {player.bio && (
                   <p
-                    className="text-sm text-gray-700 line-clamp-3 pt-1"
+                    className="text-[12px] text-gray-700 line-clamp-2 mt-1"
                     data-testid={`discovery-bio-${player.uid}`}
                   >
                     {player.bio}
                   </p>
                 )}
-                <ul className="text-xs text-gray-600 space-y-0.5 pt-1">
-                  {player.location && <li>📍 {player.location}</li>}
-                  {player.favoriteCourse && <li>⛳ Fav course: {player.favoriteCourse}</li>}
-                  {player.homeCourse && <li>🏠 Home course: {player.homeCourse}</li>}
-                  {player.favoriteFrisbee && <li>🥏 Fav frisbee: {player.favoriteFrisbee}</li>}
+                <ul className="text-[11px] text-gray-600 mt-1 space-y-px">
+                  {player.location && <li className="truncate">📍 {player.location}</li>}
+                  {player.favoriteCourse && (
+                    <li className="truncate">⛳ {player.favoriteCourse}</li>
+                  )}
+                  {player.homeCourse && (
+                    <li className="truncate">🏠 {player.homeCourse}</li>
+                  )}
+                  {player.favoriteFrisbee && (
+                    <li className="truncate">🥏 {player.favoriteFrisbee}</li>
+                  )}
                 </ul>
                 {player.interests && player.interests.length > 0 && (
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {player.interests.slice(0, 5).map((interest) => (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {player.interests.slice(0, 4).map((interest) => (
                       <span
                         key={interest}
-                        className="bg-disc-green/10 border border-disc-green/30 text-disc-green px-2 py-0.5 rounded-full text-[10px] font-medium"
+                        className="bg-disc-green/10 border border-disc-green/30 text-disc-green px-1.5 py-px rounded-full text-[9px] font-medium"
                       >
                         {interest}
                       </span>
@@ -162,42 +168,50 @@ export default function Discovery() {
                 )}
               </div>
 
-              {/* Avatar circle, lower-left */}
-              <div className="px-4 pb-3 flex items-end justify-between gap-2">
+              {/* Avatar circle (lower-left) + action row */}
+              <div className="px-3 pb-2.5 pt-1.5 flex items-end justify-between gap-2">
                 <img
                   src={image}
                   alt={player.name || 'Player'}
-                  className="w-14 h-14 rounded-full object-cover border-2 border-white shadow ring-2 ring-disc-green/30 flex-shrink-0"
+                  className="w-12 h-12 rounded-full object-cover border-2 border-white shadow ring-2 ring-disc-green/40 flex-shrink-0"
                   loading="lazy"
                   data-testid={`discovery-avatar-${player.uid}`}
                 />
                 <div
-                  className="flex gap-1.5 flex-1 justify-end"
+                  className="flex gap-1 flex-1 justify-end"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
                     type="button"
                     onClick={(e) => handleNice(e, player)}
-                    className="bg-disc-gold/95 hover:bg-disc-gold text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md transition"
+                    className="bg-disc-green hover:bg-disc-green/90 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md shadow-sm transition flex items-center gap-1"
                     data-testid={`nice-btn-${player.uid}`}
                     aria-label={`Mark ${player.name || 'player'} as nice`}
                     title="Nice"
                   >
-                    👍
+                    👍 <span>Nice</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleMessage(e, player)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md shadow-sm transition"
+                    data-testid={`message-btn-${player.uid}`}
+                    title="Message"
+                    aria-label="Send a message"
+                  >
+                    💬
                   </button>
                   {isFriend ? (
-                    <button
-                      type="button"
-                      onClick={(e) => handleMessage(e, player)}
-                      className="bg-disc-green hover:bg-disc-green/90 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md transition"
-                      data-testid={`message-btn-${player.uid}`}
-                      title="Message"
+                    <span
+                      className="bg-emerald-600 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md text-center"
+                      data-testid={`player-status-friends-${player.uid}`}
+                      title="You are players"
                     >
-                      💬
-                    </button>
+                      ✓
+                    </span>
                   ) : sent ? (
                     <span
-                      className="bg-gray-500/90 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md text-center"
+                      className="bg-gray-500 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md text-center"
                       data-testid={`player-status-sent-${player.uid}`}
                       title="Player request sent"
                     >
@@ -207,9 +221,10 @@ export default function Discovery() {
                     <button
                       type="button"
                       onClick={(e) => handlePlayer(e, player)}
-                      className="bg-disc-green/95 hover:bg-disc-green text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md transition"
+                      className="bg-disc-gold hover:bg-disc-gold/90 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md shadow-sm transition"
                       data-testid={`player-btn-${player.uid}`}
                       title="Send player request"
+                      aria-label="Send player request"
                     >
                       🤝
                     </button>

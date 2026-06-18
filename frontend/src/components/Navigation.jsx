@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/authStore';
 import { useMatchStore } from '../store/matchStore';
 import { firebaseConfigured, getFirebaseAuth } from '../lib/firebase';
 import { clearDevSession } from '../lib/devAuth';
+import DiscIcon from './DiscIcon';
 
 const INBOX_POLL_MS = 60_000;
 
@@ -50,8 +51,9 @@ export default function Navigation() {
   return (
     <nav className="bg-disc-green text-white shadow-lg sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-        <Link to="/feed" className="text-2xl font-bold" data-testid="nav-logo">
-          🥏 Ace Chasers
+        <Link to="/feed" className="text-2xl font-bold flex items-center gap-2" data-testid="nav-logo">
+          <DiscIcon className="h-7 w-7" />
+          <span>Ace Chasers</span>
         </Link>
 
         <div className="flex gap-6 items-center">

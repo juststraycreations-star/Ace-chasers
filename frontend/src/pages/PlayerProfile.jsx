@@ -94,30 +94,31 @@ export default function PlayerProfile() {
             className="mt-4 flex flex-wrap gap-2"
             data-testid="player-profile-actions"
           >
+            <button
+              type="button"
+              onClick={handleMessage}
+              className="flex-1 min-w-[140px] bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition"
+              data-testid="player-profile-message-btn"
+            >
+              💬 Message
+            </button>
             {isFriend ? (
+              <span
+                className="flex-1 min-w-[140px] bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg text-center"
+                data-testid="player-profile-friend-status"
+              >
+                ✓ Players
+              </span>
+            ) : (
               <button
                 type="button"
-                onClick={handleMessage}
-                className="flex-1 bg-disc-green hover:bg-disc-green/90 text-white font-bold py-2 px-4 rounded-lg transition"
-                data-testid="player-profile-message-btn"
+                onClick={handleAddPlayer}
+                disabled={requestSent}
+                className="flex-1 min-w-[140px] bg-disc-green hover:bg-disc-green/90 disabled:bg-gray-400 text-white font-bold py-2 px-4 rounded-lg transition"
+                data-testid="player-profile-add-btn"
               >
-                💬 Message
+                {requestSent ? '⏳ Request Sent' : '🤝 Add Player'}
               </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={handleAddPlayer}
-                  disabled={requestSent}
-                  className="flex-1 bg-disc-green hover:bg-disc-green/90 disabled:bg-gray-400 text-white font-bold py-2 px-4 rounded-lg transition"
-                  data-testid="player-profile-add-btn"
-                >
-                  {requestSent ? '⏳ Request Sent' : '🤝 Add Player'}
-                </button>
-                <p className="w-full text-xs text-gray-500 italic">
-                  Become players to send messages and see Players-only posts.
-                </p>
-              </>
             )}
           </div>
           {actionMsg && (
