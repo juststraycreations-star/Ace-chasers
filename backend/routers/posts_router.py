@@ -21,6 +21,7 @@ from posts import (
     create_post,
     delete_post,
     list_feed,
+    list_user_posts,
     sniff_image_mime,
     sniff_video_mime,
 )
@@ -179,6 +180,14 @@ async def delete_post_endpoint(post_id: str, current=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Post not found or not yours")
     return {"ok": True}
 
+
+
+@router.get("/api/users/{author_uid}/posts", response_model=list[PostOut])
+async def get_user_posts(author_uid: str, current=Depends(get_current_user)):
+    """All posts authored by the given user that the caller can see. Used by
+    the Profile page (their own posts) and PlayerProfile (someone else's)."""
+    raw = await list_user_posts(author_uid, current["uid"])
+    return [await _hydrate_post(p, current["uid"]) for p in raw]
 
 
 # --- Nice (likes) + comments -----------------------------------------------

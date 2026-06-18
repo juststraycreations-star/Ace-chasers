@@ -124,7 +124,7 @@ export default function Discovery() {
               aria-label={`Open ${player.name || 'player'}'s full profile`}
             >
               {/* Compact information box */}
-              <div className="px-3 pt-3 pb-1.5 text-xs text-gray-700 leading-snug">
+              <div className="px-3 pt-3 pb-1 text-xs text-gray-700 leading-snug">
                 <h2 className="text-base font-bold text-disc-green leading-tight truncate">
                   {player.name || 'Player'}
                   {player.age ? `, ${player.age}` : ''}
@@ -155,7 +155,7 @@ export default function Discovery() {
                   )}
                 </ul>
                 {player.interests && player.interests.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1.5">
+                  <div className="flex flex-wrap gap-1 mt-1">
                     {player.interests.slice(0, 4).map((interest) => (
                       <span
                         key={interest}
@@ -169,11 +169,11 @@ export default function Discovery() {
               </div>
 
               {/* Avatar circle (lower-left) + action row */}
-              <div className="px-3 pb-2.5 pt-1.5 flex items-end justify-between gap-2">
+              <div className="px-3 pb-3 pt-1 flex items-end justify-between gap-2">
                 <img
                   src={image}
                   alt={player.name || 'Player'}
-                  className="w-12 h-12 rounded-full object-cover border-2 border-white shadow ring-2 ring-disc-green/40 flex-shrink-0"
+                  className="w-16 h-16 rounded-full object-cover border-2 border-white shadow ring-2 ring-disc-green flex-shrink-0"
                   loading="lazy"
                   data-testid={`discovery-avatar-${player.uid}`}
                 />
@@ -186,7 +186,6 @@ export default function Discovery() {
                     onClick={(e) => handleNice(e, player)}
                     className="bg-disc-green hover:bg-disc-green/90 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md shadow-sm transition flex items-center gap-1"
                     data-testid={`nice-btn-${player.uid}`}
-                    aria-label={`Mark ${player.name || 'player'} as nice`}
                     title="Nice"
                   >
                     👍 <span>Nice</span>
@@ -197,7 +196,6 @@ export default function Discovery() {
                     className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md shadow-sm transition"
                     data-testid={`message-btn-${player.uid}`}
                     title="Message"
-                    aria-label="Send a message"
                   >
                     💬
                   </button>
@@ -221,10 +219,9 @@ export default function Discovery() {
                     <button
                       type="button"
                       onClick={(e) => handlePlayer(e, player)}
-                      className="bg-disc-gold hover:bg-disc-gold/90 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md shadow-sm transition"
+                      className="bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold py-1.5 px-2.5 rounded-md shadow-sm transition ring-2 ring-red-300"
                       data-testid={`player-btn-${player.uid}`}
                       title="Send player request"
-                      aria-label="Send player request"
                     >
                       🤝
                     </button>

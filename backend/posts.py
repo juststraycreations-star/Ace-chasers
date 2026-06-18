@@ -194,6 +194,31 @@ async def delete_post(post_id: str, author_uid: str) -> bool:
     return res.deleted_count == 1
 
 
+async def list_user_posts(
+    author_uid: str,
+    viewer_uid: str,
+    limit: int = 50,
+) -> list[dict]:
+    """Posts authored by `author_uid` that `viewer_uid` is allowed to see.
+    Drops disc reviews (they live on Bag Check) and respects friends-only
+    visibility for non-self viewers."""
+    db = get_db()
+    is_self = author_uid == viewer_uid
+    query: dict = {"author_uid": author_uid, "kind": {"$ne": "disc_review"}}
+    if not is_self:
+        friends = await get_friend_uids(viewer_uid)
+        if author_uid in friends:
+            pass  # all of their visible posts are fair game
+        else:
+            query["visibility"] = "public"
+    posts: list[dict] = []
+    async for p in db.posts.find(query).sort("created_at", -1).limit(limit):
+        p.pop("_id", None)
+        posts.append(p)
+    return posts
+
+
+
 async def get_post(post_id: str) -> Optional[dict]:
     db = get_db()
     doc = await db.posts.find_one({"id": post_id})
