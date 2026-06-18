@@ -43,16 +43,20 @@ async def discovery(
         docs.append(doc)
 
     # Batch-fetch latest public post per user (1 query instead of N).
+    # Cap the result to give each user a fair chance to surface their
+    # latest post (rough heuristic: 5 posts per user is plenty since we
+    # only keep the first one we see per author).
     uids = [d["uid"] for d in docs]
     latest_post_by_uid: dict[str, dict] = {}
     if uids:
+        post_cap = max(len(uids) * 5, 100)
         posts_cursor = db.posts.find(
             {
                 "author_uid": {"$in": uids},
                 "visibility": "public",
                 "kind": {"$ne": "disc_review"},
             }
-        ).sort("created_at", -1)
+        ).sort("created_at", -1).limit(post_cap)
         async for p in posts_cursor:
             uid = p["author_uid"]
             if uid not in latest_post_by_uid:
