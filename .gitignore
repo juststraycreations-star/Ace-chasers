@@ -38,3 +38,6 @@ credentials.json
 
 # Sensitive memory artifacts — never deploy
 memory/test_credentials.md
+.env
+.env.*
+*.env
