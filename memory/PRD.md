@@ -132,6 +132,15 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Messages inbox revamp**: header now has a ✏️ New button; empty state shows both an inline link and a primary CTA. Both open the modal in `pickFromFriends` mode (search box + friend list rows). After picking + sending, the new thread is auto-selected and the threads list refreshes.
 - **Tests**: 5 new tests (`test_iteration7.py`) — all green. Full suite: 88 pass, 3 skip, 5 pre-existing seed failures unchanged.
 
+### Session 12 — Friend-request notifications (Feb 2026)
+- **🔔 Bell + red badge** in the navbar (data-testid=notifications-bell-btn). Badge shows pending friend-request count, capped at "9+".
+- **Popover panel** with each request as `notifications-request-{uid}` — avatar, name, **✓ Add** and **✕ Ignore** inline buttons. Click outside closes. "View all on Likes page →" footer link.
+- **Inline toast** ("X wants to add you") fires top-right for 5s when a NEW uid appears between polls. Tracked in localStorage `ace_seen_friend_request_uids_v1` so we never re-toast.
+- **One-shot session modal** "Add Player? (N)" on first auth-ready when requests pending. sessionStorage `ace_friend_requests_session_modal_shown` prevents repeat.
+- **Browser Notification API** opt-in (button only renders when `Notification.permission === 'default'`). Fires native browser notifications on new arrivals if granted.
+- **Inbox polling** tightened from 60s → 30s for faster freshness.
+- Backend untouched; everything builds on the existing `/api/inbox`, `POST /friend-requests/{uid}/accept|decline`.
+
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
 - P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.
