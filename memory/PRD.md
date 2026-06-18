@@ -126,8 +126,15 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **New `interestedIn` profile field**: free-text (max 200 chars), with a privacy toggle behaving identically to the existing private fields. Backend `PRIVATE_FIELDS` extended in `deps.py`; `ProfileIn`/`ProfileOut` updated; `DiscoveryProfile` inherits the field automatically.
 - **Tests**: 3 new tests (`test_iteration6.py`) — all green. Full suite: 83 pass, 3 skip, 5 pre-existing seed failures unchanged.
 
+### Session 10 — Interested-in chip filter + full messaging UX (Feb 2026)
+- **Interested-in filter chip set** on Discovery (Casual / Doubles / League / Tournaments / Putting + Any). Backend `/api/discovery?interested_in=keyword` does case-insensitive substring match and excludes players who marked the field private.
+- **`MessageComposeModal` (new reusable component)**: clicking 💬 Message on a Discovery card or PlayerProfile opens an inline compose modal instead of navigating to the inbox. Send & stay on page.
+- **Messages inbox revamp**: header now has a ✏️ New button; empty state shows both an inline link and a primary CTA. Both open the modal in `pickFromFriends` mode (search box + friend list rows). After picking + sending, the new thread is auto-selected and the threads list refreshes.
+- **Tests**: 5 new tests (`test_iteration7.py`) — all green. Full suite: 88 pass, 3 skip, 5 pre-existing seed failures unchanged.
+
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
+- P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.
 - P2: Re-enable seed_demo_users behind a DEV-only env flag so the 5 carry-over seed tests in test_api.py go green.
 - P2: Wrap `cloud_storage.upload_bytes` in `asyncio.to_thread()` for true non-blocking uploads.
 - P2: DRY the "upload to cloud OR disk" branching between media_router and posts_router.

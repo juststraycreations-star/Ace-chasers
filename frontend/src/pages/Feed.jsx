@@ -70,7 +70,6 @@ export default function Feed() {
     // component (recreated each render) so listing it in deps would cause
     // an infinite refetch loop.
     fetchFeed();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleFileChange = async (e) => {
