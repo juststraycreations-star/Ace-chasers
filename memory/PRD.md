@@ -101,15 +101,25 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Discovery cursor pagination**: `/api/discovery` now returns `{ players, next_cursor }`. Page size 24. Frontend gets a "Load more players" button (`data-testid=discovery-load-more-btn`) that appends pages.
 - **Backend refactor**: `server.py` shrunk from 858 → 90 lines. Pydantic models moved to `models.py`, shared helpers to `deps.py`, and all routes split across six modules in `routers/` (auth, admin, media, discovery, social, posts).
 
+### Session 7 — Geocoding + distance filter + UI consistency (Feb 2026)
+- **Geocoding (`/app/backend/geocode.py`)**: Free-text `location` is geocoded via Nominatim (OpenStreetMap, no API key) and cached in Mongo `geocode_cache`. Profile saves auto-write `lat`/`lng` on the user doc.
+- **`/api/discovery?radius_miles=N`**: filters candidates by haversine distance from the caller's stored coords. Each player in the response carries `distance_miles` when the filter is active.
+- **Discovery UI**: new radius bar with chips (Anywhere / 10 / 25 / 50 / 100 / 250 mi). Distance shown inline next to each card's location. Helpful hint appears when the caller hasn't set their own location yet.
+- **UI button consistency**: all 3 Discovery card actions (Nice / Message / Player) now use the same text-disc-green styling as the Feed compose Photo and Video buttons.
+- **Feed compose**: new 👍 Nice quick-insert button (`data-testid=compose-add-nice-btn`) styled identically to Photo / Video. Click appends "Nice! 🥏" to the body.
+- **Tests**: 12 new tests (4 in test_geocode.py, 8 in test_iteration4.py) — all green.
+
+## API surface (`/api`) — updated
+- `GET  /discovery?radius_miles=N` — now also returns `distance_miles` per player when filter is active.
+
 ## Backlog / next steps
 - P2: Optional one-shot migration of `/app/backend/uploads/` legacy files to Cloudinary, then drop the StaticFiles mount.
 - P2: Wrap `cloud_storage.upload_bytes` in `asyncio.to_thread()` for true non-blocking uploads (current SDK is sync).
 - P2: DRY the "upload to cloud OR disk" branching between `media_router` and `posts_router` into a single helper in `cloud_storage.py`.
+- P2: Geocoding currently runs synchronously inside PUT /users/me; move to a background task if profile saves become hot.
+- P2: Re-enable seed_demo_users behind a DEV-only env flag so the 5 seed-dependent tests in test_api.py go green on a fresh DB.
 - P2: Replace `ADMIN_API_KEY` with Firebase custom claims (`admin: true`).
 - P2: Admin web UI for invites instead of curl.
-- P2: Invite analytics (who redeemed, when, conversion rate).
-- P2: Messages page → real conversations API.
-- P3: Real-time match / friend-request notifications (Firestore listener or websockets).
-- P3: Push / email notifications on friend request & match.
+- P3: Real-time notifications via Firestore listener or websockets.
 
 

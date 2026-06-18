@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../store/authStore';
 import { useMatchStore } from '../store/matchStore';
 import { resolveImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
@@ -37,6 +38,8 @@ export default function Discovery() {
 
   const sentSet = new Set(inbox?.sent_friend_request_uids || []);
   const friendSet = new Set(inbox?.friend_uids || []);
+  const myLocation = useAuthStore((s) => s.profile?.location);
+  const showLocationHint = !!deckRadius && !(myLocation && myLocation.trim());
 
   useEffect(() => {
     fetchDeck();
@@ -152,6 +155,27 @@ export default function Discovery() {
       </header>
 
       {radiusBar}
+
+      {showLocationHint && (
+        <div
+          className="mb-5 max-w-xl mx-auto bg-disc-gold/15 border border-disc-gold/40 rounded-lg px-4 py-3 text-sm text-gray-800 flex items-start gap-2"
+          data-testid="discovery-location-hint"
+        >
+          <span aria-hidden="true">📍</span>
+          <p className="flex-1">
+            <strong className="font-semibold">Set your location</strong> in{' '}
+            <button
+              type="button"
+              className="text-disc-green font-bold underline"
+              onClick={() => navigate('/profile')}
+              data-testid="discovery-location-hint-cta"
+            >
+              your profile
+            </button>{' '}
+            so distance filtering can find players actually near you.
+          </p>
+        </div>
+      )}
 
       {toast && (
         <div
