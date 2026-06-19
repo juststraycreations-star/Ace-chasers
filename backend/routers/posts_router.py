@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -97,6 +97,45 @@ async def get_feed(
         await _attach_recent_comments(hydrated, current["uid"])
     next_cursor = raw_posts[-1]["created_at"] if len(raw_posts) == limit else None
     return {"posts": hydrated, "next_cursor": next_cursor}
+
+
+@router.get("/api/feed/top-niced-this-week", response_model=Optional[PostOut])
+async def get_top_niced_this_week(current=Depends(get_current_user)):
+    """The single public post with the most 👍 Nice reactions in the past 7
+    days. Used by the Feed page's "🏆 Most niced this week" badge. Returns
+    null when no qualifying post exists yet."""
+    db = get_db()
+    one_week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    pipeline = [
+        {"$match": {"value": {"$ne": "down"}, "created_at": {"$gte": one_week_ago}}},
+        {
+            "$lookup": {
+                "from": "posts",
+                "localField": "post_id",
+                "foreignField": "id",
+                "as": "post",
+            }
+        },
+        {"$unwind": "$post"},
+        {
+            "$match": {
+                "post.visibility": "public",
+                "post.kind": {"$ne": "disc_review"},
+            }
+        },
+        {"$group": {"_id": "$post_id", "n": {"$sum": 1}}},
+        {"$sort": {"n": -1}},
+        {"$limit": 1},
+    ]
+    rows = [r async for r in db.post_likes.aggregate(pipeline)]
+    if not rows or rows[0]["n"] == 0:
+        return None
+    raw = await db.posts.find_one({"id": rows[0]["_id"]})
+    if not raw:
+        return None
+    hydrated = await _hydrate_post(raw, current["uid"])
+    await _attach_recent_comments([hydrated], current["uid"])
+    return hydrated
 
 
 async def _attach_recent_comments(

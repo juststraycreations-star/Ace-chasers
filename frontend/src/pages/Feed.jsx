@@ -36,6 +36,9 @@ export default function Feed() {
   const [videoPreview, setVideoPreview] = useState(null);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState('');
+  // The single post with the most 👍 Nice reactions in the past 7 days — null
+  // when no qualifying post exists yet (e.g. brand-new community).
+  const [topNiced, setTopNiced] = useState(null);
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
 
@@ -48,6 +51,17 @@ export default function Feed() {
       setError(err?.response?.data?.detail || err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTopNiced = async () => {
+    try {
+      const res = await api.get('/feed/top-niced-this-week');
+      setTopNiced(res.data || null);
+    } catch (err) {
+      // Non-critical — silently skip if the backend hiccups.
+      console.warn('top-niced fetch failed', err);
+      setTopNiced(null);
     }
   };
 
@@ -70,6 +84,7 @@ export default function Feed() {
     // component (recreated each render) so listing it in deps would cause
     // an infinite refetch loop.
     fetchFeed();
+    fetchTopNiced();
   }, []);
 
   const handleFileChange = async (e) => {
@@ -191,6 +206,49 @@ export default function Feed() {
         testId="feed-welcome-banner"
       />
       <h1 className="text-4xl font-bold text-disc-green mb-6">Feed</h1>
+
+      {topNiced && (
+        <a
+          href={`#post-${topNiced.id}`}
+          className="block mb-6 bg-gradient-to-r from-disc-gold/30 via-white to-disc-gold/30 border-2 border-disc-gold rounded-2xl shadow-sm hover:shadow-md transition p-4"
+          data-testid="top-niced-banner"
+          aria-label="Jump to the most niced post this week"
+        >
+          <div className="flex items-center gap-3">
+            <img
+              src={fullImageUrl(topNiced.author?.profilePictureUrl) || DEFAULT_AVATAR}
+              alt={topNiced.author?.name || 'Player'}
+              className="w-12 h-12 rounded-full object-cover border-2 border-white shadow ring-2 ring-disc-gold flex-shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-disc-gold uppercase tracking-wider">
+                🏆 Most niced this week
+              </p>
+              <p
+                className="font-bold text-gray-800 truncate"
+                data-testid="top-niced-author"
+              >
+                {topNiced.author?.name || 'Player'}
+              </p>
+              <p
+                className="text-sm text-gray-600 line-clamp-1"
+                data-testid="top-niced-body"
+              >
+                {topNiced.body || '(media post)'}
+              </p>
+            </div>
+            <div className="flex flex-col items-end flex-shrink-0">
+              <span
+                className="bg-disc-gold text-white font-bold text-sm px-3 py-1 rounded-full"
+                data-testid="top-niced-count"
+              >
+                👍 {topNiced.nice_count}
+              </span>
+              <span className="text-[10px] text-gray-500 mt-1">{timeAgo(topNiced.created_at)}</span>
+            </div>
+          </div>
+        </a>
+      )}
 
       {/* Compose box */}
       <form
@@ -379,7 +437,8 @@ export default function Feed() {
           {posts.map((post) => (
             <article
               key={post.id}
-              className="bg-white rounded-2xl shadow-lg p-5"
+              id={`post-${post.id}`}
+              className="bg-white rounded-2xl shadow-lg p-5 scroll-mt-24"
               data-testid={`post-${post.id}`}
             >
               <header className="flex items-start justify-between mb-3">
