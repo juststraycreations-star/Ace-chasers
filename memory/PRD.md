@@ -141,6 +141,13 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Inbox polling** tightened from 60s → 30s for faster freshness.
 - Backend untouched; everything builds on the existing `/api/inbox`, `POST /friend-requests/{uid}/accept|decline`.
 
+### Session 13 — Seed purge + comment Nice reactions (Feb 2026)
+- **Seed/demo users filtered everywhere they could surface**: `/api/discovery`, `/api/inbox.incoming_likes`, `/api/likes`, `/api/friends` all now exclude `is_seed: true` users at query time. `POST /api/auth/sync` no longer calls `ensure_inbound_likes_for`, so fresh signups never receive seed auto-likes.
+- **Per-comment 👍 Nice**: new `POST /api/posts/{post_id}/comments/{comment_id}/nice` toggle. `CommentOut` gained `nice_count` + `liked_by_me`. Counts come through on both `/api/feed.recent_comments` AND `GET /api/posts/{id}/comments` via a single batched `_attach_comment_reactions` aggregation.
+- **Cascade delete**: deleting a comment also wipes its `post_comment_likes`.
+- **Frontend `PostInteractions`**: comment Nice button (data-testid=comment-nice-btn-{commentId}) with optimistic UI + rollback, count chip (comment-nice-count-{commentId}) only when > 0. New "👍 Nice!" quick-insert button (comment-insert-nice-{postId}) appends `Nice! 🥏` to the comment textarea.
+- **Tests**: 9 new tests (5 in test_iteration10.py + 4 in test_iteration10_extra.py from the testing agent) — all green.
+
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
 - P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.
