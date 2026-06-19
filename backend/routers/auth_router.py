@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
-from db import ensure_inbound_likes_for, get_db
+from db import get_db
 from deps import (
     claims_email_verified,
     require_invite_enabled,
@@ -63,9 +63,7 @@ async def auth_sync(
         update["$setOnInsert"]["profilePictureUrl"] = current["picture"]
 
     await db.users.update_one({"uid": current["uid"]}, update, upsert=True)
-    # Seed users + auto-likes are disabled in production; ensure_inbound_likes_for
-    # is a no-op when no seed players have auto_like=True.
-    await ensure_inbound_likes_for(current["uid"])
+    # Seed users + auto-likes are disabled in production — real users only.
 
     doc = await db.users.find_one({"uid": current["uid"]})
     return user_to_profile(doc, email_verified=email_verified)

@@ -142,6 +142,8 @@ class CommentOut(BaseModel):
     created_at: str
     author: PostAuthor
     is_mine: bool = False
+    nice_count: int = 0
+    liked_by_me: bool = False
 
 
 # Resolve the forward reference now that CommentOut is defined.

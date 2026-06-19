@@ -87,10 +87,12 @@ async def list_likes(current=Depends(get_current_user)):
         .to_list(length=200)
     )
     target_uids = [s["to_uid"] for s in swipes]
-    # Batch-fetch users + matches in one round-trip each.
+    # Batch-fetch users + matches in one round-trip each. Exclude seeds.
     users_by_uid: dict[str, dict] = {}
     if target_uids:
-        async for u in db.users.find({"uid": {"$in": target_uids}}):
+        async for u in db.users.find(
+            {"uid": {"$in": target_uids}, "is_seed": {"$ne": True}}
+        ):
             users_by_uid[u["uid"]] = u
     match_keys = [match_key(current["uid"], t) for t in target_uids]
     matches_by_key: dict[tuple[str, str], dict] = {}
@@ -169,7 +171,9 @@ async def _friends_for(uid: str) -> list[ProfileOut]:
     if not other_uids:
         return []
     users_by_uid: dict[str, dict] = {}
-    async for u in db.users.find({"uid": {"$in": other_uids}}):
+    async for u in db.users.find(
+        {"uid": {"$in": other_uids}, "is_seed": {"$ne": True}}
+    ):
         users_by_uid[u["uid"]] = u
     out: list[ProfileOut] = []
     for ouid in other_uids:
@@ -312,7 +316,10 @@ async def get_inbox(current=Depends(get_current_user)):
     fr_sender_uids = [r["from_uid"] for r in fr_docs]
     senders_by_uid: dict[str, dict] = {}
     if fr_sender_uids:
-        async for u in db.users.find({"uid": {"$in": fr_sender_uids}}):
+        # Exclude seed/demo users — real users only across the app.
+        async for u in db.users.find(
+            {"uid": {"$in": fr_sender_uids}, "is_seed": {"$ne": True}}
+        ):
             senders_by_uid[u["uid"]] = u
     fr_out: list[FriendRequestOut] = []
     fr_from_uids: set[str] = set()
@@ -344,7 +351,9 @@ async def get_inbox(current=Depends(get_current_user)):
     like_sender_uids = list({s["from_uid"] for s in relevant_swipes})
     like_senders_by_uid: dict[str, dict] = {}
     if like_sender_uids:
-        async for u in db.users.find({"uid": {"$in": like_sender_uids}}):
+        async for u in db.users.find(
+            {"uid": {"$in": like_sender_uids}, "is_seed": {"$ne": True}}
+        ):
             like_senders_by_uid[u["uid"]] = u
     likes_out: list[IncomingLikeOut] = []
     for swipe in relevant_swipes:

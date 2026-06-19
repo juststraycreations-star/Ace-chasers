@@ -69,7 +69,11 @@ async def discovery(
     swiped_uids = [d["to_uid"] async for d in swiped_cursor]
     exclude = set(swiped_uids + [current["uid"]])
 
-    query: dict = {"uid": {"$nin": list(exclude)}}
+    query: dict = {
+        "uid": {"$nin": list(exclude)},
+        # Hide demo/seed accounts forever — real users only across the app.
+        "is_seed": {"$ne": True},
+    }
     if before:
         query["created_at"] = {"$lt": before}
 

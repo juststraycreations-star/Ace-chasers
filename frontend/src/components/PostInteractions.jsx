@@ -110,6 +110,74 @@ export default function PostInteractions({ post }) {
     }
   };
 
+  /**
+   * Toggle a 👍 Nice reaction on a single comment. Optimistically updates
+   * both the preview list and the full-thread list so both surfaces stay
+   * in sync. Rolls back on server error.
+   */
+  const toggleCommentNice = async (commentId) => {
+    const apply = (list, mutator) => (list || []).map((c) => (c.id === commentId ? mutator(c) : c));
+    const flip = (c) => {
+      const wasLiked = !!c.liked_by_me;
+      const nextCount = Math.max(0, (c.nice_count || 0) + (wasLiked ? -1 : 1));
+      return { ...c, liked_by_me: !wasLiked, nice_count: nextCount };
+    };
+    setPreview((p) => apply(p, flip));
+    setComments((p) => apply(p, flip));
+    try {
+      const res = await api.post(`/posts/${post.id}/comments/${commentId}/nice`);
+      const reconcile = (c) =>
+        c.id === commentId
+          ? { ...c, liked_by_me: !!res.data.liked_by_me, nice_count: res.data.nice_count }
+          : c;
+      setPreview((p) => (p || []).map(reconcile));
+      setComments((p) => (p === null ? p : p.map(reconcile)));
+    } catch (err) {
+      console.error('comment nice failed', err);
+      // Roll back by flipping again.
+      setPreview((p) => apply(p, flip));
+      setComments((p) => apply(p, flip));
+    }
+  };
+
+  /** Append (or set) "Nice! 🥏" inside the comment textarea. */
+  const insertNicePhrase = () => {
+    setCommentText((curr) => {
+      const trimmed = (curr || '').trimEnd();
+      const phrase = 'Nice! 🥏';
+      const next = trimmed.length ? `${trimmed} ${phrase}` : phrase;
+      return next.slice(0, 500);
+    });
+  };
+
+  /** Small inline Nice button + count, used both in preview rows and the
+   *  expanded thread. Keeps the per-comment reaction surface consistent. */
+  const renderCommentNice = (c) => (
+    <button
+      type="button"
+      onClick={() => toggleCommentNice(c.id)}
+      className={`inline-flex items-center gap-1 text-[11px] font-semibold transition ${
+        c.liked_by_me
+          ? 'text-disc-green hover:text-disc-green/80'
+          : 'text-gray-500 hover:text-disc-green'
+      }`}
+      data-testid={`comment-nice-btn-${c.id}`}
+      aria-pressed={!!c.liked_by_me}
+      title="Nice"
+    >
+      <span aria-hidden="true">👍</span>
+      <span>{c.liked_by_me ? 'Nice ✓' : 'Nice'}</span>
+      {c.nice_count > 0 && (
+        <span
+          className="text-[10px] text-gray-500 font-normal"
+          data-testid={`comment-nice-count-${c.id}`}
+        >
+          ({c.nice_count})
+        </span>
+      )}
+    </button>
+  );
+
   return (
     <div className="mt-3 border-t border-gray-100 pt-3">
       {/* Inline preview of up to 3 most recent comments (server-provided).
@@ -142,6 +210,7 @@ export default function PostInteractions({ post }) {
                 <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
                   {c.body}
                 </p>
+                <div className="mt-1">{renderCommentNice(c)}</div>
               </div>
             </li>
           ))}
@@ -244,6 +313,7 @@ export default function PostInteractions({ post }) {
                     <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
                       {c.body}
                     </p>
+                    <div className="mt-1">{renderCommentNice(c)}</div>
                   </div>
                   {c.is_mine && (
                     <button
@@ -276,6 +346,15 @@ export default function PostInteractions({ post }) {
               className="flex-1 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:border-disc-green"
               data-testid={`comment-input-${post.id}`}
             />
+            <button
+              type="button"
+              onClick={insertNicePhrase}
+              className="text-disc-green hover:text-disc-green/80 font-semibold text-sm px-2"
+              data-testid={`comment-insert-nice-${post.id}`}
+              title="Insert a quick Nice!"
+            >
+              👍 Nice!
+            </button>
             <button
               type="submit"
               disabled={submitting || !commentText.trim()}

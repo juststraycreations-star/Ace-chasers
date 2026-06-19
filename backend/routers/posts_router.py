@@ -156,6 +156,9 @@ async def _attach_recent_comments(
             )
             for c in bucket
         ]
+    # Hydrate reactions across every preview comment on every post in one go.
+    all_previews = [c for post in posts for c in post.recent_comments]
+    await _attach_comment_reactions(all_previews, viewer_uid)
 
 
 @router.post("/api/posts", response_model=PostOut)
@@ -339,6 +342,7 @@ async def list_comments(post_id: str, current=Depends(get_current_user)):
                 is_mine=c["author_uid"] == current["uid"],
             )
         )
+    await _attach_comment_reactions(out, current["uid"])
     return out
 
 
@@ -383,4 +387,67 @@ async def delete_comment(
     )
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Comment not found or not yours")
+    # Cascade: drop any nice/likes on the deleted comment so counts stay sane.
+    await db.post_comment_likes.delete_many({"comment_id": comment_id})
     return {"ok": True}
+
+
+# --- Comment "Nice" reactions ----------------------------------------------
+
+@router.post("/api/posts/{post_id}/comments/{comment_id}/nice")
+async def toggle_comment_nice(
+    post_id: str, comment_id: str, current=Depends(get_current_user)
+):
+    """Toggle a 👍 Nice reaction on a comment. Idempotent: tapping again
+    removes it. Returns the new nice_count + liked_by_me."""
+    db = get_db()
+    # Make sure the comment actually exists (defensive — keeps stray likes
+    # out of the post_comment_likes collection).
+    comment = await db.post_comments.find_one({"id": comment_id, "post_id": post_id})
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    existing = await db.post_comment_likes.find_one(
+        {"comment_id": comment_id, "user_uid": current["uid"]}
+    )
+    if existing:
+        await db.post_comment_likes.delete_one({"_id": existing["_id"]})
+    else:
+        await db.post_comment_likes.insert_one(
+            {
+                "comment_id": comment_id,
+                "user_uid": current["uid"],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+    nice_count = await db.post_comment_likes.count_documents({"comment_id": comment_id})
+    liked_by_me = existing is None  # we just inserted; (existing was None)
+    return {"nice_count": nice_count, "liked_by_me": liked_by_me}
+
+
+async def _attach_comment_reactions(
+    comments: list[CommentOut], viewer_uid: str
+) -> None:
+    """Populate nice_count + liked_by_me on every comment in `comments` using
+    one batched count aggregation and one viewer-specific find. Mutates in
+    place."""
+    if not comments:
+        return
+    db = get_db()
+    comment_ids = [c.id for c in comments]
+    # Total nice counts per comment in a single aggregation.
+    counts: dict[str, int] = {}
+    pipeline = [
+        {"$match": {"comment_id": {"$in": comment_ids}}},
+        {"$group": {"_id": "$comment_id", "n": {"$sum": 1}}},
+    ]
+    async for row in db.post_comment_likes.aggregate(pipeline):
+        counts[row["_id"]] = row["n"]
+    # My own likes (so the heart fills correctly).
+    mine: set[str] = set()
+    async for row in db.post_comment_likes.find(
+        {"comment_id": {"$in": comment_ids}, "user_uid": viewer_uid}
+    ):
+        mine.add(row["comment_id"])
+    for c in comments:
+        c.nice_count = counts.get(c.id, 0)
+        c.liked_by_me = c.id in mine
