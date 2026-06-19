@@ -158,6 +158,11 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Fix**: Discovery + Likes + Inbox + Friends queries now require `name: {$nin: [None, ""]}` in addition to the existing `is_seed != true` filter. Real users with a completed profile only.
 - **Tests**: 2 new tests (`test_iteration12.py`) — nameless user hidden, empty-string name hidden, named user visible. All green.
 
+### Session 16 — Mandatory onboarding name gate (Feb 2026)
+- **`OnboardingGate.jsx` (new)**: blocking modal mounted by `App.jsx` whenever `authReady && isAuthenticated && profile && !profile.name.trim()`. No dismissal paths — no ESC, no overlay click, no close button. Calls `PUT /api/users/me` on submit, closes only after the server returns the saved name.
+- **Eliminates empty placeholders at the source**: combined with iter-12's backend `name` filter, no user can ever sit invisible in a half-onboarded state. Existing users with no name set will see the gate on their next visit and be forced to fix it.
+- **Tests**: 13/13 frontend acceptance criteria verified end-to-end by the testing agent (signup → no name → gate visible on every authed route → cannot dismiss → save → gate gone permanently).
+
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
 - P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.
