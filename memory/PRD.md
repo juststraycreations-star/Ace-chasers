@@ -163,6 +163,14 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Eliminates empty placeholders at the source**: combined with iter-12's backend `name` filter, no user can ever sit invisible in a half-onboarded state. Existing users with no name set will see the gate on their next visit and be forced to fix it.
 - **Tests**: 13/13 frontend acceptance criteria verified end-to-end by the testing agent (signup → no name → gate visible on every authed route → cannot dismiss → save → gate gone permanently).
 
+### Session 17 — 2-step onboarding (name + photo) (Feb 2026)
+- **`OnboardingGate.jsx` now a 2-step flow**:
+  1. **Name (blocking, undismissable)** — same contract as iter-13. Save advances to step 2 instead of closing.
+  2. **Photo (optional)** — '📷 Pick a photo' uses `compressImage` + multipart upload to `POST /api/users/me/profile-picture`. 'Skip for now' closes the gate without an upload.
+- **`sessionStorage.ace_onboarding_photo_step_done`** tracks the photo step so a refresh doesn't bounce the user back, but clears on tab close so a returning user the next day gets one more nudge.
+- **Header + step indicator** swap between steps. Both steps remain undismissable.
+- **Tests**: 22/22 acceptance checks green across two Playwright phases (nameless user → step 1 → step 2 → Skip; existing named user with no photo → step 2 → real Cloudinary upload).
+
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
 - P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.
