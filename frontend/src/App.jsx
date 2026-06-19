@@ -3,6 +3,7 @@ import { useAuthStore } from './store/authStore';
 import AuthProvider from './components/AuthProvider';
 import Navigation from './components/Navigation';
 import EmailVerificationBanner from './components/EmailVerificationBanner';
+import OnboardingGate from './components/OnboardingGate';
 import Discovery from './pages/Discovery';
 import Feed from './pages/Feed';
 import BagCheck from './pages/BagCheck';
@@ -29,6 +30,7 @@ function AppRoutes() {
     <div className="min-h-screen bg-gray-50">
       {isAuthenticated && <Navigation />}
       {isAuthenticated && <EmailVerificationBanner />}
+      {isAuthenticated && <OnboardingGate />}
 
       <Routes>
         {!isAuthenticated ? (

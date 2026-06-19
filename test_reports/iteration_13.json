@@ -1,0 +1,26 @@
+{
+  "summary": "Iteration 13 (frontend-only): verified the mandatory OnboardingGate blocking modal end-to-end. Signed up a fresh nameless user via Firebase REST + /api/auth/sync, then logged in through the UI. All 13 acceptance criteria passed: gate visible on every authed route (/feed, /discovery, /profile, /messages), input auto-focused, ESC + overlay click + no close button cannot dismiss, Save button disabled when input <2 chars, too-short name shows 'Please use at least 2 characters.' inline error (data-testid=onboarding-error), valid name calls PUT /api/users/me and modal closes immediately (profile.name patched optimistically), gate stays gone on subsequent navigation and after full page reload. Backend untouched this iteration (regression already green in iter12).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration12.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "OnboardingGate.jsx correctly omits all dismissal paths (no overlay onClick, no ESC handler, no close button) — exactly the contract the iteration calls for.",
+    "patchProfile is called with the server's returned name (res.data.name), so a server-side trimming/normalization stays in sync — good.",
+    "Minor nit (non-blocking): when error is set from a previous attempt, it persists until next submit; that's actually preferred UX since the user can still see why their last attempt was rejected. No change needed.",
+    "needsName condition uses authReady && isAuthenticated && profile && !(profile.name && profile.name.trim()) — covers null, undefined, empty string, and whitespace-only. Robust."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not tested this iter)", "frontend": "100%"},
+  "test_credentials": "Fresh user created via Firebase Identity Toolkit REST signup (TEST_i13_<rand>@example.com / demo1234), synced to backend with no name, then deleted post-test. Pattern: /app/backend/tests/test_iteration12.py.",
+  "seed_data_creation": "One throwaway Firebase + backend user (TEST_i13_e637ace2@example.com) created at test start, deleted at end — no leftover state.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "OnboardingGate is mounted in App.jsx between EmailVerificationBanner and Routes. Triggered only when authReady && isAuthenticated && profile && !profile.name. To reproduce the gate condition on demand, use the Firebase REST signUp + POST /api/auth/sync pattern from test_iteration12.py and DO NOT call PUT /api/users/me with a name. Then sign in via the Login UI. The data-testids in scope: onboarding-gate (wrapping div), onboarding-name-input (input), onboarding-save-btn (submit), onboarding-error (inline error). The SignUp form already supplies a name during /signup so the gate never fires for users who came through SignUp — it only fires for users who got into the backend with no name (e.g., via API path or existing production users)."
+}
