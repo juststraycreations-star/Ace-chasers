@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 14 (frontend-only): verified the 2-step OnboardingGate (name + optional photo). 22/22 acceptance checks passed across two Playwright runs. Phase 1 (nameless user → step 1 → step 2 via name save → Skip flow): gate appears on login, header 'Welcome to Ace Chasers!' / subtitle 'What should other players call you?', button label 'Next 🥏', button disabled at 0 and 1 char, 'Please use at least 2 characters.' error shown for <2 chars, ESC + overlay click do NOT dismiss either step, valid name save transitions to step 2 (gate does NOT close), step 2 header 'Add a profile photo' / subtitle 'Players with a photo get 3x more replies. You can skip and add one later.', step indicator second bar bg-white (active), all photo-step testids present (onboarding-photo-pick-btn, onboarding-photo-input, onboarding-photo-skip-btn), Skip closes gate AND sets sessionStorage `ace_onboarding_photo_step_done=1`, page refresh keeps gate closed (flag persists). Phase 2 (existing named user with no photo → straight to step 2 + actual upload): user with name only lands directly on step 2 (skips name step), POST /api/users/me/profile-picture succeeds (Cloudinary URL returned), gate closes, profile.profilePictureUrl patched on backend, reload does not re-open gate. Both test users cleaned up via Firebase delete REST endpoint.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration12.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "OnboardingGate.jsx (258 lines) — clean two-step state machine. needsName / needsPhoto computed from authReady + isAuthenticated + profile + hasName + profilePictureUrl + photoStepDone covers every gating case correctly. Verified: named-but-no-photo existing users do go through step 2 once on next login (sessionStorage starts empty per tab), and fully-onboarded users never see the gate.",
+    "sessionStorage key (not localStorage) is intentional — survives reload, clears on tab close so a returning user the next day gets one more nudge. Matches the spec exactly.",
+    "Skip path is non-destructive: no API call, sessionStorage is the only side effect. Backend stays clean.",
+    "Photo upload error path resets preview and re-enables both buttons (uploading=false in finally). File input is also cleared so picking the same file twice still fires onChange — nice detail.",
+    "Minor (non-blocking): preview is set from FileReader.readAsDataURL right before the network upload kicks off. If a slow network meant the upload took several seconds, the user briefly sees a preview without confirmation it's saved — but the button reads 'Uploading…' the whole time so the affordance is fine. No change needed.",
+    "Both steps still satisfy the iter-13 undismissable contract: no overlay onClick, no ESC handler, no close button. Verified via Playwright in this run."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not tested this iter)", "frontend": "100% (22/22 checks)"},
+  "test_credentials": "Two fresh users created via Firebase Identity Toolkit REST signUp (TEST_i14_<hex>@example.com and TEST_i14b_<hex>@example.com) / demo1234. Both deleted at end of run. Pattern: /app/backend/tests/test_iteration12.py.",
+  "seed_data_creation": "Two throwaway Firebase + backend users created and deleted in-test. No lingering state. One Cloudinary upload was made by the photo-step test — backend persists the URL on the (now-deleted) user record so it's effectively orphaned; if cleanup of Cloudinary assets matters, that's a separate concern outside this gate test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "OnboardingGate now has two steps. data-testids in scope: onboarding-gate, onboarding-step-indicator, onboarding-name-input, onboarding-save-btn, onboarding-error, onboarding-photo-pick-btn, onboarding-photo-input, onboarding-photo-skip-btn, onboarding-photo-preview. sessionStorage key is `ace_onboarding_photo_step_done` (set to '1' on Skip or successful upload). To force the gate open on demand, sign a fresh user up via Firebase REST + /api/auth/sync and skip /api/users/me PUT. To put a user directly at step 2, also set a name via PUT /api/users/me but don't upload a photo. To re-trigger step 2 across tab close, clear the sessionStorage key. Photo upload endpoint: POST /api/users/me/profile-picture, multipart field name 'image', returns ProfileOut JSON with profilePictureUrl."
+}
