@@ -87,11 +87,16 @@ async def list_likes(current=Depends(get_current_user)):
         .to_list(length=200)
     )
     target_uids = [s["to_uid"] for s in swipes]
-    # Batch-fetch users + matches in one round-trip each. Exclude seeds.
+    # Batch-fetch users + matches in one round-trip each. Exclude seeds +
+    # incomplete profiles so the Likes list shows real users only.
     users_by_uid: dict[str, dict] = {}
     if target_uids:
         async for u in db.users.find(
-            {"uid": {"$in": target_uids}, "is_seed": {"$ne": True}}
+            {
+                "uid": {"$in": target_uids},
+                "is_seed": {"$ne": True},
+                "name": {"$nin": [None, ""]},
+            }
         ):
             users_by_uid[u["uid"]] = u
     match_keys = [match_key(current["uid"], t) for t in target_uids]
@@ -172,7 +177,11 @@ async def _friends_for(uid: str) -> list[ProfileOut]:
         return []
     users_by_uid: dict[str, dict] = {}
     async for u in db.users.find(
-        {"uid": {"$in": other_uids}, "is_seed": {"$ne": True}}
+        {
+            "uid": {"$in": other_uids},
+            "is_seed": {"$ne": True},
+            "name": {"$nin": [None, ""]},
+        }
     ):
         users_by_uid[u["uid"]] = u
     out: list[ProfileOut] = []
@@ -316,9 +325,13 @@ async def get_inbox(current=Depends(get_current_user)):
     fr_sender_uids = [r["from_uid"] for r in fr_docs]
     senders_by_uid: dict[str, dict] = {}
     if fr_sender_uids:
-        # Exclude seed/demo users — real users only across the app.
+        # Real, completed-profile users only — exclude seeds + empty signups.
         async for u in db.users.find(
-            {"uid": {"$in": fr_sender_uids}, "is_seed": {"$ne": True}}
+            {
+                "uid": {"$in": fr_sender_uids},
+                "is_seed": {"$ne": True},
+                "name": {"$nin": [None, ""]},
+            }
         ):
             senders_by_uid[u["uid"]] = u
     fr_out: list[FriendRequestOut] = []
@@ -352,7 +365,11 @@ async def get_inbox(current=Depends(get_current_user)):
     like_senders_by_uid: dict[str, dict] = {}
     if like_sender_uids:
         async for u in db.users.find(
-            {"uid": {"$in": like_sender_uids}, "is_seed": {"$ne": True}}
+            {
+                "uid": {"$in": like_sender_uids},
+                "is_seed": {"$ne": True},
+                "name": {"$nin": [None, ""]},
+            }
         ):
             like_senders_by_uid[u["uid"]] = u
     likes_out: list[IncomingLikeOut] = []

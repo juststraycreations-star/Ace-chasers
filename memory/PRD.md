@@ -153,6 +153,11 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Feed badge UI**: gold-trimmed card pinned to the top of `/feed` (data-testid=top-niced-banner) that shows author avatar, body preview, 👍 count, and timeAgo. Click jumps to `#post-{id}` (smooth-scroll via `scroll-mt-24`).
 - **Tests**: 3 new tests (`test_iteration11.py`) — top winner contract, friends-only exclusion for non-friends, disc-review exclusion — all green.
 
+### Session 15 — Incomplete-profile placeholders fixed (Feb 2026)
+- **Real root cause** of "placeholder cards" on production: not `is_seed: true` users (there are zero of those!), but rather **abandoned signups that never set a `name`**. Preview DB had 104 of 115 users with no name set.
+- **Fix**: Discovery + Likes + Inbox + Friends queries now require `name: {$nin: [None, ""]}` in addition to the existing `is_seed != true` filter. Real users with a completed profile only.
+- **Tests**: 2 new tests (`test_iteration12.py`) — nameless user hidden, empty-string name hidden, named user visible. All green.
+
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
 - P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.

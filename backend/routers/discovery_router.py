@@ -73,6 +73,9 @@ async def discovery(
         "uid": {"$nin": list(exclude)},
         # Hide demo/seed accounts forever — real users only across the app.
         "is_seed": {"$ne": True},
+        # Hide profiles that haven't completed onboarding yet (no name set).
+        # Without this, abandoned signups appear as empty "placeholder" cards.
+        "name": {"$nin": [None, ""]},
     }
     if before:
         query["created_at"] = {"$lt": before}
