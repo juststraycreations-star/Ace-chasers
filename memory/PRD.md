@@ -171,6 +171,14 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Header + step indicator** swap between steps. Both steps remain undismissable.
 - **Tests**: 22/22 acceptance checks green across two Playwright phases (nameless user → step 1 → step 2 → Skip; existing named user with no photo → step 2 → real Cloudinary upload).
 
+### Session 18 — Courses page + in-app reviews + Ace Club field (Feb 2026)
+- **Backend**: New `routers/courses_router.py` with 8 endpoints (list/search, detail, recent-reviews, per-course-reviews, create-review with one-per-user upsert, delete-review, admin add/delete). New `seed_courses.py` seeds 15 popular US courses on first boot. New `CourseIn` / `CourseOut` / `CourseReviewIn` / `CourseReviewOut` Pydantic models.
+- **"Ace Club" field** — bool + optional integer count on every course. 10 of the 15 seeded courses ship with Ace Club enabled (Maple Hill 250, Idlewild 180, Winthrop Gold 320, etc).
+- **Frontend `/courses`** — list with search (250ms debounce), recent-reviews sidebar, Ace Club pills on enabled courses.
+- **Frontend `/courses/:id`** — detail page with star picker, write-a-review form, last 10 reviews, replace-on-resubmit, admin/author delete.
+- **Nav** — new "Courses" link between Bag Check and Discovery.
+- **Tests**: 6/6 backend tests + 30+/30+ frontend acceptance checks green.
+
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
 - P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.
