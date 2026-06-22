@@ -38,12 +38,14 @@ from posts import (  # noqa: E402
 from routers import (  # noqa: E402
     admin_router,
     auth_router,
+    courses_router,
     discovery_router,
     media_router,
     messages_router,
     posts_router,
     social_router,
 )
+from seed_courses import seed_default_courses  # noqa: E402
 
 
 logger = logging.getLogger("server")
@@ -72,6 +74,11 @@ async def on_startup() -> None:
     # Demo seed users (Sarah, Jessica, Amanda) and auto-likes intentionally
     # disabled — production goes live with real users only.
     # await seed_demo_users()
+    # Courses are public data (real popular US courses) — seeded once if
+    # collection is empty. Idempotent on every boot.
+    inserted = await seed_default_courses()
+    if inserted:
+        logger.info("Seeded %d default courses", inserted)
 
 
 @app.get("/api/health")
@@ -92,3 +99,4 @@ app.include_router(discovery_router.router)
 app.include_router(social_router.router)
 app.include_router(posts_router.router)
 app.include_router(messages_router.router)
+app.include_router(courses_router.router)

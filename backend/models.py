@@ -148,3 +148,45 @@ class CommentOut(BaseModel):
 
 # Resolve the forward reference now that CommentOut is defined.
 PostOut.model_rebuild()
+
+
+# --- Courses ----------------------------------------------------------------
+
+class CourseIn(BaseModel):
+    """Admin-facing payload for adding/editing a course."""
+    name: str = Field(min_length=1, max_length=200)
+    location: Optional[str] = Field(default=None, max_length=200)  # "City, State"
+    description: Optional[str] = Field(default=None, max_length=2000)
+    holes: Optional[int] = Field(default=None, ge=1, le=99)
+    # "Ace Club" — does the course run an ace pot / club? When True, the
+    # numeric value below holds the buy-in / member count (interpretation up
+    # to the user; we just persist the integer).
+    aceClub: bool = False
+    aceClubCount: Optional[int] = Field(default=None, ge=0, le=10_000)
+
+
+class CourseOut(CourseIn):
+    id: str
+    created_at: str
+    review_count: int = 0
+    avg_rating: Optional[float] = None  # 1-5
+
+
+class CourseReviewIn(BaseModel):
+    body: str = Field(min_length=1, max_length=1000)
+    rating: int = Field(ge=1, le=5)
+
+
+class CourseReviewOut(BaseModel):
+    id: str
+    course_id: str
+    body: str
+    rating: int
+    created_at: str
+    author: PostAuthor
+    is_mine: bool = False
+    # Course context is included on the global "recent reviews" feed so the
+    # caller doesn't have to look it up separately.
+    course_name: Optional[str] = None
+    course_location: Optional[str] = None
+
