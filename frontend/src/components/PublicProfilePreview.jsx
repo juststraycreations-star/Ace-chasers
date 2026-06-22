@@ -50,9 +50,25 @@ export default function PublicProfilePreview({ player, actions, compact = false 
               {player.age ? `, ${player.age}` : ''}
             </h2>
           )}
-          {player.skillLevel && (
-            <p className="text-disc-gold font-semibold">{player.skillLevel}</p>
-          )}
+          <div className="flex flex-wrap items-center gap-2 mt-0.5">
+            {player.skillLevel && (
+              <p className="text-disc-gold font-semibold">{player.skillLevel}</p>
+            )}
+            {player.aceClub && (
+              <span
+                className="bg-disc-gold/15 text-disc-gold border border-disc-gold/40 text-xs font-bold px-2 py-0.5 rounded-full"
+                data-testid="public-profile-ace-club"
+                title={
+                  player.aceClubCount != null
+                    ? `Ace Club member · ${player.aceClubCount} aces`
+                    : 'Ace Club member'
+                }
+              >
+                🏆 Ace Club
+                {player.aceClubCount != null ? ` (${player.aceClubCount})` : ''}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Info */}

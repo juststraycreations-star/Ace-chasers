@@ -99,6 +99,10 @@ async def update_me(payload: ProfileIn, current=Depends(get_current_user)):
                 # doesn't return a wrong result.
                 updates["lat"] = None
                 updates["lng"] = None
+    # Ace Club: clearing the bool always clears the count too, so a player
+    # who toggles off can't leave a stale ace count behind.
+    if updates.get("aceClub") is False:
+        updates["aceClubCount"] = None
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.users.update_one({"uid": current["uid"]}, {"$set": updates}, upsert=True)
     doc = await db.users.find_one({"uid": current["uid"]})

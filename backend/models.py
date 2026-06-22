@@ -25,6 +25,9 @@ class ProfileIn(BaseModel):
     interests: Optional[List[str]] = Field(default=None, max_length=20)
     profilePictureUrl: Optional[str] = Field(default=None, max_length=500)
     bannerUrl: Optional[str] = Field(default=None, max_length=500)
+    # "Ace Club" membership: does the player belong to one? Optional ace count.
+    aceClub: Optional[bool] = None
+    aceClubCount: Optional[int] = Field(default=None, ge=0, le=10_000)
     privacy: Optional[dict] = None
 
 
@@ -53,6 +56,8 @@ class ProfileOut(BaseModel):
     bannerUrl: Optional[str] = None
     homeCourse: Optional[str] = None
     interestedIn: Optional[str] = None
+    aceClub: Optional[bool] = None
+    aceClubCount: Optional[int] = None
     privacy: dict = Field(default_factory=dict)
 
 

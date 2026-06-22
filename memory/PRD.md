@@ -179,6 +179,13 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Nav** — new "Courses" link between Bag Check and Discovery.
 - **Tests**: 6/6 backend tests + 30+/30+ frontend acceptance checks green.
 
+### Session 19 — Ace Club on player profile cards (Feb 2026)
+- **`aceClub: bool` + `aceClubCount: int?`** added to `ProfileIn` / `ProfileOut` / `user_to_profile`. Same shape as the course-level field for consistency.
+- **`PUT /api/users/me`** auto-clears `aceClubCount` whenever `aceClub` is set to false — no stale ace count can linger.
+- **Frontend Profile edit form**: new toggle '🏆 I&apos;m in an Ace Club' (data-testid=profile-ace-club-toggle) + conditional number input (data-testid=profile-ace-club-count-input). Unchecking the toggle clears the count via UI + server.
+- **`PublicProfilePreview`** renders a gold pill (data-testid=public-profile-ace-club) below the player's name when `aceClub` is truthy. Shows on Discovery cards, PlayerProfile, and the "How others see you" preview.
+- **Tests**: 4/4 new tests in `test_iteration16.py` — self lookup, other viewer lookup, Discovery card carry-through, toggle-off clears count. All green.
+
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
 - P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.

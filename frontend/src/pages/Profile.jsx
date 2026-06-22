@@ -96,6 +96,8 @@ export default function Profile() {
         favoriteFrisbee: draft.favoriteFrisbee,
         homeCourse: draft.homeCourse,
         interestedIn: draft.interestedIn,
+        aceClub: !!draft.aceClub,
+        aceClubCount: draft.aceClub && draft.aceClubCount ? Number(draft.aceClubCount) : null,
         bio: draft.bio,
         interests: draft.interests,
         privacy: draft.privacy || {},
@@ -504,6 +506,51 @@ export default function Profile() {
               </label>
             </div>
 
+            <div className="col-span-2 border-t border-gray-100 pt-4">
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.aceClub)}
+                  onChange={(e) =>
+                    setDraft((p) => ({
+                      ...p,
+                      aceClub: e.target.checked,
+                      // Clear count when toggled off.
+                      aceClubCount: e.target.checked ? p.aceClubCount : null,
+                    }))
+                  }
+                  data-testid="profile-ace-club-toggle"
+                />
+                🏆 I&apos;m in an Ace Club
+              </label>
+              {draft.aceClub && (
+                <div className="mt-2">
+                  <label
+                    htmlFor="profile-ace-club-count"
+                    className="block text-xs font-semibold text-gray-700 mb-1"
+                  >
+                    How many aces?
+                  </label>
+                  <input
+                    id="profile-ace-club-count"
+                    type="number"
+                    min="0"
+                    max="10000"
+                    value={draft.aceClubCount ?? ''}
+                    onChange={(e) =>
+                      setDraft((p) => ({
+                        ...p,
+                        aceClubCount: e.target.value === '' ? null : Number(e.target.value),
+                      }))
+                    }
+                    placeholder="0"
+                    className="w-32 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
+                    data-testid="profile-ace-club-count-input"
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="col-span-2">
               <label className="block text-sm font-semibold text-gray-700 mb-1">Bio</label>
               <textarea
@@ -541,6 +588,8 @@ export default function Profile() {
               favoriteFrisbee: profile.favoriteFrisbee,
               homeCourse: profile.homeCourse,
               interestedIn: profile.interestedIn,
+              aceClub: profile.aceClub,
+              aceClubCount: profile.aceClubCount,
               bio: profile.bio,
               interests: profile.interests?.length ? profile.interests : DEFAULT_INTERESTS,
               profilePictureUrl: profile.profilePictureUrl,
