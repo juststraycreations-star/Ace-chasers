@@ -282,7 +282,7 @@ class TestDiscoveryAndLikes:
         )
         assert r.status_code == 200
         likes = r.json()
-        sarah = next((l for l in likes if l["player"]["uid"] == "seed-sarah"), None)
+        sarah = next((row for row in likes if row["player"]["uid"] == "seed-sarah"), None)
         assert sarah is not None
         assert sarah["matched"] is True
         assert sarah["friended"] is False

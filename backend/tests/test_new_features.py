@@ -233,14 +233,14 @@ class TestFriendRequests:
 
         # A's /api/likes shows B as matched + friended.
         lr = requests.get(f"{BASE_URL}/api/likes", headers=_h(user_a["id_token"]), timeout=15)
-        b_like = next((l for l in lr.json() if l["player"]["uid"] == user_b["uid"]), None)
+        b_like = next((row for row in lr.json() if row["player"]["uid"] == user_b["uid"]), None)
         assert b_like is not None
         assert b_like["matched"] is True
         assert b_like["friended"] is True
 
         # B's /api/likes also shows A matched + friended (B got a like recorded on accept).
         lr2 = requests.get(f"{BASE_URL}/api/likes", headers=_h(user_b["id_token"]), timeout=15)
-        a_like = next((l for l in lr2.json() if l["player"]["uid"] == user_a["uid"]), None)
+        a_like = next((row for row in lr2.json() if row["player"]["uid"] == user_a["uid"]), None)
         assert a_like is not None
         assert a_like["matched"] is True
         assert a_like["friended"] is True

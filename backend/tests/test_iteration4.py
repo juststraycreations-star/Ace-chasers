@@ -209,7 +209,7 @@ def test_radius_filter_includes_near_excludes_far(caller):
         body = r.json()
         uids = [p["uid"] for p in body["players"]]
         assert near_uid in uids, f"expected near_uid in radius=200 results, got {uids}"
-        assert far_uid not in uids, f"far_uid should be excluded at radius=200"
+        assert far_uid not in uids, "far_uid should be excluded at radius=200"
 
         # Each returned player must have a numeric distance_miles
         near_player = next(p for p in body["players"] if p["uid"] == near_uid)
