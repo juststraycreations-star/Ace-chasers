@@ -186,6 +186,14 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **`PublicProfilePreview`** renders a gold pill (data-testid=public-profile-ace-club) below the player's name when `aceClub` is truthy. Shows on Discovery cards, PlayerProfile, and the "How others see you" preview.
 - **Tests**: 4/4 new tests in `test_iteration16.py` — self lookup, other viewer lookup, Discovery card carry-through, toggle-off clears count. All green.
 
+### Session 20 — Disc golf news rail on Feed (Feb 2026)
+- **Backend `routers/news_router.py` (new)**: pulls RSS from Ultiworld Disc Golf (`discgolf.ultiworld.com/feed`), PDGA (`pdga.com/news/feed`), and r/discgolf top-of-week (`reddit.com/r/discgolf/top/.rss?t=week`). 30-minute in-memory TTL cache; httpx + feedparser; per-URL dedupe; newest-first.
+- **`NewsResponse` + `NewsItem` Pydantic models** in `models.py`.
+- **Dependency**: `feedparser==6.0.12` added to `requirements.txt`.
+- **Frontend `NewsSidebar.jsx` (new)**: 📰 Disc Golf News rail. Each item is an external link with source pill, title, summary, and time-ago.
+- **Feed layout reflow**: `max-w-7xl` flex container — left column is the existing feed (capped at `max-w-2xl`), right column is the news rail (`hidden xl:block`, sticky). On smaller screens the rail stacks below the feed via `xl:hidden` mirror.
+- **Tests**: 2/2 new tests in `test_iteration17.py` — feed aggregation contract + URL dedupe. All green using FastAPI `TestClient` with patched httpx + startup hooks.
+
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
 - P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.

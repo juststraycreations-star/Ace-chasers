@@ -195,3 +195,19 @@ class CourseReviewOut(BaseModel):
     course_name: Optional[str] = None
     course_location: Optional[str] = None
 
+
+# --- News -------------------------------------------------------------------
+
+class NewsItem(BaseModel):
+    title: str
+    url: str
+    summary: str = ""
+    source: str
+    published_at: Optional[str] = None
+
+
+class NewsResponse(BaseModel):
+    items: List[NewsItem] = Field(default_factory=list)
+    fetched_at: Optional[str] = None
+    sources: List[str] = Field(default_factory=list)
+
