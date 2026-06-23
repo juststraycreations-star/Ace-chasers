@@ -172,9 +172,10 @@ export default function Feed() {
       form.append('visibility', visibility);
       if (imageFile) form.append('image', imageFile);
       if (videoFile) form.append('media', videoFile);
-      const res = await api.post('/posts', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // Let the browser set Content-Type with the correct multipart boundary.
+      // Explicitly setting it without a boundary breaks the upload on some
+      // mobile browsers (iOS Safari in particular).
+      const res = await api.post('/posts', form);
       setPosts((prev) => [res.data, ...prev]);
       setBody('');
       setVisibility('public');

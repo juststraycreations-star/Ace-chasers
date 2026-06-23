@@ -70,9 +70,7 @@ export default function BagCheck() {
       form.append('body', body);
       form.append('visibility', visibility);
       form.append('kind', 'disc_review');
-      const res = await api.post('/posts', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const res = await api.post('/posts', form);
       setReviews((prev) => [res.data, ...prev]);
       setBody('');
       setVisibility('public');

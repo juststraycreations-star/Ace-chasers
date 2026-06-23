@@ -71,9 +71,7 @@ export default function Profile() {
       form.append('image', compressed);
       const endpoint =
         kind === 'avatar' ? '/users/me/profile-picture' : '/users/me/banner';
-      const res = await api.post(endpoint, form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const res = await api.post(endpoint, form);
       setProfile(res.data);
     } catch (e) {
       setUploadError(e?.response?.data?.detail || e.message);
