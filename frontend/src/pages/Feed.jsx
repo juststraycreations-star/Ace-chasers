@@ -539,12 +539,6 @@ export default function Feed() {
           )}
         </div>
       )}
-
-      {/* News below the feed on small/medium screens; the sticky rail on the
-          right handles xl+. */}
-      <div className="xl:hidden mt-8" data-testid="feed-news-stacked">
-        <NewsSidebar />
-      </div>
       </main>
 
       <aside className="hidden xl:block w-80 flex-shrink-0 sticky top-24" data-testid="feed-news-rail">

@@ -16,7 +16,6 @@ export default function Navigation() {
   const navigate = useNavigate();
   const reset = useAuthStore((s) => s.reset);
   const user = useAuthStore((s) => s.user);
-  const inbox = useMatchStore((s) => s.inbox);
   const fetchInbox = useMatchStore((s) => s.fetchInbox);
 
   // Poll the inbox so the bell badge stays roughly up to date without
@@ -27,10 +26,6 @@ export default function Navigation() {
     const id = setInterval(fetchInbox, INBOX_POLL_MS);
     return () => clearInterval(id);
   }, [user, fetchInbox]);
-
-  const pendingCount =
-    (inbox?.incoming_friend_requests?.length || 0) +
-    (inbox?.incoming_likes?.length || 0);
 
   const isActive = (path) => location.pathname === path;
   const linkClasses = (path) =>
@@ -72,20 +67,11 @@ export default function Navigation() {
             Discovery
           </Link>
           <Link
-            to="/likes"
-            className={`relative ${linkClasses('/likes')}`}
-            data-testid="nav-likes"
+            to="/daily-plastic"
+            className={linkClasses('/daily-plastic')}
+            data-testid="nav-daily-plastic"
           >
-            Likes
-            {pendingCount > 0 && (
-              <span
-                className="absolute -top-2 -right-3 bg-disc-gold text-disc-green text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shadow"
-                data-testid="nav-likes-badge"
-                aria-label={`${pendingCount} pending notification${pendingCount === 1 ? '' : 's'}`}
-              >
-                {pendingCount > 9 ? '9+' : pendingCount}
-              </span>
-            )}
+            📰 Daily Plastic
           </Link>
           <Link to="/messages" className={linkClasses('/messages')} data-testid="nav-messages">
             Messages
