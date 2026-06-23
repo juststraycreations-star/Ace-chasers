@@ -35,7 +35,8 @@ FEEDS: list[dict] = [
     },
     {
         "source": "PDGA",
-        "url": "https://www.pdga.com/news/feed",
+        # PDGA's /news/feed went 404; the active feed lives at /rss.xml.
+        "url": "https://www.pdga.com/rss.xml",
     },
     {
         "source": "r/discgolf",
@@ -103,9 +104,11 @@ async def _fetch_feed(url: str, source: str) -> list[dict]:
             resp.raise_for_status()
             xml = resp.text
     except Exception as exc:  # noqa: BLE001
-        logger.warning("News feed fetch failed [%s]: %s", source, exc)
+        logger.warning("News feed fetch failed [%s] %s: %s", source, url, exc)
         return []
     parsed = feedparser.parse(xml)
+    if not parsed.entries:
+        logger.warning("News feed [%s] returned no entries", source)
     items: list[dict] = []
     for entry in parsed.entries[:15]:
         items.append(

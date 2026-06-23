@@ -194,6 +194,13 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Feed layout reflow**: `max-w-7xl` flex container — left column is the existing feed (capped at `max-w-2xl`), right column is the news rail (`hidden xl:block`, sticky). On smaller screens the rail stacks below the feed via `xl:hidden` mirror.
 - **Tests**: 2/2 new tests in `test_iteration17.py` — feed aggregation contract + URL dedupe. All green using FastAPI `TestClient` with patched httpx + startup hooks.
 
+### Session 21 — Daily Plastic full-page tab + PDGA RSS fix (Feb 2026)
+- **Removed top-nav "Likes" link**. The `/likes` route stays (NotificationsBell + SessionRequestsModal link to it) but it's no longer a primary nav surface — the bell + session modal handle the Add Player flow.
+- **`/daily-plastic` (new full-page route)**: '📰 Daily Plastic' header + 'Updated …' freshness label + source filter chips (All / Ultiworld / PDGA / r/discgolf) + 2-col responsive grid of news cards (open in new tab).
+- **PDGA RSS URL update**: `pdga.com/news/feed` started returning 404; swapped to `pdga.com/rss.xml`. Backend now logs a warning when any source returns zero entries.
+- **Dropped Feed's mobile-stacked news section**: Daily Plastic is the primary news destination now; the xl+ sticky news rail on Feed stays for ambient discovery.
+- **Tests**: existing 2/2 test_iteration17.py still green. Frontend acceptance for Daily Plastic + nav swap 100% in iteration_18.json.
+
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
 - P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.
