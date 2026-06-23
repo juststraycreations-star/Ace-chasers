@@ -96,6 +96,46 @@ def _clean_summary(raw: Optional[str]) -> str:
     return text
 
 
+def _extract_thumbnail(entry) -> Optional[str]:
+    """Best-effort image URL extraction from a feedparser entry. Tries every
+    common RSS image location in order of reliability."""
+    # 1. Yahoo Media RSS — media:thumbnail
+    thumbs = entry.get("media_thumbnail") or []
+    if thumbs and isinstance(thumbs, list):
+        url = thumbs[0].get("url")
+        if url:
+            return url
+    # 2. Yahoo Media RSS — media:content with type=image
+    contents = entry.get("media_content") or []
+    if contents and isinstance(contents, list):
+        for c in contents:
+            url = c.get("url")
+            type_ = (c.get("type") or "").lower()
+            if url and (not type_ or type_.startswith("image")):
+                return url
+    # 3. RSS <enclosure type="image/*">
+    for enc in entry.get("enclosures") or []:
+        href = enc.get("href") or enc.get("url")
+        type_ = (enc.get("type") or "").lower()
+        if href and type_.startswith("image"):
+            return href
+    # 4. First <img src="..."> inside the description / content HTML.
+    import re
+
+    candidates: list[str] = []
+    summary = entry.get("summary") or ""
+    if summary:
+        candidates.append(summary)
+    for c in entry.get("content") or []:
+        if isinstance(c, dict) and c.get("value"):
+            candidates.append(c["value"])
+    for html in candidates:
+        m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', html)
+        if m:
+            return m.group(1)
+    return None
+
+
 async def _fetch_feed(url: str, source: str) -> list[dict]:
     """Fetch a single RSS feed and return parsed entries with metadata."""
     try:
@@ -118,6 +158,7 @@ async def _fetch_feed(url: str, source: str) -> list[dict]:
                 "summary": _clean_summary(entry.get("summary")),
                 "source": source,
                 "published_at": _parse_dt(entry),
+                "thumbnail_url": _extract_thumbnail(entry),
             }
         )
     return items

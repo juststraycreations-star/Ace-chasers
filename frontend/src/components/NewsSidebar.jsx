@@ -73,21 +73,31 @@ export default function NewsSidebar() {
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block px-4 py-3 hover:bg-disc-green/5 transition"
+                className="flex gap-3 px-4 py-3 hover:bg-disc-green/5 transition"
                 data-testid={`news-item-${idx}`}
               >
-                <p className="text-[10px] uppercase tracking-wide text-disc-gold font-bold">
-                  {item.source}
-                </p>
-                <p className="text-sm font-semibold text-gray-800 mt-0.5 line-clamp-2">
-                  {item.title}
-                </p>
-                {item.summary && (
-                  <p className="text-xs text-gray-600 mt-1 line-clamp-2">{item.summary}</p>
+                {item.thumbnail_url && (
+                  <img
+                    src={item.thumbnail_url}
+                    alt=""
+                    loading="lazy"
+                    className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
                 )}
-                {item.published_at && (
-                  <p className="text-[10px] text-gray-400 mt-1">{timeAgo(item.published_at)}</p>
-                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] uppercase tracking-wide text-disc-gold font-bold">
+                    {item.source}
+                  </p>
+                  <p className="text-sm font-semibold text-gray-800 mt-0.5 line-clamp-2">
+                    {item.title}
+                  </p>
+                  {item.published_at && (
+                    <p className="text-[10px] text-gray-400 mt-1">{timeAgo(item.published_at)}</p>
+                  )}
+                </div>
               </a>
             </li>
           ))}

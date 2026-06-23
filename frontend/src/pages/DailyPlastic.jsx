@@ -110,23 +110,41 @@ export default function DailyPlastic() {
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block bg-white rounded-2xl shadow-sm hover:shadow-md hover:ring-2 hover:ring-disc-green/40 transition p-5 h-full"
+                className="block bg-white rounded-2xl shadow-sm hover:shadow-md hover:ring-2 hover:ring-disc-green/40 transition overflow-hidden h-full"
                 data-testid={`daily-plastic-item-${idx}`}
               >
-                <p className="text-[10px] uppercase tracking-wide text-disc-gold font-bold">
-                  {item.source}
-                </p>
-                <h2 className="text-base font-bold text-gray-800 mt-1 line-clamp-3">
-                  {item.title}
-                </h2>
-                {item.summary && (
-                  <p className="text-sm text-gray-600 mt-2 line-clamp-3">{item.summary}</p>
-                )}
-                <div className="flex items-center justify-between mt-3">
-                  {item.published_at ? (
-                    <span className="text-[11px] text-gray-400">{timeAgo(item.published_at)}</span>
-                  ) : <span />}
-                  <span className="text-xs font-semibold text-disc-green">Read →</span>
+                {item.thumbnail_url ? (
+                  <div className="aspect-[16/9] w-full bg-gray-100 overflow-hidden">
+                    <img
+                      src={item.thumbnail_url}
+                      alt=""
+                      className="w-full h-full object-cover transition group-hover:scale-105"
+                      loading="lazy"
+                      onError={(e) => {
+                        // If the image 404s or is blocked, hide the wrapper
+                        // so the card falls back to text-only gracefully.
+                        e.currentTarget.parentElement.style.display = 'none';
+                      }}
+                      data-testid={`daily-plastic-thumb-${idx}`}
+                    />
+                  </div>
+                ) : null}
+                <div className="p-5">
+                  <p className="text-[10px] uppercase tracking-wide text-disc-gold font-bold">
+                    {item.source}
+                  </p>
+                  <h2 className="text-base font-bold text-gray-800 mt-1 line-clamp-3">
+                    {item.title}
+                  </h2>
+                  {item.summary && (
+                    <p className="text-sm text-gray-600 mt-2 line-clamp-3">{item.summary}</p>
+                  )}
+                  <div className="flex items-center justify-between mt-3">
+                    {item.published_at ? (
+                      <span className="text-[11px] text-gray-400">{timeAgo(item.published_at)}</span>
+                    ) : <span />}
+                    <span className="text-xs font-semibold text-disc-green">Read →</span>
+                  </div>
                 </div>
               </a>
             </li>

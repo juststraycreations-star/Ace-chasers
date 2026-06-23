@@ -204,6 +204,7 @@ class NewsItem(BaseModel):
     summary: str = ""
     source: str
     published_at: Optional[str] = None
+    thumbnail_url: Optional[str] = None
 
 
 class NewsResponse(BaseModel):

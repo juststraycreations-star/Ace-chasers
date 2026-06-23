@@ -201,6 +201,13 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Dropped Feed's mobile-stacked news section**: Daily Plastic is the primary news destination now; the xl+ sticky news rail on Feed stays for ambient discovery.
 - **Tests**: existing 2/2 test_iteration17.py still green. Frontend acceptance for Daily Plastic + nav swap 100% in iteration_18.json.
 
+### Session 22 — Article thumbnails on news cards (Feb 2026)
+- **Backend `_extract_thumbnail()`**: tries 4 image sources per RSS entry in reliability order — `media:thumbnail`, `media:content` (type=image), RSS `<enclosure type="image/*">`, then first `<img src="…">` from the HTML description/content. Returns null when none found.
+- **`NewsItem.thumbnail_url`**: new optional field on `/api/news` payload. Live cache shows 8/24 items currently have thumbnails (mostly PDGA).
+- **Daily Plastic cards**: 16:9 cover image renders above the title when present; cards gracefully fall back to text-only when the image 404s or no thumbnail was found.
+- **Feed news rail**: 56×56 square thumbnail next to each headline for the sticky right-rail variant.
+- **No new tests required**: the field is additive; existing 2/2 tests in test_iteration17.py still green.
+
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
 - P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.
