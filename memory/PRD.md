@@ -208,6 +208,13 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Feed news rail**: 56×56 square thumbnail next to each headline for the sticky right-rail variant.
 - **No new tests required**: the field is additive; existing 2/2 tests in test_iteration17.py still green.
 
+### Session 23 — Mobile responsive Navigation (Feb 2026)
+- **Bug**: 9 nav items (Feed, Bag Check, Courses, Discovery, Daily Plastic, Messages, Profile, Bell, Logout) were rendered in a single non-responsive flex row → overflow / unusable layout on phones.
+- **Fix** (`/app/frontend/src/components/Navigation.jsx`): split into desktop (`hidden lg:flex`) and mobile (`flex lg:hidden`) clusters. Mobile cluster shows the notifications bell + a hamburger toggle (`data-testid="nav-mobile-toggle"`) which expands a slide-down panel (`data-testid="nav-mobile-panel"`) with all 7 nav links and a Logout button. Active link is highlighted in `disc-gold/20`. Panel auto-closes on route change.
+- **Accessibility**: hamburger button has `aria-label`/`aria-expanded`, focus ring on `disc-gold`.
+- **Verified** at 375px (mobile) and 1440px (desktop) viewports via screenshot tool — desktop layout unchanged.
+
+
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
 - P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.
