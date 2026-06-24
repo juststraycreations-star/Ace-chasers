@@ -2,9 +2,87 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ace Chasers - Connect with local disc golf players</title>
+    <meta name="theme-color" content="#1f4d2e" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="canonical" href="https://acechasers.net/" />
+
+    <title>Ace Chasers — Connect with local disc golf players</title>
+    <meta
+      name="description"
+      content="Ace Chasers — find local disc golf players near you, share rounds, review courses, and stay in the loop with Daily Plastic news."
+    />
+    <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="disc golf, find disc golf players, disc golf community, disc golf courses, disc golf reviews, disc golf news, daily plastic, ace club" />
+
+    <!-- Open Graph (Facebook, iMessage, Discord, LinkedIn) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Ace Chasers" />
+    <meta property="og:url" content="https://acechasers.net/" />
+    <meta property="og:title" content="Ace Chasers — Connect with local disc golf players" />
+    <meta
+      property="og:description"
+      content="Find local disc golf players near you, share rounds, review courses, and stay in the loop with Daily Plastic news."
+    />
+    <meta property="og:image" content="https://acechasers.net/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Disc golf basket at sunset with the Ace Chasers logo" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Ace Chasers — Connect with local disc golf players" />
+    <meta
+      name="twitter:description"
+      content="Find local disc golf players near you, share rounds, review courses, and stay in the loop with Daily Plastic news."
+    />
+    <meta name="twitter:image" content="https://acechasers.net/og-image.jpg" />
+    <meta name="twitter:image:alt" content="Disc golf basket at sunset with the Ace Chasers logo" />
+
+    <!-- Schema.org structured data (Organization + WebSite) -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://acechasers.net/#organization",
+            "name": "Ace Chasers",
+            "url": "https://acechasers.net/",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://acechasers.net/og-image.jpg",
+              "width": 1200,
+              "height": 630
+            },
+            "description": "A social platform for the disc golf community — find local players, share rounds, review courses, and keep up with the latest news."
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://acechasers.net/#website",
+            "url": "https://acechasers.net/",
+            "name": "Ace Chasers",
+            "description": "Find local disc golf players near you, share rounds, review courses, and stay in the loop with Daily Plastic news.",
+            "publisher": { "@id": "https://acechasers.net/#organization" },
+            "inLanguage": "en-US"
+          },
+          {
+            "@type": "WebApplication",
+            "name": "Ace Chasers",
+            "url": "https://acechasers.net/",
+            "applicationCategory": "SocialNetworkingApplication",
+            "operatingSystem": "Any (web)",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "description": "Disc golf social platform: discover nearby players, post rounds, review courses, and read Daily Plastic news."
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
