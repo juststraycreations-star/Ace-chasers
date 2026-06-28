@@ -217,6 +217,13 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 
 ## Backlog / next steps (current)
 - P2: Native Web Share / copy-link CTA on the Discovery invite banner.
+
+### Session 24 — Launch Giveaway promo + Cache-notice modal (Feb 2026)
+- **Giveaway promo card** (`/app/frontend/src/components/GiveawayPromo.jsx`) — gold-bordered card on Login page above the form. Copy: "🏆 LAUNCH GIVEAWAY — Win a GTO Leopard3, Proto Glow, & Pro Series Duo Pack!". 2-step entry instructions + drawing date Sunday, July 19, 2026.
+- **Cache-notice → modal** (`/app/frontend/src/components/CacheNoticeModal.jsx`) — replaced inline `<CacheNotice />` banner on Login page with a modal that auto-opens on first failed login attempt. Dismissable via ✕ / Escape / backdrop / "Got it" button. localStorage flag `ace_cache_notice_dismissed_v1` prevents it from reappearing after dismissal. SignUp page still uses the original inline `CacheNotice` (untouched).
+- **Backend perf refactor (session 23 follow-up applied this session also):** N+1 `_hydrate_post` → batched `_hydrate_posts` in `/app/backend/routers/posts_router.py`, plus projection fixes on `social_router.py` (lines 169, 351), `posts.py:111`, and `posts_router.py:235`. 12/12 backend tests pass (iteration_19.json). Deployment agent: PASS, ready for production.
+- **SEO/social previews:** Added meta description, OG, Twitter Card, Schema.org JSON-LD (Organization + WebSite + WebApplication) to `index.html`. Added `/public/og-image.jpg` (1200×630 sunset basket), `/public/robots.txt`, `/public/sitemap.xml`.
+
 - P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.
 - P2: Re-enable seed_demo_users behind a DEV-only env flag so the 5 carry-over seed tests in test_api.py go green.
 - P2: Wrap `cloud_storage.upload_bytes` in `asyncio.to_thread()` for true non-blocking uploads.

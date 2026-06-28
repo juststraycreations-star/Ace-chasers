@@ -8,8 +8,11 @@ import { useAuthStore } from '../store/authStore';
 import { firebaseConfigured, getFirebaseAuth, googleProvider } from '../lib/firebase';
 import { clearDevSession, makeDevSession } from '../lib/devAuth';
 import { api } from '../lib/api';
-import CacheNotice from '../components/CacheNotice';
+import CacheNoticeModal from '../components/CacheNoticeModal';
+import GiveawayPromo from '../components/GiveawayPromo';
 import DiscIcon from '../components/DiscIcon';
+
+const CACHE_DISMISSED_KEY = 'ace_cache_notice_dismissed_v1';
 
 /**
  * Surface a friendlier hint when Firebase or our backend throws a generic
@@ -34,6 +37,21 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [cacheModalOpen, setCacheModalOpen] = useState(false);
+
+  /**
+   * Show the cache-notice modal whenever a sign-in attempt fails, unless
+   * the user has already dismissed it (localStorage flag). The first
+   * failure surfaces the hint; once dismissed it never nags again.
+   */
+  const maybeOpenCacheModal = () => {
+    try {
+      if (localStorage.getItem(CACHE_DISMISSED_KEY)) return;
+    } catch {
+      /* ignore — private mode etc. */
+    }
+    setCacheModalOpen(true);
+  };
 
   /**
    * Run /api/auth/sync and commit the session only on success. The local
@@ -90,7 +108,9 @@ export default function Login() {
         await commitSession(user);
       }
     } catch (err) {
-      setError(friendlyError(err));
+      const msg = friendlyError(err);
+      setError(msg);
+      maybeOpenCacheModal();
     } finally {
       setLoading(false);
     }
@@ -113,16 +133,18 @@ export default function Login() {
         photoURL: cred.user.photoURL,
       });
     } catch (err) {
-      setError(friendlyError(err));
+      const msg = friendlyError(err);
+      setError(msg);
+      maybeOpenCacheModal();
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-disc-green via-disc-purple to-disc-gold flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-disc-green via-disc-purple to-disc-gold flex items-center justify-center px-4 py-8">
       <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <h1 className="text-4xl font-bold text-disc-green mb-2 flex items-center justify-center gap-2">
             <DiscIcon className="h-9 w-9" />
             <span>Ace Chasers</span>
@@ -130,8 +152,9 @@ export default function Login() {
           <p className="text-gray-600">Connect with local players</p>
         </div>
 
+        <GiveawayPromo />
+
         <form onSubmit={handleEmailLogin} className="space-y-4" data-testid="login-form">
-          <CacheNotice />
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" data-testid="login-error">
               {error}
@@ -203,6 +226,11 @@ export default function Login() {
           </p>
         </div>
       </div>
+
+      <CacheNoticeModal
+        open={cacheModalOpen}
+        onClose={() => setCacheModalOpen(false)}
+      />
     </div>
   );
 }
