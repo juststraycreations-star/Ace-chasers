@@ -66,6 +66,9 @@ from fastapi.responses import FileResponse
 async def read_root():
     return FileResponse("../front-end/dist/index.html")
 
+app.mount("/static", StaticFiles(directory="../front-end/dist"), name="static")
+
+
 app.mount("/", StaticFiles(directory="../front-end/dist", html=True), name="static")
 
 app.add_middleware(
