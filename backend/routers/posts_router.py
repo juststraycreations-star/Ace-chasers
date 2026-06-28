@@ -35,49 +35,107 @@ FEED_PAGE_SIZE = 20
 
 
 async def _hydrate_post(post: dict, viewer_uid: str) -> PostOut:
+    """Single-post hydration. Thin wrapper around the batch helper so
+    callers handling one post (e.g. create_post, get_top_niced) don't
+    duplicate the batching logic."""
+    out = await _hydrate_posts([post], viewer_uid)
+    return out[0]
+
+
+async def _hydrate_posts(posts: list[dict], viewer_uid: str) -> list[PostOut]:
+    """Hydrate a list of raw post dicts into PostOut models using batched
+    queries — 5 DB round-trips total regardless of how many posts are in
+    the list (authors, nice counts, down counts, viewer reactions,
+    comment counts). Replaces the prior N+1 pattern."""
+    if not posts:
+        return []
     db = get_db()
-    author = await db.users.find_one({"uid": post["author_uid"]})
-    author_obj = PostAuthor(
-        uid=post["author_uid"],
-        name=(author or {}).get("name"),
-        profilePictureUrl=(author or {}).get("profilePictureUrl"),
-    )
-    image_url = None
-    if post.get("image_path"):
-        img = post["image_path"]
-        image_url = img if img.startswith("http") else f"/api/uploads/{img}"
-    video_url = None
-    if post.get("video_path"):
-        vid = post["video_path"]
-        video_url = vid if vid.startswith("http") else f"/api/uploads/{vid}"
-    nice_count = await db.post_likes.count_documents(
-        {"post_id": post["id"], "value": {"$ne": "down"}}
-    )
-    down_count = await db.post_likes.count_documents(
-        {"post_id": post["id"], "value": "down"}
-    )
-    my_reaction = await db.post_likes.find_one(
-        {"post_id": post["id"], "user_uid": viewer_uid}
-    )
-    liked_by_me = bool(my_reaction and my_reaction.get("value") != "down")
-    disliked_by_me = bool(my_reaction and my_reaction.get("value") == "down")
-    comment_count = await db.post_comments.count_documents({"post_id": post["id"]})
-    return PostOut(
-        id=post["id"],
-        body=post.get("body", ""),
-        image_url=image_url,
-        video_url=video_url,
-        visibility=post.get("visibility", "public"),
-        kind=post.get("kind", "post"),
-        created_at=post.get("created_at", ""),
-        author=author_obj,
-        is_mine=post["author_uid"] == viewer_uid,
-        nice_count=nice_count,
-        down_count=down_count,
-        liked_by_me=liked_by_me,
-        disliked_by_me=disliked_by_me,
-        comment_count=comment_count,
-    )
+    post_ids = [p["id"] for p in posts]
+    author_uids = list({p["author_uid"] for p in posts})
+
+    # Authors — one query for every distinct author on the page.
+    authors_by_uid: dict[str, dict] = {}
+    if author_uids:
+        async for u in db.users.find(
+            {"uid": {"$in": author_uids}},
+            {"uid": 1, "name": 1, "profilePictureUrl": 1, "_id": 0},
+        ):
+            authors_by_uid[u["uid"]] = u
+
+    # Nice / Down counts — one aggregation grouped by post_id.
+    nice_by_post: dict[str, int] = {pid: 0 for pid in post_ids}
+    down_by_post: dict[str, int] = {pid: 0 for pid in post_ids}
+    async for row in db.post_likes.aggregate(
+        [
+            {"$match": {"post_id": {"$in": post_ids}}},
+            {
+                "$group": {
+                    "_id": {"post_id": "$post_id", "value": "$value"},
+                    "n": {"$sum": 1},
+                }
+            },
+        ]
+    ):
+        pid = row["_id"]["post_id"]
+        if row["_id"].get("value") == "down":
+            down_by_post[pid] = row["n"]
+        else:
+            nice_by_post[pid] = nice_by_post.get(pid, 0) + row["n"]
+
+    # Viewer's reactions across this page — one find.
+    my_reactions: dict[str, str] = {}
+    async for r in db.post_likes.find(
+        {"post_id": {"$in": post_ids}, "user_uid": viewer_uid},
+        {"post_id": 1, "value": 1, "_id": 0},
+    ):
+        my_reactions[r["post_id"]] = r.get("value", "")
+
+    # Comment counts — one aggregation grouped by post_id.
+    comment_count_by_post: dict[str, int] = {pid: 0 for pid in post_ids}
+    async for row in db.post_comments.aggregate(
+        [
+            {"$match": {"post_id": {"$in": post_ids}}},
+            {"$group": {"_id": "$post_id", "n": {"$sum": 1}}},
+        ]
+    ):
+        comment_count_by_post[row["_id"]] = row["n"]
+
+    out: list[PostOut] = []
+    for post in posts:
+        author = authors_by_uid.get(post["author_uid"])
+        author_obj = PostAuthor(
+            uid=post["author_uid"],
+            name=(author or {}).get("name"),
+            profilePictureUrl=(author or {}).get("profilePictureUrl"),
+        )
+        image_url = None
+        if post.get("image_path"):
+            img = post["image_path"]
+            image_url = img if img.startswith("http") else f"/api/uploads/{img}"
+        video_url = None
+        if post.get("video_path"):
+            vid = post["video_path"]
+            video_url = vid if vid.startswith("http") else f"/api/uploads/{vid}"
+        my_val = my_reactions.get(post["id"])
+        out.append(
+            PostOut(
+                id=post["id"],
+                body=post.get("body", ""),
+                image_url=image_url,
+                video_url=video_url,
+                visibility=post.get("visibility", "public"),
+                kind=post.get("kind", "post"),
+                created_at=post.get("created_at", ""),
+                author=author_obj,
+                is_mine=post["author_uid"] == viewer_uid,
+                nice_count=nice_by_post.get(post["id"], 0),
+                down_count=down_by_post.get(post["id"], 0),
+                liked_by_me=bool(my_val and my_val != "down"),
+                disliked_by_me=my_val == "down",
+                comment_count=comment_count_by_post.get(post["id"], 0),
+            )
+        )
+    return out
 
 
 @router.get("/api/feed")
@@ -91,7 +149,7 @@ async def get_feed(
     feed, otherwise returns the regular social feed."""
     limit = max(1, min(limit, 50))
     raw_posts = await list_feed(current["uid"], limit=limit, before=before, kind=kind)
-    hydrated = [await _hydrate_post(p, current["uid"]) for p in raw_posts]
+    hydrated = await _hydrate_posts(raw_posts, current["uid"])
     # Batch-fetch up to 3 most recent comments per post in this page.
     if hydrated:
         await _attach_recent_comments(hydrated, current["uid"])
@@ -291,7 +349,7 @@ async def get_user_posts(author_uid: str, current=Depends(get_current_user)):
     """All posts authored by the given user that the caller can see. Used by
     the Profile page (their own posts) and PlayerProfile (someone else's)."""
     raw = await list_user_posts(author_uid, current["uid"])
-    hydrated = [await _hydrate_post(p, current["uid"]) for p in raw]
+    hydrated = await _hydrate_posts(raw, current["uid"])
     await _attach_recent_comments(hydrated, current["uid"])
     return hydrated
 

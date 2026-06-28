@@ -166,7 +166,10 @@ async def list_user_friends(uid: str, current=Depends(get_current_user)):
 
 async def _friends_for(uid: str) -> list[ProfileOut]:
     db = get_db()
-    matches = await db.matches.find({"friended_by": uid}).limit(500).to_list(length=500)
+    matches = await db.matches.find(
+        {"friended_by": uid},
+        {"user_a": 1, "user_b": 1, "friended_by": 1, "_id": 0},
+    ).limit(500).to_list(length=500)
     other_uids: list[str] = []
     for m in matches:
         friended = m.get("friended_by") or []
@@ -348,7 +351,9 @@ async def get_inbox(current=Depends(get_current_user)):
         fr_from_uids.add(req["from_uid"])
 
     # --- Incoming likes (de-duped). One batch users query. -------------
-    my_likes_cursor = db.swipes.find({"from_uid": me, "action": "like"}, {"to_uid": 1}).limit(500)
+    my_likes_cursor = db.swipes.find(
+        {"from_uid": me, "action": "like"}, {"to_uid": 1, "_id": 0}
+    ).limit(500)
     my_like_targets = {d["to_uid"] async for d in my_likes_cursor}
 
     incoming_swipes = await (
