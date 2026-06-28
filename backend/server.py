@@ -60,6 +60,13 @@ logger = logging.getLogger("server")
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="Ace Chasers API")
+from fastapi.responses import FileResponse
+
+@app.get("/")
+async def read_root():
+    return FileResponse("../front-end/dist/index.html")
+
+app.mount("/", StaticFiles(directory="../front-end/dist", html=True), name="static")
 
 app.add_middleware(
     CORSMiddleware,
