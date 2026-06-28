@@ -232,7 +232,10 @@ async def _attach_recent_comments(
             author_uids.add(c["author_uid"])
     authors_by_uid: dict[str, dict] = {}
     if author_uids:
-        async for u in db.users.find({"uid": {"$in": list(author_uids)}}):
+        async for u in db.users.find(
+            {"uid": {"$in": list(author_uids)}},
+            {"uid": 1, "name": 1, "profilePictureUrl": 1, "_id": 0},
+        ):
             authors_by_uid[u["uid"]] = u
     for post in posts:
         bucket = grouped.get(post.id) or []
