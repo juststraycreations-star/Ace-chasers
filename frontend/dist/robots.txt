@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /messages
+Disallow: /profile
+Disallow: /api/
+
+Sitemap: https://acechasers.net/sitemap.xml
