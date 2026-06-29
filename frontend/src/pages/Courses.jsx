@@ -143,6 +143,14 @@ export default function Courses() {
                             </span>
                           )}
                         </div>
+                        {c.submitted_by_name && (
+                          <p
+                            className="mt-2 text-xs text-disc-green/80 italic"
+                            data-testid={`course-submitter-${c.id}`}
+                          >
+                            🥏 Suggested by {c.submitted_by_name}
+                          </p>
+                        )}
                       </div>
                       {c.aceClub && (
                         <span

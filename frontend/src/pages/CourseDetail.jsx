@@ -165,6 +165,14 @@ export default function CourseDetail() {
         {course.description && (
           <p className="text-gray-700 mt-4">{course.description}</p>
         )}
+        {course.submitted_by_name && (
+          <p
+            className="mt-3 text-sm text-disc-green/80 italic"
+            data-testid="course-submitter"
+          >
+            🥏 Suggested by {course.submitted_by_name}
+          </p>
+        )}
       </header>
 
       {/* Write a review */}

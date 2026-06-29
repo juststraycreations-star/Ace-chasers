@@ -176,6 +176,10 @@ class CourseOut(CourseIn):
     created_at: str
     review_count: int = 0
     avg_rating: Optional[float] = None  # 1-5
+    # When a course was submitted by a community member (via the
+    # user-facing POST /api/courses endpoint) this exposes the
+    # submitter's display name. Admin-seeded courses leave it null.
+    submitted_by_name: Optional[str] = None
 
 
 class CourseReviewIn(BaseModel):

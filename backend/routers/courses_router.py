@@ -43,7 +43,31 @@ def _course_doc_to_out(doc: dict) -> CourseOut:
         created_at=doc.get("created_at", ""),
         review_count=int(doc.get("_review_count") or 0),
         avg_rating=doc.get("_avg_rating"),
+        submitted_by_name=doc.get("_submitter_name"),
     )
+
+
+async def _attach_submitter_names(courses: list[dict]) -> None:
+    """Mutate each course dict with `_submitter_name` (display name of
+    the user who submitted it via POST /api/courses). One batched query
+    regardless of list size. Courses without `submitted_by` (admin
+    seeds) are left untouched."""
+    submitter_uids = list({c["submitted_by"] for c in courses if c.get("submitted_by")})
+    if not submitter_uids:
+        return
+    db = get_db()
+    names: dict[str, str] = {}
+    async for u in db.users.find(
+        {"uid": {"$in": submitter_uids}},
+        {"uid": 1, "name": 1, "_id": 0},
+    ):
+        n = (u.get("name") or "").strip()
+        if n:
+            names[u["uid"]] = n
+    for c in courses:
+        uid = c.get("submitted_by")
+        if uid and uid in names:
+            c["_submitter_name"] = names[uid]
 
 
 async def _attach_course_stats(courses: list[dict]) -> None:
@@ -88,6 +112,7 @@ async def list_courses(search: Optional[str] = None):
         ]
     docs = await db.courses.find(query).sort("name", 1).to_list(length=500)
     await _attach_course_stats(docs)
+    await _attach_submitter_names(docs)
     return [_course_doc_to_out(d) for d in docs]
 
 
@@ -146,6 +171,7 @@ async def get_course(course_id: str):
     if not doc:
         raise HTTPException(status_code=404, detail="Course not found")
     await _attach_course_stats([doc])
+    await _attach_submitter_names([doc])
     return _course_doc_to_out(doc)
 
 
@@ -307,6 +333,11 @@ async def add_course(
     await db.courses.insert_one(doc)
     doc["_review_count"] = 0
     doc["_avg_rating"] = None
+    # Surface the submitter name on the immediate response so the
+    # frontend can show the "Suggested by …" credit without a refetch.
+    submitter_name = (current.get("name") or "").strip()
+    if submitter_name:
+        doc["_submitter_name"] = submitter_name
     return _course_doc_to_out(doc)
 
 
