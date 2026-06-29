@@ -158,7 +158,8 @@ PostOut.model_rebuild()
 # --- Courses ----------------------------------------------------------------
 
 class CourseIn(BaseModel):
-    """Admin-facing payload for adding/editing a course."""
+    """Payload for adding or editing a course. Used by both the
+    user-facing POST /api/courses endpoint and the admin endpoint."""
     name: str = Field(min_length=1, max_length=200)
     location: Optional[str] = Field(default=None, max_length=200)  # "City, State"
     description: Optional[str] = Field(default=None, max_length=2000)

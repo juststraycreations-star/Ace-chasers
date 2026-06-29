@@ -227,6 +227,12 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - P2: Real-time message delivery via Firestore listener or websockets so receivers don't have to refresh threads.
 - P2: Re-enable seed_demo_users behind a DEV-only env flag so the 5 carry-over seed tests in test_api.py go green.
 - P2: Wrap `cloud_storage.upload_bytes` in `asyncio.to_thread()` for true non-blocking uploads.
+
+### Session 25 — User-facing "Add a course" on Courses page (Feb 2026)
+- **Backend** (`/app/backend/routers/courses_router.py`): new `POST /api/courses` endpoint open to any signed-in user. Dedupes on name+location (case-insensitive, anchored regex). Stores `submitted_by` uid for moderation. Legacy admin `/api/admin/courses` endpoint still works unchanged.
+- **Frontend**: new `AddCourseModal.jsx` component (name, location, holes, description, Ace Club checkbox + count). New "Add a course" button (`data-testid="add-course-btn"`) at top of `/courses` page. Success path: toast + new course prepended to the list. Duplicate path: in-modal error message, modal stays open.
+- **Verified** via `/app/test_reports/iteration_20.json` — 10/10 new backend tests, 12/12 i19 regression still green, frontend e2e for add + duplicate-error flows.
+
 - P2: DRY the "upload to cloud OR disk" branching between media_router and posts_router.
 - P2: Replace ADMIN_API_KEY with Firebase custom claims (`admin: true`).
 - P3: Real-time notifications (Firestore listener / websockets).
