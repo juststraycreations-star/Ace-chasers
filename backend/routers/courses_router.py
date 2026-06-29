@@ -333,9 +333,12 @@ async def add_course(
     await db.courses.insert_one(doc)
     doc["_review_count"] = 0
     doc["_avg_rating"] = None
-    # Surface the submitter name on the immediate response so the
-    # frontend can show the "Suggested by …" credit without a refetch.
-    submitter_name = (current.get("name") or "").strip()
+    # Surface the submitter name on the immediate response so the frontend
+    # can show the "Suggested by …" credit without a refetch. The name
+    # lives in MongoDB (set during onboarding via PUT /api/users/me) —
+    # NOT on the Firebase token claims for email/password signups.
+    me = await db.users.find_one({"uid": current["uid"]}, {"name": 1, "_id": 0}) or {}
+    submitter_name = (me.get("name") or "").strip()
     if submitter_name:
         doc["_submitter_name"] = submitter_name
     return _course_doc_to_out(doc)

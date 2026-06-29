@@ -238,6 +238,12 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - P3: Real-time notifications (Firestore listener / websockets).
 
 ## Backlog / next steps
+
+### Session 26 — "Suggested by" credit on community-added courses (Feb 2026)
+- **Backend** (`/app/backend/models.py` + `/app/backend/routers/courses_router.py`): `CourseOut` now exposes optional `submitted_by_name`. New batched helper `_attach_submitter_names(courses)` resolves submitter uids → display names in a single `users.find` per page. Wired into `GET /api/courses`, `GET /api/courses/{id}`, and `POST /api/courses` (inline). The POST handler now reads the name from MongoDB (not Firebase token claims), since email/password signups set their name via PUT /api/users/me which only writes to Mongo.
+- **Frontend**: `Courses.jsx` and `CourseDetail.jsx` render an italic `🥏 Suggested by {name}` line under each user-submitted course. Admin-seeded courses (no `submitted_by`) leave the field null and the line is hidden.
+- **Tests:** 30/30 backend tests pass across iter19/20/21. New file `/app/backend/tests/test_iteration21.py` covers the named user, anon submitter (no profile name), admin-seed, and POST inline-response paths.
+
 - P2: Optional one-shot migration of `/app/backend/uploads/` legacy files to Cloudinary, then drop the StaticFiles mount.
 - P2: Wrap `cloud_storage.upload_bytes` in `asyncio.to_thread()` for true non-blocking uploads (current SDK is sync).
 - P2: DRY the "upload to cloud OR disk" branching between `media_router` and `posts_router` into a single helper in `cloud_storage.py`.
