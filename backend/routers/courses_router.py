@@ -10,6 +10,7 @@ POST   /api/admin/courses                 — admin-only add a course
 """
 from __future__ import annotations
 
+import re
 import secrets
 from datetime import datetime, timezone
 from typing import Optional
@@ -80,8 +81,6 @@ async def list_courses(search: Optional[str] = None):
     db = get_db()
     query: dict = {}
     if search:
-        import re
-
         pat = re.escape(search.strip())
         query["$or"] = [
             {"name": {"$regex": pat, "$options": "i"}},
@@ -260,6 +259,55 @@ async def delete_course_review(
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Review not found or not yours")
     return {"ok": True}
+
+
+@router.post("/api/courses", response_model=CourseOut)
+async def add_course(
+    payload: CourseIn,
+    current=Depends(get_current_user),
+):
+    """Any signed-in user can add a course to the community list.
+
+    To avoid trivial duplicates we reject when an existing course already
+    matches the same name + location (case-insensitive). The submitter's
+    uid is stored as `submitted_by` for moderation.
+    """
+    db = get_db()
+    name = payload.name.strip()
+    location = (payload.location or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Course name is required")
+
+    dup_query: dict = {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}
+    if location:
+        dup_query["location"] = {
+            "$regex": f"^{re.escape(location)}$",
+            "$options": "i",
+        }
+    existing = await db.courses.find_one(dup_query)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="A course with that name and location already exists.",
+        )
+
+    course_id = secrets.token_urlsafe(8)
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": course_id,
+        "name": name,
+        "location": location or None,
+        "description": (payload.description or None),
+        "holes": payload.holes,
+        "aceClub": payload.aceClub,
+        "aceClubCount": payload.aceClubCount,
+        "created_at": now,
+        "submitted_by": current["uid"],
+    }
+    await db.courses.insert_one(doc)
+    doc["_review_count"] = 0
+    doc["_avg_rating"] = None
+    return _course_doc_to_out(doc)
 
 
 # --- Admin ------------------------------------------------------------------

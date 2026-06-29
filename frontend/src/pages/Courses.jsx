@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { resolveImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
+import AddCourseModal from '../components/AddCourseModal';
 
 function timeAgo(iso) {
   if (!iso) return '';
@@ -31,6 +32,8 @@ export default function Courses() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
+  const [toast, setToast] = useState('');
 
   const fetchCourses = async (q = '') => {
     try {
@@ -65,12 +68,31 @@ export default function Courses() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8" data-testid="courses-view">
-      <header className="mb-6">
-        <h1 className="text-4xl font-bold text-disc-green">Courses</h1>
-        <p className="text-gray-600 mt-1">
-          Browse disc golf courses and see what other Ace Chasers are saying.
-        </p>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-4xl font-bold text-disc-green">Courses</h1>
+          <p className="text-gray-600 mt-1">
+            Browse disc golf courses and see what other Ace Chasers are saying.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAddOpen(true)}
+          className="bg-disc-green hover:bg-disc-green/90 text-white font-semibold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-2"
+          data-testid="add-course-btn"
+        >
+          <span aria-hidden="true">＋</span> Add a course
+        </button>
       </header>
+
+      {toast && (
+        <div
+          className="mb-4 bg-disc-green/10 border border-disc-green/30 text-disc-green px-3 py-2 rounded-lg text-sm font-semibold"
+          data-testid="courses-toast"
+        >
+          {toast}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main list */}
@@ -182,6 +204,16 @@ export default function Courses() {
           )}
         </aside>
       </div>
+
+      <AddCourseModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onAdded={(c) => {
+          setCourses((prev) => [c, ...prev]);
+          setToast(`✅ Added "${c.name}"`);
+          setTimeout(() => setToast(''), 3500);
+        }}
+      />
     </div>
   );
 }
