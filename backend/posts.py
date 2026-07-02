@@ -11,6 +11,8 @@ import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
+from pymongo import ReturnDocument
+
 from db import get_db
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
@@ -195,6 +197,26 @@ async def delete_post(post_id: str, author_uid: str) -> bool:
     db = get_db()
     res = await db.posts.delete_one({"id": post_id, "author_uid": author_uid})
     return res.deleted_count == 1
+
+
+async def update_post_body(
+    post_id: str, author_uid: str, body: str
+) -> Optional[dict]:
+    """Update the body text of a post the caller owns. Returns the updated
+    post document, or None if the post doesn't exist / isn't owned by
+    `author_uid`. Media (image/video) is intentionally not editable — users
+    delete + repost if they want to change media."""
+    db = get_db()
+    now = datetime.now(timezone.utc).isoformat()
+    res = await db.posts.find_one_and_update(
+        {"id": post_id, "author_uid": author_uid},
+        {"$set": {"body": body, "edited_at": now}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if res is None:
+        return None
+    res.pop("_id", None)
+    return res
 
 
 async def list_user_posts(

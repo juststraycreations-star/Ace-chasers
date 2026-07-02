@@ -198,6 +198,41 @@ export default function Feed() {
     }
   };
 
+  // --- Inline edit ---------------------------------------------------------
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  const startEdit = (post) => {
+    setEditingId(post.id);
+    setEditDraft(post.body || '');
+    setEditError('');
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditDraft('');
+    setEditError('');
+  };
+  const saveEdit = async () => {
+    const trimmed = editDraft.trim();
+    if (!trimmed) {
+      setEditError('Post body cannot be empty.');
+      return;
+    }
+    setEditSaving(true);
+    setEditError('');
+    try {
+      const res = await api.patch(`/posts/${editingId}`, { body: trimmed });
+      setPosts((prev) => prev.map((p) => (p.id === editingId ? res.data : p)));
+      cancelEdit();
+    } catch (err) {
+      setEditError(err?.response?.data?.detail || err.message || 'Could not save');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   return (
     <div
       className="max-w-7xl mx-auto px-4 py-8 flex gap-6 items-start"
@@ -488,21 +523,82 @@ export default function Feed() {
                   </div>
                 </div>
                 {post.is_mine && (
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(post.id)}
-                    className="text-xs text-gray-400 hover:text-red-600 transition"
-                    data-testid={`post-delete-btn-${post.id}`}
-                  >
-                    Delete
-                  </button>
+                  <div className="flex items-center gap-3" data-testid={`post-actions-${post.id}`}>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(post)}
+                      className="text-xs text-gray-400 hover:text-disc-green transition"
+                      data-testid={`post-edit-btn-${post.id}`}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(post.id)}
+                      className="text-xs text-gray-400 hover:text-red-600 transition"
+                      data-testid={`post-delete-btn-${post.id}`}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 )}
               </header>
 
-              {post.body && (
-                <p className="text-gray-800 whitespace-pre-wrap mb-3" data-testid={`post-body-${post.id}`}>
-                  {post.body}
-                </p>
+              {editingId === post.id ? (
+                <div className="mb-3" data-testid={`post-edit-form-${post.id}`}>
+                  <textarea
+                    value={editDraft}
+                    onChange={(e) => setEditDraft(e.target.value)}
+                    maxLength={1000}
+                    rows={3}
+                    disabled={editSaving}
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-disc-green resize-none"
+                    data-testid={`post-edit-textarea-${post.id}`}
+                  />
+                  {editError && (
+                    <p
+                      className="text-red-600 text-xs mt-1"
+                      data-testid={`post-edit-error-${post.id}`}
+                    >
+                      {editError}
+                    </p>
+                  )}
+                  <div className="flex justify-end gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      disabled={editSaving}
+                      className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 rounded transition disabled:opacity-50"
+                      data-testid={`post-edit-cancel-${post.id}`}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveEdit}
+                      disabled={editSaving || !editDraft.trim()}
+                      className="text-sm bg-disc-green hover:bg-disc-green/90 text-white font-semibold px-3 py-1 rounded transition disabled:opacity-50"
+                      data-testid={`post-edit-save-${post.id}`}
+                    >
+                      {editSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                post.body && (
+                  <p className="text-gray-800 whitespace-pre-wrap mb-3" data-testid={`post-body-${post.id}`}>
+                    {post.body}
+                    {post.edited_at && (
+                      <span
+                        className="ml-2 text-xs text-gray-400 italic"
+                        title={`Edited ${new Date(post.edited_at).toLocaleString()}`}
+                        data-testid={`post-edited-${post.id}`}
+                      >
+                        (edited)
+                      </span>
+                    )}
+                  </p>
+                )
               )}
               {post.image_url && (
                 <img
@@ -516,6 +612,7 @@ export default function Feed() {
                 <video
                   src={fullImageUrl(post.video_url)}
                   controls
+                  playsInline
                   preload="metadata"
                   className="rounded-lg max-h-[520px] w-full bg-black"
                   data-testid={`post-video-${post.id}`}

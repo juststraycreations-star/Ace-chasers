@@ -115,3 +115,23 @@ def public_id_from_url(url: Optional[str]) -> Optional[str]:
     if "." in after_upload.rsplit("/", 1)[-1]:
         after_upload = after_upload.rsplit(".", 1)[0]
     return after_upload
+
+
+# Cloudinary transformation that forces MP4 container + H.264 video codec.
+# iPhone videos default to HEVC/.mov which desktop Chrome and Firefox cannot
+# decode; forcing this transcode makes them play everywhere.
+_VIDEO_COMPAT_TRANSFORM = "f_mp4,vc_h264"
+
+
+def browser_compatible_video_url(url: Optional[str]) -> Optional[str]:
+    """Rewrite a Cloudinary video URL to force an MP4 / H.264 stream so the
+    video plays on desktop browsers (which lack HEVC support) in addition to
+    iOS Safari. No-op for non-Cloudinary URLs or URLs that already contain
+    the transform."""
+    if not url or "res.cloudinary.com" not in url:
+        return url
+    if "/upload/" not in url:
+        return url
+    if _VIDEO_COMPAT_TRANSFORM in url:
+        return url
+    return url.replace("/upload/", f"/upload/{_VIDEO_COMPAT_TRANSFORM}/", 1)

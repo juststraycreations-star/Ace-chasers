@@ -126,6 +126,7 @@ class PostOut(BaseModel):
     visibility: Literal["public", "friends_only"]
     kind: Literal["post", "disc_review"] = "post"
     created_at: str
+    edited_at: Optional[str] = None
     author: PostAuthor
     is_mine: bool = False
     nice_count: int = 0

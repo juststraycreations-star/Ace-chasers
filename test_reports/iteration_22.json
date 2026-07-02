@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 22 — Cloudinary video codec rewrite (bug fix) + PATCH /api/posts/{id} edit endpoint (new feature) both fully working end-to-end. 14/14 new backend tests pass (browser_compatible_video_url unit tests, /api/feed rewriting Cloudinary URLs while leaving /api/uploads/ untouched, PATCH owner happy path, non-owner 404, empty body 422, nonexistent 404, edited_at null on new posts + set after edit, DELETE still works). Full regression: 30/30 iteration 19/20/21 tests still green. Frontend Playwright e2e passed all 5 scenarios: Edit+Delete buttons only on own posts, edit happy path with (edited) indicator, edit cancel reverts, empty-body disables Save, delete removes post from feed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration22.py",
+    "/app/test_reports/pytest/iteration_22.xml",
+    "/app/backend/tests/test_iteration19.py",
+    "/app/backend/tests/test_iteration20.py",
+    "/app/backend/tests/test_iteration21.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "cloud_storage.browser_compatible_video_url (lines 126-137) is correctly guarded: skips non-Cloudinary URLs, skips URLs without /upload/, and skips URLs that already contain the transform — so double-injection is impossible. Uses str.replace with count=1 which is the safest form.",
+    "posts_router.py _hydrate_posts wraps the constructed video_url through the helper (line 123). This is applied both for Cloudinary secure_urls (post['video_path'] starting with http) and, harmlessly, for the /api/uploads/ path (helper is a no-op there because 'res.cloudinary.com' is not in the string). Correct.",
+    "posts_router.py PATCH endpoint (~line 359) uses a proper Pydantic model with min_length=1/max_length=1000, then strips before hitting update_post_body. Empty body -> Pydantic 422. Non-owner correctly gets 404 with detail 'Post not found or not yours' because the Mongo filter includes author_uid. Response is re-hydrated through the same batched pipeline so nice_count / comment_count / is_mine / author stay correct.",
+    "posts.update_post_body uses find_one_and_update with ReturnDocument.AFTER — returns the actual persisted doc, avoiding the race where a follow-up find could miss the write. Good.",
+    "models.PostOut adds edited_at: Optional[str] between created_at and author — matches spec. PostOut.model_rebuild() still called after CommentOut is defined, so the forward ref resolves.",
+    "Feed.jsx: Save button is `disabled={editSaving || !editDraft.trim()}` — matches spec ('Save disabled OR error'). (edited) indicator is gated on truthy post.edited_at, so freshly-created posts don't show it. Video element also gained playsInline (verified by spec, not directly tested in e2e)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration22.py",
+    "/app/test_reports/iteration_22.json",
+    "/app/test_reports/pytest/iteration_22.xml"
+  ],
+  "success_rate": {
+    "backend": "14/14 new (100%) + 30/30 regression (100%) = 44/44",
+    "frontend": "5/5 e2e scenarios passed (100%)"
+  },
+  "test_credentials": "Uses REACT_APP_FIREBASE_API_KEY Identity Toolkit signUp. Ephemeral TEST_i22_* users created + deleted at teardown.",
+  "seed_data_creation": "Two ephemeral Firebase users (user_a / user_b) for PATCH auth tests. Two seeded Mongo post docs (one Cloudinary URL, one bare filename) for the feed-rewrite tests, both deleted in the finally block. One frontend signup user (TEST_i22ui_*) leaves a couple of posts + a Firebase account behind — same pattern as previous iterations, admin cleanup not required.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 22 is fully green. All backend endpoints + frontend flows for the video codec fix and the Edit Post feature work as specified. Regression suite from iterations 19/20/21 also still passes. If the next iteration touches posts_router.py or Feed.jsx, re-run /app/backend/tests/test_iteration22.py and the Playwright script in this report's script section (signup → skip photo → compose 'original text' → edit → cancel → edit → save → delete).",
+  "rca of the issue": "N/A — all specified behavior is implemented correctly."
+}

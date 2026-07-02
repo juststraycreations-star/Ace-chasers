@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 
 import cloud_storage
 from db import get_db
@@ -24,6 +25,7 @@ from posts import (
     list_user_posts,
     sniff_image_mime,
     sniff_video_mime,
+    update_post_body,
 )
 
 
@@ -115,7 +117,10 @@ async def _hydrate_posts(posts: list[dict], viewer_uid: str) -> list[PostOut]:
         video_url = None
         if post.get("video_path"):
             vid = post["video_path"]
-            video_url = vid if vid.startswith("http") else f"/api/uploads/{vid}"
+            raw = vid if vid.startswith("http") else f"/api/uploads/{vid}"
+            # Force MP4/H.264 for iPhone-recorded HEVC clips so they play
+            # on desktop browsers as well as mobile.
+            video_url = cloud_storage.browser_compatible_video_url(raw)
         my_val = my_reactions.get(post["id"])
         out.append(
             PostOut(
@@ -126,6 +131,7 @@ async def _hydrate_posts(posts: list[dict], viewer_uid: str) -> list[PostOut]:
                 visibility=post.get("visibility", "public"),
                 kind=post.get("kind", "post"),
                 created_at=post.get("created_at", ""),
+                edited_at=post.get("edited_at"),
                 author=author_obj,
                 is_mine=post["author_uid"] == viewer_uid,
                 nice_count=nice_by_post.get(post["id"], 0),
@@ -344,6 +350,25 @@ async def delete_post_endpoint(post_id: str, current=Depends(get_current_user)):
     if not ok:
         raise HTTPException(status_code=404, detail="Post not found or not yours")
     return {"ok": True}
+
+
+class _EditPostBody(BaseModel):
+    body: str = Field(min_length=1, max_length=1000)
+
+
+@router.patch("/api/posts/{post_id}", response_model=PostOut)
+async def edit_post_endpoint(
+    post_id: str,
+    payload: _EditPostBody,
+    current=Depends(get_current_user),
+):
+    """Edit the text body of one of your own posts. Media (image/video)
+    is intentionally not editable — repost if you want to change media."""
+    updated = await update_post_body(post_id, current["uid"], payload.body.strip())
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Post not found or not yours")
+    hydrated = await _hydrate_posts([updated], current["uid"])
+    return hydrated[0]
 
 
 
