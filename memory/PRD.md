@@ -250,6 +250,12 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - P2: Geocoding currently runs synchronously inside PUT /users/me; move to a background task if profile saves become hot.
 - P2: Re-enable seed_demo_users behind a DEV-only env flag so the 5 seed-dependent tests in test_api.py go green on a fresh DB.
 - P2: Replace `ADMIN_API_KEY` with Firebase custom claims (`admin: true`).
+
+### Session 27 — Desktop video playback fix + Post edit/delete (Feb 2026)
+- **Video codec bug fixed** (`/app/backend/cloud_storage.py`): iPhone-recorded HEVC/.mov videos wouldn't play on desktop Chrome/Firefox because those browsers lack HEVC support. New helper `browser_compatible_video_url()` rewrites Cloudinary video URLs to insert `f_mp4,vc_h264` after `/upload/`, forcing Cloudinary to transcode on-the-fly to a universally-compatible MP4/H.264 stream. `_hydrate_posts` in `posts_router.py` wraps every returned `video_url` through the helper. Non-Cloudinary URLs pass through unchanged; already-transformed URLs are not double-injected. Feed.jsx `<video>` also gained `playsInline` for iOS in-line playback.
+- **Post edit + delete feature**: New PATCH `/api/posts/{id}` endpoint (Pydantic `{body: str, 1-1000 chars}`) using `motor.find_one_and_update` with `ReturnDocument.AFTER`. Sets `edited_at` ISO timestamp. `PostOut.edited_at: Optional[str]` added to models. Owner-only (`{id, author_uid}` filter). Frontend Feed.jsx: header shows Edit + Delete for is_mine posts, Edit reveals an inline textarea with Save/Cancel; saved posts show a subtle `(edited)` indicator with the timestamp on hover.
+- **Testing**: 44/44 backend (14 new + 30 regression) + 5/5 frontend e2e (iter22). Zero issues found.
+
 - P2: Admin web UI for invites instead of curl.
 - P3: Real-time notifications via Firestore listener or websockets.
 
