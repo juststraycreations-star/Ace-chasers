@@ -9,6 +9,7 @@ import AlphaBanner from '../components/AlphaBanner';
 import DismissibleBanner from '../components/DismissibleBanner';
 import NewsSidebar from '../components/NewsSidebar';
 import PostInteractions from '../components/PostInteractions';
+import { extractVideoPoster } from '../lib/videoPoster';
 
 const MAX_RAW_IMAGE_BYTES = 30 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
@@ -35,6 +36,7 @@ export default function Feed() {
   const [imagePreview, setImagePreview] = useState(null);
   const [videoFile, setVideoFile] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
+  const [videoPoster, setVideoPoster] = useState(null);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState('');
   // The single post with the most 👍 Nice reactions in the past 7 days — null
@@ -144,6 +146,14 @@ export default function Feed() {
     if (fileInputRef.current) fileInputRef.current.value = '';
     setVideoFile(file);
     setVideoPreview(URL.createObjectURL(file));
+    setVideoPoster(null);
+    // Extract a poster frame in the background so the preview shows a
+    // static image instantly instead of a black tile — and we can leave
+    // `preload="none"` on the <video>, avoiding buffering the full file
+    // in memory on mobile until the user actually taps play.
+    extractVideoPoster(file).then((dataUrl) => {
+      if (dataUrl) setVideoPoster(dataUrl);
+    });
   };
 
   const clearImage = () => {
@@ -155,6 +165,7 @@ export default function Feed() {
   const clearVideo = () => {
     setVideoFile(null);
     setVideoPreview(null);
+    setVideoPoster(null);
     if (videoInputRef.current) videoInputRef.current.value = '';
   };
 
@@ -373,8 +384,12 @@ export default function Feed() {
               <div className="relative mt-3 inline-block" data-testid="compose-video-preview">
                 <video
                   src={videoPreview}
+                  poster={videoPoster || undefined}
                   controls
+                  playsInline
+                  preload="none"
                   className="max-h-60 rounded-lg border border-gray-200 bg-black"
+                  data-testid="compose-video-el"
                 />
                 <button
                   type="button"

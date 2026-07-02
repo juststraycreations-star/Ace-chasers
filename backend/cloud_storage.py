@@ -117,10 +117,12 @@ def public_id_from_url(url: Optional[str]) -> Optional[str]:
     return after_upload
 
 
-# Cloudinary transformation that forces MP4 container + H.264 video codec.
-# iPhone videos default to HEVC/.mov which desktop Chrome and Firefox cannot
-# decode; forcing this transcode makes them play everywhere.
-_VIDEO_COMPAT_TRANSFORM = "f_mp4,vc_h264"
+# Cloudinary transformation that forces MP4 container + H.264 video codec
+# with automatic quality/bitrate. iPhone videos default to HEVC/.mov which
+# desktop Chrome and Firefox cannot decode; forcing this transcode makes them
+# play everywhere, and `q_auto` lets Cloudinary pick a bandwidth-friendly
+# bitrate per client (helpful on slower mobile connections).
+_VIDEO_COMPAT_TRANSFORM = "f_mp4,vc_h264,q_auto"
 
 
 def browser_compatible_video_url(url: Optional[str]) -> Optional[str]:
@@ -132,6 +134,7 @@ def browser_compatible_video_url(url: Optional[str]) -> Optional[str]:
         return url
     if "/upload/" not in url:
         return url
-    if _VIDEO_COMPAT_TRANSFORM in url:
+    # Idempotent guard — any variant of our compat transform already present.
+    if "/upload/f_mp4," in url:
         return url
     return url.replace("/upload/", f"/upload/{_VIDEO_COMPAT_TRANSFORM}/", 1)

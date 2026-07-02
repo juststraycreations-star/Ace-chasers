@@ -105,15 +105,26 @@ class TestBrowserCompatibleVideoUrlHelper:
     def test_cloudinary_gets_transform_injected(self):
         u = "https://res.cloudinary.com/demo/video/upload/v1234567890/acechasers/post/vid-xyz.mp4"
         out = browser_compatible_video_url(u)
-        assert "/upload/f_mp4,vc_h264/" in out
+        assert "/upload/f_mp4,vc_h264,q_auto/" in out
         assert out == (
-            "https://res.cloudinary.com/demo/video/upload/f_mp4,vc_h264/"
+            "https://res.cloudinary.com/demo/video/upload/f_mp4,vc_h264,q_auto/"
             "v1234567890/acechasers/post/vid-xyz.mp4"
         )
 
     def test_cloudinary_with_existing_transform_not_double_injected(self):
+        # The legacy pre-q_auto transform must still be recognized so that
+        # any cached URLs from a previous deploy aren't double-injected.
         u = (
             "https://res.cloudinary.com/demo/video/upload/f_mp4,vc_h264/"
+            "v1234567890/acechasers/post/vid-xyz.mp4"
+        )
+        out = browser_compatible_video_url(u)
+        assert out == u
+        assert out.count("f_mp4,vc_h264") == 1
+
+    def test_cloudinary_with_new_transform_not_double_injected(self):
+        u = (
+            "https://res.cloudinary.com/demo/video/upload/f_mp4,vc_h264,q_auto/"
             "v1234567890/acechasers/post/vid-xyz.mp4"
         )
         out = browser_compatible_video_url(u)
@@ -166,7 +177,7 @@ class TestFeedVideoUrlRewrite:
             match = next((p for p in posts if p["id"] == post_id), None)
             assert match is not None, "seeded post not in feed"
             vu = match["video_url"]
-            assert "/upload/f_mp4,vc_h264/" in vu, f"transform missing: {vu}"
+            assert "/upload/f_mp4,vc_h264,q_auto/" in vu, f"transform missing: {vu}"
             assert "res.cloudinary.com" in vu
         finally:
             asyncio.get_event_loop().run_until_complete(_cleanup())

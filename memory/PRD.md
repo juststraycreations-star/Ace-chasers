@@ -257,6 +257,12 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Testing**: 44/44 backend (14 new + 30 regression) + 5/5 frontend e2e (iter22). Zero issues found.
 
 - P2: Admin web UI for invites instead of curl.
+
+### Session 28 — Video compression + compose-side poster preview (Feb 2026)
+- **Cloudinary compression** (`/app/backend/cloud_storage.py`): extended the video transform from `f_mp4,vc_h264` → `f_mp4,vc_h264,q_auto`. Cloudinary now picks the best bitrate/quality for the requesting client → smaller files, faster loads on mobile/cellular. Idempotency guard broadened to `"/upload/f_mp4,"` so old-transform URLs from prior deploys aren't double-injected.
+- **Compose-side video preview improvement** (`/app/frontend/src/lib/videoPoster.js` + `Feed.jsx`): the compose preview `<video>` now uses `preload="none"` + `playsInline`, so the browser doesn't buffer the whole file into memory on mobile just to render a preview. New helper `extractVideoPoster(file)` uses an off-screen `<video>` + canvas to grab a JPEG poster frame client-side (data URL), which is wired to the compose `<video poster=…>` for an instant visual preview. Helper is best-effort with a 4s timeout — falls back to the previous black tile if decoding fails (never regresses).
+- **Testing**: iteration_22 tests updated for the new transform string; **45/45 backend tests pass** across iter19-22. Poster extraction verified live on a signed-up user's compose form (`preload="none"` confirmed in DOM). Screenshot verified compose renders correctly.
+
 - P3: Real-time notifications via Firestore listener or websockets.
 
 
