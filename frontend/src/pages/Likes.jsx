@@ -290,7 +290,7 @@ export default function Likes() {
                     )}
                     {player.favoriteFrisbee && (
                       <p>
-                        <span className="font-semibold text-gray-800">Favorite Frisbee:</span>{' '}
+                        <span className="font-semibold text-gray-800">Favorite Disc:</span>{' '}
                         {player.favoriteFrisbee}
                       </p>
                     )}

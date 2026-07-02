@@ -101,7 +101,7 @@ export default function PublicProfilePreview({ player, actions, compact = false 
           )}
           {player.favoriteFrisbee && (
             <p className="text-gray-600 text-sm" data-testid="public-profile-favorite-frisbee">
-              <span className="font-semibold text-gray-800">Favorite Frisbee:</span>{' '}
+              <span className="font-semibold text-gray-800">Favorite Disc:</span>{' '}
               {player.favoriteFrisbee}
             </p>
           )}

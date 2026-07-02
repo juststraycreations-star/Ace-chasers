@@ -1,5 +1,5 @@
 /**
- * Small red disc / frisbee icon used in the app header. Inline SVG so it
+ * Small red disc icon used in the app header. Inline SVG so it
  * renders consistently across browsers (emoji rendering varies by OS).
  *
  * Pass `className` to control size (default 1.5em tall).

@@ -417,7 +417,7 @@ export default function Profile() {
               </div>
 
               <div className="col-span-2">
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Favorite Frisbee</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Favorite Disc</label>
                 <input
                   type="text"
                   name="favoriteFrisbee"

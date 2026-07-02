@@ -37,7 +37,7 @@ export default function PlayerCard({ player, onLike, onPass }) {
           )}
           {player.favoriteFrisbee && (
             <p className="text-gray-600">
-              <span className="font-semibold text-gray-800">Favorite Frisbee:</span>{' '}
+              <span className="font-semibold text-gray-800">Favorite Disc:</span>{' '}
               {player.favoriteFrisbee}
             </p>
           )}
