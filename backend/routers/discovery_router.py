@@ -65,9 +65,32 @@ async def discovery(
     """
     limit = max(1, min(limit, 50))
     db = get_db()
-    swiped_cursor = db.swipes.find({"from_uid": current["uid"]}, {"to_uid": 1}).limit(1000)
-    swiped_uids = [d["to_uid"] async for d in swiped_cursor]
-    exclude = set(swiped_uids + [current["uid"]])
+    me = current["uid"]
+
+    # Everyone the caller has already interacted with should drop out of
+    # discovery — otherwise the "N players to discover" count never decreases
+    # after adding friends or sending requests. We gather three sources in
+    # parallel-friendly individual queries (each is a small indexed lookup):
+    #
+    #   1. Legacy swipes (like/pass from the old swipe UI, kept for back-compat)
+    #   2. Friend requests I've sent AND requests sent to me
+    #   3. Anyone who's already a match/friend of mine (either direction)
+    exclude: set[str] = {me}
+
+    async for d in db.swipes.find({"from_uid": me}, {"to_uid": 1, "_id": 0}).limit(1000):
+        exclude.add(d["to_uid"])
+
+    async for r in db.friend_requests.find(
+        {"$or": [{"from_uid": me}, {"to_uid": me}]},
+        {"from_uid": 1, "to_uid": 1, "_id": 0},
+    ).limit(1000):
+        exclude.add(r["from_uid"] if r["from_uid"] != me else r["to_uid"])
+
+    async for m in db.matches.find(
+        {"$or": [{"user_a": me}, {"user_b": me}]},
+        {"user_a": 1, "user_b": 1, "_id": 0},
+    ).limit(1000):
+        exclude.add(m["user_b"] if m["user_a"] == me else m["user_a"])
 
     query: dict = {
         "uid": {"$nin": list(exclude)},
