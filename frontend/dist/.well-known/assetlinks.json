@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "net.acechasers.twa",
+        "sha256_cert_fingerprints": ["4B:C9:4E:5A:64:7E:2E:1C:77:48:1C:7F:70:F4:A4:A7:62:9E:18:E0:49:C3:01:8E:57:65:98:CE:82:64:2C:D2"]
+      }
+    }]
