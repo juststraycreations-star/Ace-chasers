@@ -271,6 +271,15 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Compose-side video preview improvement** (`/app/frontend/src/lib/videoPoster.js` + `Feed.jsx`): the compose preview `<video>` now uses `preload="none"` + `playsInline`, so the browser doesn't buffer the whole file into memory on mobile just to render a preview. New helper `extractVideoPoster(file)` uses an off-screen `<video>` + canvas to grab a JPEG poster frame client-side (data URL), which is wired to the compose `<video poster=…>` for an instant visual preview. Helper is best-effort with a 4s timeout — falls back to the previous black tile if decoding fails (never regresses).
 - **Testing**: iteration_22 tests updated for the new transform string; **45/45 backend tests pass** across iter19-22. Poster extraction verified live on a signed-up user's compose form (`preload="none"` confirmed in DOM). Screenshot verified compose renders correctly.
 
+### Session 30 — Discovery count bug fix (Feb 2026)
+- **User-reported bug**: "Why does the '24 players to discover' number never change?" — the count on /discovery stayed stale even after adding friends or sending player requests.
+- **RCA**: `/api/discovery`'s `exclude` set was only populated from the legacy `db.swipes` collection. The current UI uses `friend_requests` (Player button) and `matches` (accepted requests) — neither wrote to `swipes`, so nothing ever dropped out of the deck.
+- **Fix** (`/app/backend/routers/discovery_router.py` lines ~66-95): `exclude` set now unions three sources — legacy swipes, `friend_requests` (both incoming and outgoing), and `matches` (both directions user_a/user_b). Self remains excluded.
+- **Frontend**: no change. Discovery already refetches deck on mount and on filter change, so the corrected count surfaces on next visit/filter toggle. In-session UX preserved (card stays visible with status pill updating Player → ⏳ Sent → ✓ Players).
+- **Tests**: iteration_23 — 9 new + 45 regression = **54/54 passing**. Report: `/app/test_reports/iteration_23.json`.
+- **Known limitation**: `.limit(1000)` on each exclusion source is fine at current scale but a power user with >1000 friends/requests could see stale entries. Fix later with pagination or `$unionWith` aggregation if scaling.
+
+
 - P3: Real-time notifications via Firestore listener or websockets.
 
 
