@@ -5,10 +5,10 @@ import { api } from '../lib/api';
 import { compressImage } from '../lib/compressImage';
 import { resolveImageUrl as fullImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
-import AlphaBanner from '../components/AlphaBanner';
 import DismissibleBanner from '../components/DismissibleBanner';
 import NewsSidebar from '../components/NewsSidebar';
 import PostInteractions from '../components/PostInteractions';
+import GetTheAppBanner from '../components/GetTheAppBanner';
 import { extractVideoPoster } from '../lib/videoPoster';
 
 const MAX_RAW_IMAGE_BYTES = 30 * 1024 * 1024;
@@ -250,7 +250,7 @@ export default function Feed() {
       data-testid="feed-view"
     >
       <main className="flex-1 max-w-2xl mx-auto xl:mx-0 w-full min-w-0">
-      <AlphaBanner />
+      <GetTheAppBanner />
       <DismissibleBanner
         storageKey="ace_welcome_v2_dismissed"
         title="We've upgraded! Let's get you re-connected:"
