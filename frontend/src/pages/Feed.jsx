@@ -5,7 +5,6 @@ import { api } from '../lib/api';
 import { compressImage } from '../lib/compressImage';
 import { resolveImageUrl as fullImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
-import DismissibleBanner from '../components/DismissibleBanner';
 import NewsSidebar from '../components/NewsSidebar';
 import PostInteractions from '../components/PostInteractions';
 import GetTheAppBanner from '../components/GetTheAppBanner';
@@ -251,12 +250,6 @@ export default function Feed() {
     >
       <main className="flex-1 max-w-2xl mx-auto xl:mx-0 w-full min-w-0">
       <GetTheAppBanner />
-      <DismissibleBanner
-        storageKey="ace_welcome_v2_dismissed"
-        title="We've upgraded! Let's get you re-connected:"
-        body={'Update your location for local matching, drop in a profile photo, and share a quick "hi" on the feed.'}
-        testId="feed-welcome-banner"
-      />
       <h1 className="text-4xl font-bold text-disc-green mb-6">Feed</h1>
 
       {topNiced && (
