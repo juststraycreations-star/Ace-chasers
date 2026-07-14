@@ -290,3 +290,10 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Fix** (`/app/frontend/src/pages/Discovery.jsx` L199-217): header count now derives from `deck.filter(p => !friendSet.has(p.uid) && !sentSet.has(p.uid)).length`. `matchStore.sendFriendRequest` already optimistically updates `inbox.sent_friend_request_uids`, so the derived count re-renders immediately on successful send. Added `data-testid="discovery-count"` for testability.
 - **Backend**: no change this iteration; iteration 23 exclude-set fix still active.
 - **Verified**: `/app/test_reports/iteration_24.json` — desktop + mobile e2e confirmed count decrements immediately (24 → 23 → 22) with Sent pills appearing on the previously-actioned cards. **54/54 backend regression green**.
+
+
+### Session 32 — Discovery page size fix (Feb 2026)
+- **User re-reported**: "It is still not counting the players correctly, I know there should be more than 24 users." Screenshot showed acechasers.net/discovery capped at exactly 24.
+- **RCA**: The endpoint had `DISCOVERY_PAGE_SIZE = 24` as the default page size. Even with 88+ real users in Mongo, the API returned exactly 24 per fetch. Pagination via `next_cursor` + "Load more" existed but wasn't obvious to users.
+- **Fix** (`/app/backend/routers/discovery_router.py`): bumped `DISCOVERY_PAGE_SIZE` 24 → 100, max limit cap 50 → 200, radius-scan cap 200 → 800. All users on a small/launching community now fit on the first fetch. Pagination cursors still work for when the user base grows past 100.
+- **Verified on preview**: /discovery header now reads "88 players to discover" (was 24). No Load-more button needed. 45/45 iter19-22 regression tests still green.

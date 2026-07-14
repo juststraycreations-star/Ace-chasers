@@ -17,7 +17,11 @@ from posts import get_latest_public_post
 router = APIRouter()
 
 
-DISCOVERY_PAGE_SIZE = 24
+# Discovery default page size. Bumped from 24 → 100 so all users on a
+# launching / small-community app appear on the first fetch without
+# needing to click "Load more". The endpoint still supports pagination
+# via `before` for when the user base grows past this.
+DISCOVERY_PAGE_SIZE = 100
 # When the caller passes radius_miles, we widen the underlying scan so that
 # the haversine filter still returns a full page on dense regions.
 RADIUS_SCAN_MULTIPLIER = 6
@@ -63,7 +67,7 @@ async def discovery(
       contains the keyword (case-insensitive substring match). Players who
       have flagged `privacy.interestedIn=true` are excluded.
     """
-    limit = max(1, min(limit, 50))
+    limit = max(1, min(limit, 200))
     db = get_db()
     me = current["uid"]
 
@@ -123,10 +127,11 @@ async def discovery(
         query["lng"] = {"$ne": None}
 
     # When a radius filter is active we scan a wider pool because most rows
-    # will be filtered out client-side after the haversine check.
+    # will be filtered out client-side after the haversine check. Cap the
+    # scan at 800 rows so we don't full-table-scan in edge cases.
     scan_limit = limit
     if viewer_coords is not None:
-        scan_limit = min(limit * RADIUS_SCAN_MULTIPLIER, 200)
+        scan_limit = min(limit * RADIUS_SCAN_MULTIPLIER, 800)
 
     docs: list[dict] = []
     cursor = db.users.find(query).sort("created_at", -1).limit(scan_limit)
