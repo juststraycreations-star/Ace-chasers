@@ -283,3 +283,10 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - P3: Real-time notifications via Firestore listener or websockets.
 
 
+
+
+### Session 31 — Discovery count in-session fix (Feb 2026)
+- **Bug re-reported**: user said "The count on the discovery page is still stuck at 24 — it only works when you click to view more pages." Iteration 23 only fixed the backend exclude set; the frontend still rendered `deck.length` (which never decreased in-session because cards intentionally stay visible after a Sent request).
+- **Fix** (`/app/frontend/src/pages/Discovery.jsx` L199-217): header count now derives from `deck.filter(p => !friendSet.has(p.uid) && !sentSet.has(p.uid)).length`. `matchStore.sendFriendRequest` already optimistically updates `inbox.sent_friend_request_uids`, so the derived count re-renders immediately on successful send. Added `data-testid="discovery-count"` for testability.
+- **Backend**: no change this iteration; iteration 23 exclude-set fix still active.
+- **Verified**: `/app/test_reports/iteration_24.json` — desktop + mobile e2e confirmed count decrements immediately (24 → 23 → 22) with Sent pills appearing on the previously-actioned cards. **54/54 backend regression green**.
