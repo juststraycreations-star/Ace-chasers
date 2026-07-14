@@ -198,8 +198,21 @@ export default function Discovery() {
       />
       <header className="mb-4 text-center">
         <h1 className="text-4xl font-bold text-disc-green mb-1">Find Your Ace Match</h1>
-        <p className="text-gray-600 text-sm">
-          {deck.length} player{deck.length === 1 ? '' : 's'} to discover — tap a card to view their full profile
+        <p className="text-gray-600 text-sm" data-testid="discovery-count">
+          {(() => {
+            // The visible count reflects players you can still act on —
+            // friends and already-requested users are shown in the deck
+            // (with a status pill) but shouldn't inflate the counter.
+            const actionable = deck.filter(
+              (p) => !friendSet.has(p.uid) && !sentSet.has(p.uid)
+            ).length;
+            return (
+              <>
+                {actionable} player{actionable === 1 ? '' : 's'} to discover —
+                tap a card to view their full profile
+              </>
+            );
+          })()}
         </p>
       </header>
 

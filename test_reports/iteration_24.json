@@ -1,0 +1,23 @@
+{
+  "summary": "Iteration 24 (frontend fix retest): Verified /discovery header count decrements immediately on Player request send. Desktop (1920x1080) and Mobile (375x800) both confirmed. Backend regression (iters 19-23, 54 tests) still 100% green.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration23.py",
+    "/app/test_reports/pytest/iteration_24.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Discovery.jsx L199-217: count is computed inline via IIFE inside JSX — fine but a useMemo(() => actionable, [deck, friendSet, sentSet]) would be marginally clearer and avoid recomputation on unrelated re-renders.",
+    "sentSet/friendSet are new Set() rebuilt on every render (matchStore inbox reference stability); this is fine at N<=100 but consider useMemo if the deck grows to hundreds.",
+    "Positive-control 'reload after send' scenario: the backend now excludes sent-request targets from /api/discovery (iter 23 fix), so on reload the deck is *replenished* to N=24 with new candidates rather than showing N-1. The FE-derived counter is correct given the deck contents; the requirement wording ('N-1 after reload') no longer applies once the BE also filters. Recommend clarifying the product spec — current behaviour is sensible and consistent."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (54/54 regression)", "frontend": "100% (desktop + mobile decrement + Sent pill verified)"},
+  "test_credentials": "Firebase Identity Toolkit signUp with random TEST_i24_* / TEST_i24m2_* emails.",
+  "seed_data_creation": "Seed users (24 auto-seeded demo players) already present; no new seeds required. Test users left as Firebase accounts (not cleaned up in this run — same pattern as prior iterations).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The FE fix requires skipping the onboarding modal (name+next flow) before navigating to /discovery — the first automation attempt failed the click flow because the modal was blocking. Use `input[placeholder*=\"Sam Putter\"]` + iterate Next/Skip buttons. `data-testid=\"discovery-count\"` and `player-status-sent-<uid>` are the canonical selectors added this iteration.",
+  "rca of the issue": "Original iter-23 fix only touched the backend exclude set. The frontend Discovery.jsx still rendered `deck.length` as the header count, and deck items are never removed on send (intentional — cards stay visible with a Sent pill). So the counter appeared stuck at 24 until a fresh /api/discovery fetch. This iteration derives the visible count from `deck.filter(p => !friendSet.has(p.uid) && !sentSet.has(p.uid)).length`, and matchStore.sendFriendRequest optimistically adds to sent_friend_request_uids — verified in devtools network log (POST /api/friend-requests/<uid> → 200, count re-renders synchronously)."
+}
