@@ -24,8 +24,13 @@ function resolveBackendUrl() {
 
 const BACKEND_URL = resolveBackendUrl();
 
+// Named export for consumers (like the merged league components) that want
+// the raw API base URL — e.g. to build absolute URLs for <img src> tags or
+// to hand off to fetch() directly.
+export const API = `${BACKEND_URL}/api`;
+
 export const api = axios.create({
-  baseURL: `${BACKEND_URL}/api`,
+  baseURL: API,
 });
 
 api.interceptors.request.use(async (config) => {

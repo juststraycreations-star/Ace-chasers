@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import api, { API } from "@/lib/api";
+import api, { API } from "../lib/api";
 import { toast } from "sonner";
 import { Coins, ArrowUpRight, ArrowDownRight, Plus, DownloadSimple, UsersFour } from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";

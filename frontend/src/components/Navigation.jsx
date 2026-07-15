@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { to: '/feed', label: 'Feed', testid: 'nav-feed' },
   { to: '/bagcheck', label: 'Bag Check', testid: 'nav-bagcheck' },
   { to: '/courses', label: 'Courses', testid: 'nav-courses' },
+  { to: '/leagues', label: 'Leagues', testid: 'nav-leagues' },
   { to: '/discovery', label: 'Discovery', testid: 'nav-discovery' },
   { to: '/daily-plastic', label: '📰 Daily Plastic', testid: 'nav-daily-plastic' },
   { to: '/messages', label: 'Messages', testid: 'nav-messages' },

@@ -16,6 +16,12 @@ import PlayerProfile from './pages/PlayerProfile';
 import Likes from './pages/Likes';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
+import LeagueDashboard from './pages/leagues/LeagueDashboard';
+import CreateLeague from './pages/leagues/CreateLeague';
+import LeagueDetail from './pages/leagues/LeagueDetail';
+import RoundScorecard from './pages/leagues/RoundScorecard';
+import LeaguePlayerProfile from './pages/leagues/LeaguePlayerProfile';
+import { AuthProvider as LeagueAuthProvider } from './context/AuthContext';
 
 function AppRoutes() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -54,6 +60,11 @@ function AppRoutes() {
             <Route path="/messages" element={<Messages />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/players/:uid" element={<PlayerProfile />} />
+            <Route path="/leagues" element={<LeagueDashboard />} />
+            <Route path="/leagues/new" element={<CreateLeague />} />
+            <Route path="/leagues/:leagueId" element={<LeagueDetail />} />
+            <Route path="/leagues/:leagueId/players/:userId" element={<LeaguePlayerProfile />} />
+            <Route path="/rounds/:roundId" element={<RoundScorecard />} />
             <Route path="*" element={<Navigate to="/feed" replace />} />
           </>
         )}
@@ -66,7 +77,9 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppRoutes />
+        <LeagueAuthProvider>
+          <AppRoutes />
+        </LeagueAuthProvider>
       </AuthProvider>
     </Router>
   );

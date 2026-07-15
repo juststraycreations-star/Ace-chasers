@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import api, { API } from "@/lib/api";
+import api, { API } from "../lib/api";
 import BagTagMatrix from "./BagTagMatrix";
 import { Trophy, TrendUp, DownloadSimple } from "@phosphor-icons/react";
 

@@ -40,6 +40,7 @@ from routers import (  # noqa: E402
     auth_router,
     courses_router,
     discovery_router,
+    leagues_router,
     media_router,
     messages_router,
     news_router,
@@ -102,3 +103,4 @@ app.include_router(posts_router.router)
 app.include_router(messages_router.router)
 app.include_router(courses_router.router)
 app.include_router(news_router.router)
+app.include_router(leagues_router.api_router, prefix="/api")

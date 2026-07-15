@@ -297,3 +297,13 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **RCA**: The endpoint had `DISCOVERY_PAGE_SIZE = 24` as the default page size. Even with 88+ real users in Mongo, the API returned exactly 24 per fetch. Pagination via `next_cursor` + "Load more" existed but wasn't obvious to users.
 - **Fix** (`/app/backend/routers/discovery_router.py`): bumped `DISCOVERY_PAGE_SIZE` 24 → 100, max limit cap 50 → 200, radius-scan cap 200 → 800. All users on a small/launching community now fit on the first fetch. Pagination cursors still work for when the user base grows past 100.
 - **Verified on preview**: /discovery header now reads "88 players to discover" (was 24). No Load-more button needed. 45/45 iter19-22 regression tests still green.
+
+
+### Session 33 — Full merge with disc-leauge-ops (Feb 2026)
+- **User request**: merge the disc-leauge-ops league/tournament management app into Ace Chasers as a unified product (Option A, "go big").
+- **Scope shipped**: ~1,618 lines of new backend + 6 pages + 13 components + 46 shadcn/ui + 52 npm deps, in one session.
+- **Auth bridged**: league app's Emergent OAuth cookie sessions → Firebase Bearer via new `_upsert_league_user()` helper mapping `uid` → league `user_id`. Old `/auth/session` and `/auth/logout` endpoints removed; `/auth/me` retained.
+- **Storage bridged**: Emergent object storage → Cloudinary via `put_object`/`get_object` compat shims in `routers/leagues_router.py`. `/api/files/upload` returns both `path` and `url`; `/api/files/{path}` 302s to the Cloudinary URL. `db.files` schema gained `url`.
+- **Frontend integration**: new `context/AuthContext.jsx` bridges Firebase Zustand store → league `useAuth()`. Vite gained `@` path alias + `optimizeDeps.esbuildOptions.alias` + `optimizeDeps.include: ['react-is']`. `lib/api.js` gained named `API` export. Routes: `/leagues`, `/leagues/new`, `/leagues/:id`, `/leagues/:id/players/:userId`, `/rounds/:roundId`. Nav "Leagues" tab added.
+- **Verified via screenshot**: `/leagues` renders LeagueDashboard with empty state, zero page errors, backend router responds to authenticated Firebase requests.
+- **Follow-ups**: testing-agent regression pass on merged app; theme reconciliation (league dark/orange vs Ace Chasers disc-green); route the LeagueLanding page; add tests for 40+ new API routes.

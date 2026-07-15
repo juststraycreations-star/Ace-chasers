@@ -28,8 +28,9 @@ import requests
 from datetime import datetime, timezone, timedelta
 
 # Reuse the shared MongoDB connection so this router doesn't open a second
-# client. `deps.get_db()` returns the same DB instance the rest of the app uses.
-from deps import get_current_user as _fb_get_current_user, get_db  # noqa: E402
+# client. `db.get_db()` returns the same DB instance the rest of the app uses.
+from firebase_auth import get_current_user as _fb_get_current_user  # noqa: E402
+from db import get_db  # noqa: E402
 import cloud_storage  # noqa: E402
 
 db = get_db()
@@ -96,14 +97,8 @@ def get_object(path: str):
 
 
 # ============= AUTH (Firebase bridge) =============
-class User(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    user_id: str
-    email: Optional[str] = None
-    name: Optional[str] = None
-    picture: Optional[str] = None
-    handle: Optional[str] = None
-    created_at: Optional[str] = None
+# `User` is defined below in the MODELS section; the shape there is what
+# the rest of this file relies on. We use it via forward reference here.
 
 
 async def _upsert_league_user(uid: str, fb_user: dict) -> dict:
@@ -130,7 +125,7 @@ async def get_current_user(
     request: Request = None,
     session_token: Optional[str] = Cookie(None),
     authorization: Optional[str] = Header(None),
-) -> User:
+) -> "User":
     """Bridged auth: verify Firebase Bearer token via the existing deps,
     then map the returned uid onto the league app's `User(user_id=...)`
     shape. Cookie/session args are kept for signature compatibility with
@@ -140,6 +135,9 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="Not authenticated")
     uid = fb["uid"]
     doc = await _upsert_league_user(uid, fb)
+    # `User` is defined lower in this file (MODELS section) — forward ref OK
+    # at call time because the module is fully loaded before any request
+    # handler runs.
     return User(**doc)
 
 
@@ -150,8 +148,6 @@ def now_iso():
 
 
 # ============= MODELS =============
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
 
 class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -362,6 +358,10 @@ async def files_upload(
     session_token: Optional[str] = Cookie(None),
     authorization: Optional[str] = Header(None),
 ):
+    """Upload to Cloudinary (via the put_object compat shim) and return
+    both the storage `path` (for source-compat with existing frontend code
+    that stores it) AND the `url` — new frontend code should use the URL
+    directly to skip a redirect."""
     user = await get_current_user(request, session_token, authorization)
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
     path = f"{APP_NAME}/uploads/{user.user_id}/{uuid.uuid4()}.{ext}"
@@ -370,6 +370,7 @@ async def files_upload(
     await db.files.insert_one({
         "id": str(uuid.uuid4()),
         "storage_path": result["path"],
+        "url": result["url"],
         "user_id": user.user_id,
         "original_filename": file.filename,
         "content_type": file.content_type,
@@ -377,32 +378,27 @@ async def files_upload(
         "is_deleted": False,
         "created_at": now_iso(),
     })
-    return {"path": result["path"]}
+    return {"path": result["path"], "url": result["url"]}
 
 
 @api_router.get("/files/{path:path}")
-async def files_download(path: str, auth: Optional[str] = Query(None),
+async def files_download(path: str, request: Request, auth: Optional[str] = Query(None),
                           session_token: Optional[str] = Cookie(None),
                           authorization: Optional[str] = Header(None)):
-    # Any authenticated user can download. Validate session via any of the auth mechanisms.
-    token = session_token or auth
-    header_auth = authorization
-    if not token and not header_auth:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    if auth and not session_token and not authorization:
-        header_auth = f"Bearer {auth}"
-    session_doc = None
-    check_token = token or (header_auth.split(" ", 1)[1] if header_auth and header_auth.startswith("Bearer ") else None)
-    if check_token:
-        session_doc = await db.user_sessions.find_one({"session_token": check_token}, {"_id": 0})
-    if not session_doc:
-        raise HTTPException(status_code=401, detail="Invalid session")
-
+    """Look up the Cloudinary URL for a `storage_path` we handed out at
+    upload time and 302 to it. Auth is checked via the Firebase bridge so
+    only signed-in users can resolve paths."""
+    # Prefer header, fall back to ?auth= query arg (used for <img> tags).
+    if auth and not authorization:
+        authorization = f"Bearer {auth}"
+    await get_current_user(request, session_token, authorization)
     record = await db.files.find_one({"storage_path": path, "is_deleted": False}, {"_id": 0})
     if not record:
         raise HTTPException(status_code=404, detail="File not found")
-    data, ct = get_object(path)
-    return Response(content=data, media_type=record.get("content_type") or ct)
+    url = record.get("url")
+    if not url:
+        raise HTTPException(status_code=410, detail="File URL missing (legacy record)")
+    return RedirectResponse(url=url, status_code=302)
 
 
 # ============= LEAGUES =============
@@ -1108,7 +1104,7 @@ async def _validate_ws_token(token: str) -> Optional[dict]:
     user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
     return user
 
-@app.websocket("/api/ws/rounds/{round_id}")
+@api_router.websocket("/ws/rounds/{round_id}")
 async def ws_round(websocket: WebSocket, round_id: str, token: str = Query(...)):
     user = await _validate_ws_token(token)
     if not user:
@@ -1137,7 +1133,7 @@ async def ws_round(websocket: WebSocket, round_id: str, token: str = Query(...))
     finally:
         await ws_manager.disconnect(room, websocket)
 
-@app.websocket("/api/ws/leagues/{league_id}")
+@api_router.websocket("/ws/leagues/{league_id}")
 async def ws_league(websocket: WebSocket, league_id: str, token: str = Query(...)):
     user = await _validate_ws_token(token)
     if not user:
@@ -1588,17 +1584,6 @@ async def finalize_payout(round_id: str, request: Request,
     return {"created": len(entries), "entries": entries}
 
 
-# ============= INCLUDE =============
-app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+# The router is included by the main Ace Chasers server.py with the /api
+# prefix. CORS is handled globally by the main app. No shutdown handler
+# is needed here — the main app owns the Mongo client lifecycle.

@@ -11,6 +11,16 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    optimizeDeps: {
+      // Recharts imports `react-is` at bundle time; forcing it in
+      // optimizeDeps ensures esbuild can resolve it from node_modules.
+      include: ['react-is'],
+      esbuildOptions: {
+        alias: {
+          '@': path.resolve(__dirname, './src'),
+        },
+      },
+    },
     server: {
       host: '0.0.0.0',
       port: 3000,
