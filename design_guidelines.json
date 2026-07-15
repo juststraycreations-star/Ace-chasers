@@ -1,0 +1,133 @@
+{
+  "theme": "dark",
+  "typography": {
+    "headings": {
+      "family": "Outfit, sans-serif",
+      "style": "font-black tracking-tight",
+      "banned": ["Inter", "Roboto", "Open Sans"],
+      "usage": "Use Outfit for all section headers and wizards. Use Anton for massive numbers (Scores, Bag Tags, Ledger totals)."
+    },
+    "body": {
+      "family": "Manrope, sans-serif",
+      "style": "font-medium tracking-normal",
+      "usage": "All standard text, feed content, and form inputs."
+    },
+    "data_display": {
+      "family": "JetBrains Mono, monospace",
+      "style": "tracking-widest uppercase",
+      "usage": "Use for Proof of Score timestamps, Ledger debit/credit numbers, and QR Check-in IDs."
+    }
+  },
+  "colors": {
+    "archetype": "THE PERFORMANCE PRO mixed with ORGANIC & EARTHY",
+    "background": {
+      "base": "#09090B",
+      "surface": "#18181B",
+      "glass": "rgba(24, 24, 27, 0.7)"
+    },
+    "primary": {
+      "name": "Hyper Orange",
+      "value": "#FF5C00",
+      "usage": "Action buttons, Active UI states, Bag Tag highlights."
+    },
+    "secondary": {
+      "name": "Course Green",
+      "value": "#166534",
+      "usage": "Positive ledger balances, Hot Round indicators, 'Fairway' visual metaphors."
+    },
+    "text": {
+      "primary": "#F4F4F5",
+      "muted": "#A1A1AA",
+      "inverse": "#000000"
+    },
+    "rules": [
+      "No full-screen gradients.",
+      "Never use pure black or pure gray; zinc scale is tinted slightly with blue.",
+      "High contrast (Pure White) required for all primary data."
+    ]
+  },
+  "visual_enhancers": {
+    "surfaces": {
+      "scorecard_header": "Glassmorphism (Crystal) - bg-zinc-900/80 backdrop-blur-xl border-b border-white/10 to keep hole info visible while scrolling.",
+      "bag_tags": "Neumorphism (Tactile) - Sharp 1px border with ambient shadow to simulate physical metal/plastic tags.",
+      "recap_cards": "The Tracing Beam - Animated gradient border for 'Hot Round' and 'Most Improved' feed cards.",
+      "ledger_grid": "Grid Borders - border-collapse layout with 1px border-zinc-800 on inner cells, exposing the technical skeleton."
+    },
+    "textures": [
+      "Subtle SVG noise overlay on empty states and the hero dashboard to kill digital flatness."
+    ]
+  },
+  "grids": {
+    "bento_protocol": {
+      "clubhouse_feed": "Mode A (Tetris Grid) - Asymmetric feed with the Story Grid spanning full width, followed by overlapping recap cards and pinned announcements.",
+      "ledger_dashboard": "Mode B (High Density) - Strict grid hierarchy, gap-4, tight data correlation. Every pixel utilized for financial stats."
+    }
+  },
+  "layouts": {
+    "spacing_system": {
+      "philosophy": "Generous Spacing (2-3x typical). Use p-8 or p-12 for dashboard widgets.",
+      "mobile_first": "Scorecard module MUST be optimized for one-handed thumb use on mobile devices."
+    },
+    "containers": "All bordered containers must have internal padding (p-6) to prevent text collision."
+  },
+  "motion": {
+    "required": [
+      "Hover states for all interactive elements (color shift + slight -translate-y-1).",
+      "Staggered entrance animations for Bag Tag sorting matrix.",
+      "Smooth height transitions for multi-step League Wizard."
+    ],
+    "technical": "Use Framer Motion for Bag Tag matrix resorting and Tracing Beam effects. Avoid 'transition-all'."
+  },
+  "accessibility": {
+    "contrast": "Minimum 4.5:1 for all text. Use APCA guidelines.",
+    "focus": "focus:ring-2 focus:ring-orange-500 focus:outline-none on all inputs and buttons.",
+    "motion": "Respect prefers-reduced-motion for the Bag Tag resorting matrix."
+  },
+  "media": {
+    "image_urls": {
+      "hero_background": {
+        "url": "https://images.unsplash.com/photo-1725724767938-26e57f67a12c",
+        "description": "Disc golf basket at sunset. Apply bg-black/50 overlay."
+      },
+      "feed_lost_and_found": {
+        "url": "https://images.pexels.com/photos/13189540/pexels-photo-13189540.jpeg",
+        "description": "Man throwing disc (placeholder for player/lost disc)."
+      },
+      "story_grid": {
+        "url": "https://images.pexels.com/photos/12661977/pexels-photo-12661977.jpeg",
+        "description": "Tournament throw. Use in vertical layout."
+      }
+    },
+    "icons": {
+      "library": "@phosphor-icons/react",
+      "style": "Duotone or bold weight for high legibility outdoors."
+    }
+  },
+  "3d_libraries": {
+    "recommendation": "Use framer-motion for the 'Bag Tag Matrix' 2.5D flip animations rather than full WebGL, ensuring mobile battery performance during live rounds."
+  },
+  "modules_instructions": {
+    "league_dashboard": "Build the 'Create League' wizard using shadcn tabs or a state-driven stepper. Keep the Ledger grid highly dense, using the JetBrains Mono font for numbers. Mark positive pools in Course Green.",
+    "digital_scorecard": "MUST be built mobile-first. Use large touch targets for score entry (+ / -). The 'Proof of Score' log should look like a retro-terminal audit trail (Courier/JetBrains font, small text). Keep the chat in a bottom drawer or collapsible glass sheet.",
+    "standings_engine": "The Bag Tag matrix is the visual centerpiece. When a round completes, use framer-motion layout animations to visually swap the physical-looking bag tags between players.",
+    "clubhouse_feed": "Build a vertical 'Story Grid' at the top (Instagram style but rectangular cards). Use 'The Tracing Beam' style for the Hot Round card so it visually dominates the feed."
+  },
+  "instructions_to_main_agent": [
+    "Install required fonts from Google Fonts: Outfit, Anton, Manrope, JetBrains Mono.",
+    "Install @phosphor-icons/react and framer-motion.",
+    "Use pure HTML+Tailwind for the Clubhouse Feed and Bag Tag layouts to allow deep customization. Use shadcn/ui for forms, inputs, and modals in the Wizard.",
+    "Implement the 'Tracing Beam' effect for the Hot Round feed cards.",
+    "Ensure the Live Scorecard uses sticky headers so players don't lose context of the current hole.",
+    "Add data-testid attributes to ALL interactive elements."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "Do not converge toward generic outputs. Avoid standard SaaS blue.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur) for sticky navs and modals.",
+    "You MUST NOT apply universal transition (transition: all).",
+    "You MUST NOT center align the app container (.App { text-align: center; }).",
+    "Use sonner for toasts notifications.",
+    "NEVER use placeholder text for missing images; use the provided image URLs.",
+    "All interactive elements MUST include a data-testid attribute."
+  ]
+}
