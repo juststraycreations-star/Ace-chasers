@@ -91,8 +91,8 @@ export default function PlayerProfile() {
                 <h3 className="font-display text-xl flex items-center gap-2"><TrendUp size={18} weight="fill" className="text-[#FF9E00]" /> Round-by-Round</h3>
               </div>
             </div>
-            <div style={{ width: "100%", height: 240 }}>
-              <ResponsiveContainer>
+            <div style={{ width: "100%", height: 240, minHeight: 240 }}>
+              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
                   <XAxis dataKey="idx" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
