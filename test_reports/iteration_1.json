@@ -1,0 +1,46 @@
+{
+  "summary": "First e2e test iteration of Ace Chasers Disc Golf platform. Backend: 29/31 pytest cases pass (93.5%). All auth, leagues, members, scoring, handicap, finalize+recap, ledger, clubhouse announcements/feed/lost-found flows work correctly. Emergent Object Storage /api/files/upload returns 500 (integration failure at storage service PUT), which cascades to file download and stories UI. Frontend: landing, OAuth redirect, dashboard, Create-League wizard, League detail (all 4 tabs), DIRECTOR chip, QR check-in, ledger form (director-gated), scorecard hole navigation, and card chat all work end-to-end.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/files/upload", "issue": "Returns 500. Backend calls PUT https://integrations.emergentagent.com/objstore/api/v1/storage/objects/{path} which responds 500 Internal Server Error. Storage init succeeds at startup, so credentials/emergent_key are valid; the PUT contract or the storage service itself is failing. Blocks Lost&Found image uploads and Story image posts.", "priority": "HIGH"},
+      {"endpoint": "GET /api/files/{path}", "issue": "Blocked by upload failure - not independently testable, but code path is dependent on upload succeeding.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "RoundScorecard", "issue": "Review spec expects data-testid values 'score-plus', 'score-minus', 'score-cell', 'proof-btn' but implementation uses suffixed variants: 'score-plus-{sc.id}', 'score-minus-{sc.id}', 'score-cell-{sc.id}', 'proof-btn-{sc.id}'. Functionality is fine but violates the documented test contract in the review request. Consider adding both (or generic wrappers) so external tests using the documented ids can locate elements.", "selector": "[data-testid^='score-plus-']", "priority": "MEDIUM"},
+      {"component": "RoundScorecard", "issue": "hole-cell exists as a CSS class only, not a data-testid. If required for testing, promote to data-testid.", "selector": ".hole-cell", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Clubhouse story upload / Lost&Found image", "issue": "Since /api/files/upload returns 500, any UI attempt to upload story image or L&F photo will fail. Not tested via UI given backend failure.", "affected_selectors": ["story-upload input", "lost-found image input"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Investigate /api/files/upload 500 - verify Emergent Object Storage PUT payload format (currently: PUT {STORAGE_URL}/objects/{path} with header X-Storage-Key and raw body). May need multipart form, different header name, or different endpoint shape. Consider a curl test against integrations.emergentagent.com/objstore/api/v1/storage with the acquired storage_key.",
+    "Align data-testid naming for RoundScorecard: either add unsuffixed testids (score-plus, score-minus, score-cell, proof-btn) OR update the feature spec to reference the suffixed variants (score-plus-{id}).",
+    "Optionally add data-testid='hole-cell' to the color-coded score cells."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~1044 lines - consider splitting into routers (auth, leagues, rounds, scoring, ledger, clubhouse, files) for maintainability once above 700 LOC threshold.",
+    "get_current_user is duplicated by manually re-parsing session_token/authorization in /api/files/{path} download handler (lines 386-402). Extract into a shared helper so cookie/query/header token logic isn't repeated.",
+    "_finalize_round bag-tag reshuffle only re-sorts existing tag numbers among participants but does not consider non-participants who may hold better tags in the league. Confirm this matches product spec (only-participants swap).",
+    "handicap uses plus_minus average of last 5 scorecards regardless of completed round status - includes in-progress rounds if total>0. May want to filter by round.status=='completed'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/__init__.py"
+  ],
+  "success_rate": {"backend": "93.5% (29/31)", "frontend": "~95% (all core flows pass; only file-upload dependent stories/L&F images untested)"},
+  "test_credentials": "Pre-seeded sessions verified: test_session_director_2026 (Dax Director), test_session_alpha_2026 (Alex Alpha), test_session_bravo_2026 (Bella Bravo).",
+  "seed_data_creation": "Test suite created TEST_League_QA and TEST_Private leagues via director session; 3 members, 2 rounds with cards & scorecards, 1 completed round with recap FeedPost, 1 Ace Pool ledger credit ($25), 1 announcement, 1 feed post, 1 lost&found item.",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Backend regression suite at /app/backend/tests/backend_test.py runs sequentially with `pytest -n 0`. Uses shared STATE dict across classes so DO NOT run with xdist parallelism (pytest.ini default -n 2 will break state sharing - override with `-n 0`). If file-upload still fails, investigate the Emergent objstore PUT contract - init succeeds, PUT does not.",
+  "rca_of_the_issue": "File Upload 500: /api/files/upload initializes storage_key successfully (POST /objstore/api/v1/storage/init works, logs show 'Storage initialized'). The subsequent PUT to /objstore/api/v1/storage/objects/{path} with headers X-Storage-Key + Content-Type and raw bytes body responds 500. Because init works, credentials are valid; likely the PUT request format is wrong (needs multipart form-data, or a different path/header). Mitigation: (a) inspect emergentintegrations Storage helper to see canonical request shape, (b) log the storage service's response body when non-2xx to see the specific error, (c) try multipart PUT."
+}
