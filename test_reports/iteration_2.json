@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 2 e2e testing complete. Backend: 13/13 pytest cases pass (100%) covering course_rating, PDGA-style player_rating, WebSocket /api/ws/rounds and /api/ws/leagues (hello, score_update broadcast, announcement broadcast, invalid-token/non-member close), auto-pair (director + 403), CSV exports (standings.csv + ledger.csv with proper headers and ?auth= query support), and player profile endpoint. Frontend: all iteration 2 UI features validated - wizard-course-rating input on step 3, Standings tab Rating column + Export CSV (working download) + row click nav to Player Profile, Player Profile page with recharts LineChart + history table + rating/handicap, Ledger CSV export button (working download), notif-toggle-btn (Enable Alerts), WebSocket live indicator ('LIVE · WEBSOCKET CONNECTED' visible), Auto-Pair button visible on Random-Draw Doubles league AND correctly hidden on Singles league. Fixed 2 blocker bugs during testing: (1) Round pydantic model was missing course_rating field so persistence silently dropped it (server.py:118); (2) RoundScorecard.jsx referenced undefined variables leagueFormat/isDirector causing the entire component to crash — added league fetch and derived both values.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/leagues/{id}/rounds", "issue": "Round pydantic model was missing course_rating field (server.py:118) so schedule.course_rating from POST /api/leagues never persisted. FIXED by testing agent - added `course_rating: Optional[float] = None` to Round model."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "RoundScorecard.jsx", "issue": "Referenced undefined variables `leagueFormat` and `isDirector` on lines 120 and 181, causing ReferenceError and full component crash (React error boundary triggered). Users could not open any round scorecard. FIXED by testing agent - added league fetch in load() and derived leagueFormat/isDirector from league state.", "selector": "[data-testid='round-scorecard-page']", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [
+      {"flow": "Clubhouse story lightbox", "issue": "Could not e2e-verify lightbox opening from a story image because file upload endpoint /api/files/upload still returns 500 (known iteration 1 bug) so no stories/L&F images exist in DB. Wiring is correct in ClubhouseTab.jsx (setLightbox onClick), Lightbox component has data-testid='lightbox' and 'lightbox-close-btn' - verified via source inspection.", "affected_selectors": ["[data-testid='lightbox']"]}
+    ],
+    "design_issues": [
+      {"screen": "PlayerProfile chart container", "issues": ["recharts warns: 'width(-1) and height(-1) of chart should be greater than 0' - ResponsiveContainer parent has no explicit height/minHeight. Chart still renders but throws warnings. Consider wrapping in a div with min-height."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration2.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iteration2.xml"
+  ],
+  "action_items": [
+    "Verify testing agent's Round model fix (added course_rating field) is acceptable - server.py line ~127.",
+    "Verify testing agent's RoundScorecard.jsx fix (added league fetch + leagueFormat/isDirector derivation) is acceptable.",
+    "Fix recharts LineChart container sizing warning in PlayerProfile.jsx (add explicit height to ResponsiveContainer parent).",
+    "Still-open iteration 1 bug: POST /api/files/upload returns 500 (Emergent Object Storage PUT contract). Blocks all image-based features including full lightbox e2e verification."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now ~1296 lines - exceeds 700 LOC guideline. Split into routers: auth, leagues, rounds/scoring, ledger, clubhouse, ws, csv_exports, player_profile.",
+    "RoundScorecard.jsx uses window.confirm() for auto-pair confirmation - not testable in headless mode without page.on('dialog', d.accept()). Consider using an in-app confirmation modal for consistency.",
+    "useWebSocket hook reconnects every 3s on close with no exponential backoff - can hammer server on persistent auth failure. Add backoff + max-retries.",
+    "StandingsTab polls every 12s (setInterval) in addition to relying on parent for realtime - if switched fully to WS, remove polling to save requests.",
+    "CSV endpoints (standings.csv, ledger.csv) accept ?auth={token} as a query parameter - this leaks tokens into browser history and server logs. Consider a short-lived signed download URL instead."
+  ],
+  "updated_files": [
+    "/app/backend/server.py",
+    "/app/backend/tests/test_iteration2.py",
+    "/app/frontend/src/pages/RoundScorecard.jsx"
+  ],
+  "success_rate": {"backend": "100% (13/13 iteration 2 tests)", "frontend": "~95% (all iteration 2 UI features verified except lightbox open-from-story, blocked by iteration 1 file-upload bug)"},
+  "test_credentials": "Pre-seeded sessions verified: test_session_director_2026, test_session_alpha_2026, test_session_bravo_2026",
+  "seed_data_creation": "Created TEST_IT2_League (Random-Draw Doubles, course_rating=54, 3 weekly rounds) with 3 members + scored round 1 for alpha (best-than-rating 36 vs 54), triggering player_rating > 900 and handicap < 0. Also TEST_IT2_Private, TEST_IT2_Private2 for non-member 403 checks. Ledger has $15 ace pool credits. One urgent announcement TEST_IT2_urgent posted.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 2 tests at /app/backend/tests/test_iteration2.py use a fresh league fixture per module. Run with `pytest -n 0` to preserve STATE dict. Frontend WebSocket connections work through the ingress (wss://). File upload 500 (iteration 1) still unresolved and blocks any UI test that needs image URLs.",
+  "rca_of_the_issue": "Bug 1 (RoundScorecard crash): The auto-pair feature was added referencing leagueFormat and isDirector variables that were never defined in the component - a straightforward missing-derivation bug. React caught it as a component-level error and rendered nothing. Fix: fetch /api/leagues/{id} during load() and derive `leagueFormat = league?.format` and `isDirector = league?.is_director`. Bug 2 (course_rating not persisted): The Round Pydantic model (server.py:118) uses ConfigDict(extra='ignore') and did not include course_rating as a field, so when create_league did `Round(..., course_rating=float(rating))`, pydantic silently dropped it before insert_one. All round records in DB missed the field. Fix: add `course_rating: Optional[float] = None` to Round model."
+}

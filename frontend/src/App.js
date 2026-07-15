@@ -9,6 +9,7 @@ import Dashboard from "@/pages/Dashboard";
 import CreateLeague from "@/pages/CreateLeague";
 import LeagueDetail from "@/pages/LeagueDetail";
 import RoundScorecard from "@/pages/RoundScorecard";
+import PlayerProfile from "@/pages/PlayerProfile";
 
 // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 function AuthCallback() {
@@ -72,6 +73,7 @@ function AppRouter() {
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/create-league" element={<ProtectedRoute><CreateLeague /></ProtectedRoute>} />
       <Route path="/leagues/:leagueId" element={<ProtectedRoute><LeagueDetail /></ProtectedRoute>} />
+      <Route path="/leagues/:leagueId/players/:memberId" element={<ProtectedRoute><PlayerProfile /></ProtectedRoute>} />
       <Route path="/rounds/:roundId" element={<ProtectedRoute><RoundScorecard /></ProtectedRoute>} />
     </Routes>
   );

@@ -27,6 +27,7 @@ export default function CreateLeague() {
     points_step: 2,
     weeks: 8,
     start_date: new Date().toISOString().slice(0, 10),
+    course_rating: 54,
   });
   const [creating, setCreating] = useState(false);
 
@@ -48,6 +49,7 @@ export default function CreateLeague() {
         schedule: {
           weeks: Number(form.weeks),
           start_date: new Date(form.start_date).toISOString(),
+          course_rating: Number(form.course_rating),
         },
       });
       toast.success("League created");
@@ -173,6 +175,22 @@ export default function CreateLeague() {
                     className="mt-2 h-12 bg-[#131316] border-white/10"
                   />
                 </div>
+              </div>
+              <div>
+                <Label className="text-xs text-zinc-500 flex items-center gap-1">
+                  Course Rating (SSA)
+                  <span className="text-zinc-600 text-[10px]">— Scratch Scoring Average, drives PDGA-style ratings</span>
+                </Label>
+                <Input
+                  data-testid="wizard-course-rating"
+                  type="number"
+                  step="0.1"
+                  min={30}
+                  max={90}
+                  value={form.course_rating}
+                  onChange={(e) => setForm({ ...form, course_rating: e.target.value })}
+                  className="mt-2 h-12 bg-[#131316] border-white/10 font-mono-data max-w-[220px]"
+                />
               </div>
               <div className="terminal">
                 <div className="ts">// GENERATED SCHEDULE (WEEKLY)</div>

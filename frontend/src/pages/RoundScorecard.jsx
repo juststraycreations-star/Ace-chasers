@@ -1,9 +1,10 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useWebSocket } from "@/lib/ws";
 import { toast } from "sonner";
-import { CaretLeft, Minus, Plus, ChatCircleText, Terminal, ArrowsClockwise, UsersThree } from "@phosphor-icons/react";
+import { CaretLeft, Minus, Plus, ChatCircleText, Terminal, ArrowsClockwise, UsersThree, Shuffle } from "@phosphor-icons/react";
 
 function scoreClass(strokes, par) {
   if (!strokes) return "";
@@ -30,6 +31,7 @@ export default function RoundScorecard() {
   const [chatText, setChatText] = useState("");
   const [showBuilder, setShowBuilder] = useState(false);
   const [newCard, setNewCard] = useState({ label: "Card A", player_ids: [] });
+  const [league, setLeague] = useState(null);
   const chatEnd = useRef(null);
 
   const load = async () => {
@@ -39,24 +41,37 @@ export default function RoundScorecard() {
       if (!selectedCardId && data.cards.length > 0) setSelectedCardId(data.cards[0].id);
       const memb = await api.get(`/leagues/${data.round.league_id}/members`);
       setMembers(memb.data);
+      const lg = await api.get(`/leagues/${data.round.league_id}`);
+      setLeague(lg.data);
     } catch { toast.error("Failed to load round"); }
   };
 
-  const loadChat = async () => {
+  const loadChat = useCallback(async () => {
     if (!selectedCardId) return;
     try {
       const { data } = await api.get(`/rounds/${roundId}/chat`, { params: { card_id: selectedCardId } });
       setChat(data);
     } catch {}
-  };
-
-  useEffect(() => { load(); }, [roundId]);
-  useEffect(() => {
-    const t = setInterval(() => { load(); loadChat(); }, 5000); // Polling for real-time
-    return () => clearInterval(t);
   }, [roundId, selectedCardId]);
-  useEffect(() => { loadChat(); }, [selectedCardId]);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadChat(); }, [loadChat]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [chat.length]);
+
+  // WebSocket for realtime updates
+  const { connected } = useWebSocket(`/api/ws/rounds/${roundId}`, useCallback((msg) => {
+    if (msg.type === "score_update") {
+      load();
+    } else if (msg.type === "chat") {
+      // Only append if it's for the currently-selected card
+      const newMsg = msg.message;
+      if (newMsg.card_id === selectedCardId || (!newMsg.card_id && !selectedCardId)) {
+        setChat((prev) => (prev.some((m) => m.id === newMsg.id) ? prev : [...prev, newMsg]));
+      }
+    } else if (msg.type === "cards_updated") {
+      load();
+    }
+  }, [load, selectedCardId]));
 
   const round = data?.round;
   const cards = data?.cards || [];
@@ -64,6 +79,8 @@ export default function RoundScorecard() {
   const activeCard = cards.find((c) => c.id === selectedCardId);
   const cardScorecards = scorecards.filter((sc) => sc.card_id === selectedCardId);
   const memberMap = Object.fromEntries(members.map((m) => [m.id, m]));
+  const leagueFormat = league?.format || "Singles";
+  const isDirector = !!(league?.is_director);
 
   const updateScore = async (scorecardId, hole, strokes) => {
     if (strokes < 0) strokes = 0;
@@ -98,6 +115,19 @@ export default function RoundScorecard() {
       setNewCard({ label: "Card A", player_ids: [] });
       await load();
     } catch (e) { toast.error(e?.response?.data?.detail || "Failed"); }
+  };
+
+  const autoPair = async () => {
+    if (!window.confirm("Auto-pair will REPLACE existing cards and scorecards for this round with random pairs. Continue?")) return;
+    try {
+      await api.post(`/rounds/${roundId}/auto-pair`, {
+        member_ids: members.map((m) => m.id),
+        card_size: leagueFormat === "Singles" ? 1 : 2,
+      });
+      toast.success("Cards drawn");
+      setSelectedCardId(null);
+      await load();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Auto-pair failed"); }
   };
 
   if (!round) return <div className="min-h-screen bg-[#09090B] flex items-center justify-center text-zinc-500 font-mono-data text-xs">LOADING…</div>;
@@ -153,6 +183,11 @@ export default function RoundScorecard() {
           <button data-testid="new-card-btn" onClick={() => setShowBuilder(!showBuilder)} className="px-4 py-2 rounded-full text-sm border border-dashed border-white/15 text-zinc-400 hover:border-white/40 flex items-center gap-1 flex-shrink-0">
             <Plus size={14} weight="bold" /> New Card
           </button>
+          {isDirector && (leagueFormat === "Random-Draw Doubles" || leagueFormat === "BYOP" || leagueFormat === "Team") && (
+            <button data-testid="auto-pair-btn" onClick={autoPair} className="px-4 py-2 rounded-full text-sm border border-[#FF5C00]/40 bg-[#FF5C00]/10 text-[#FF9E00] hover:bg-[#FF5C00]/20 flex items-center gap-1 flex-shrink-0">
+              <Shuffle size={14} weight="bold" /> Auto-Pair
+            </button>
+          )}
         </div>
 
         {showBuilder && (
@@ -271,7 +306,8 @@ export default function RoundScorecard() {
         {/* Round total footer */}
         {activeCard && (
           <div className="mt-8 text-xs text-zinc-500 font-mono-data flex items-center gap-2">
-            <ArrowsClockwise size={12} /> POLLING FOR LIVE UPDATES · EVERY 5S
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${connected ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`}></span>
+            {connected ? "LIVE · WEBSOCKET CONNECTED" : "RECONNECTING…"}
           </div>
         )}
       </div>

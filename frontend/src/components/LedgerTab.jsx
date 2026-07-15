@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import api from "@/lib/api";
+import api, { API } from "@/lib/api";
 import { toast } from "sonner";
-import { Coins, ArrowUpRight, ArrowDownRight, Plus } from "@phosphor-icons/react";
+import { Coins, ArrowUpRight, ArrowDownRight, Plus, DownloadSimple } from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";
 
 const CATEGORIES = ["Ace Pool", "CTP Cash", "Club Payout", "Entry Fee", "Other"];
@@ -64,6 +64,16 @@ export default function LedgerTab({ leagueId, isDirector }) {
           <div className="text-right">
             <div className="font-mono-data text-[10px] text-zinc-500">NET BALANCE</div>
             <div className={`font-mega text-2xl ${balance >= 0 ? "text-emerald-400" : "text-red-400"}`}>${balance.toFixed(2)}</div>
+            <button
+              data-testid="ledger-export-btn"
+              onClick={() => {
+                const token = localStorage.getItem("session_token");
+                window.open(`${API}/leagues/${leagueId}/ledger.csv?auth=${encodeURIComponent(token)}`, "_blank");
+              }}
+              className="mt-2 text-[10px] px-2 py-1 rounded-full border border-white/15 text-zinc-400 hover:bg-white/5 flex items-center gap-1 ml-auto"
+            >
+              <DownloadSimple size={11} weight="bold" /> CSV
+            </button>
           </div>
         </div>
 

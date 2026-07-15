@@ -6,6 +6,7 @@ import StandingsTab from "@/components/StandingsTab";
 import LedgerTab from "@/components/LedgerTab";
 import ClubhouseTab from "@/components/ClubhouseTab";
 import { useAuth } from "@/context/AuthContext";
+import LeagueLiveNotifier from "@/components/LeagueLiveNotifier";
 import { MapPin, Users, Trophy, Coins, ChatCircle, Calendar, Plus, PlayCircle, CheckCircle, QrCode } from "@phosphor-icons/react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
@@ -85,6 +86,9 @@ export default function LeagueDetail() {
               {league.description && <p className="mt-3 text-sm text-zinc-400 max-w-2xl">{league.description}</p>}
             </div>
             <div className="flex flex-col gap-2">
+              {league.is_member && (
+                <LeagueLiveNotifier leagueId={leagueId} isDirector={league.is_director} />
+              )}
               {!league.is_member && (
                 <button data-testid="league-join-btn" onClick={join} className="btn-primary">Join League</button>
               )}

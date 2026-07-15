@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import api from "@/lib/api";
 import AuthImage from "./AuthImage";
+import Lightbox from "./Lightbox";
 import { toast } from "sonner";
 import { PushPin, Warning, ImageSquare, Plus, Fire, TrendUp, Trash, CheckCircle } from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
   const [newAnn, setNewAnn] = useState({ title: "", body: "", urgent: false });
   const [showAnnForm, setShowAnnForm] = useState(false);
   const [lfForm, setLfForm] = useState({ title: "", description: "" });
+  const [lightbox, setLightbox] = useState(null); // {path, caption}
 
   const load = async () => {
     try {
@@ -126,7 +128,7 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
             <div className="text-zinc-500 text-sm">No stories yet — share your first shot!</div>
           )}
           {stories.map((s) => (
-            <div key={s.id} className="story-ring flex-shrink-0" data-testid={`story-${s.id}`}>
+            <div key={s.id} className="story-ring flex-shrink-0 cursor-pointer" data-testid={`story-${s.id}`} onClick={() => setLightbox({ path: s.image_path, caption: `${s.author_name}${s.caption ? ' · ' + s.caption : ''}` })}>
               <div className="story-inner" style={{ width: 120, height: 180 }}>
                 <AuthImage path={s.image_path} className="w-full h-full object-cover" />
                 <div className="absolute bottom-2 left-2 right-2 pointer-events-none">
@@ -293,7 +295,7 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
             {lostFound.map((it) => (
               <div key={it.id} className={`card-surface overflow-hidden ${it.resolved ? "opacity-50" : ""}`} data-testid={`lf-item-${it.id}`}>
                 {it.image_path && (
-                  <AuthImage path={it.image_path} className="w-full aspect-video object-cover" />
+                  <AuthImage path={it.image_path} className="w-full aspect-video object-cover cursor-pointer" onClick={() => setLightbox({ path: it.image_path, caption: it.title })} />
                 )}
                 <div className="p-4">
                   <div className="flex items-start justify-between">
@@ -316,6 +318,8 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
           </div>
         </div>
       )}
+
+      {lightbox && <Lightbox path={lightbox.path} caption={lightbox.caption} onClose={() => setLightbox(null)} />}
     </div>
   );
 }

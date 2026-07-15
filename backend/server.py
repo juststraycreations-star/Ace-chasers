@@ -125,6 +125,7 @@ class Round(BaseModel):
     holes: int = 18
     par_per_hole: List[int] = Field(default_factory=lambda: [3]*18)
     status: Literal["scheduled", "active", "completed"] = "scheduled"
+    course_rating: Optional[float] = None
     created_at: str = Field(default_factory=now_iso)
 
 class LeagueMember(BaseModel):
@@ -436,6 +437,7 @@ async def create_league(payload: LeagueCreate, request: Request,
     if schedule.get("weeks"):
         weeks = int(schedule.get("weeks", 8))
         start = schedule.get("start_date")
+        rating = schedule.get("course_rating")
         try:
             base = datetime.fromisoformat(start) if start else datetime.now(timezone.utc)
         except Exception:
@@ -446,6 +448,7 @@ async def create_league(payload: LeagueCreate, request: Request,
                 season_id=season.id,
                 name=f"Week {i+1}",
                 date=(base + timedelta(days=7 * i)).isoformat(),
+                course_rating=float(rating) if rating is not None else None,
             )
             await db.rounds.insert_one(rd.model_dump())
 
@@ -546,6 +549,7 @@ class RoundCreate(BaseModel):
     date: str
     holes: int = 18
     par_per_hole: Optional[List[int]] = None
+    course_rating: Optional[float] = None
 
 @api_router.post("/leagues/{league_id}/rounds")
 async def create_round(league_id: str, payload: RoundCreate, request: Request,
@@ -557,7 +561,8 @@ async def create_round(league_id: str, payload: RoundCreate, request: Request,
         raise HTTPException(status_code=403, detail="Only director can create rounds")
     par = payload.par_per_hole or [3] * payload.holes
     rd = Round(league_id=league_id, season_id=payload.season_id, name=payload.name,
-               date=payload.date, holes=payload.holes, par_per_hole=par)
+               date=payload.date, holes=payload.holes, par_per_hole=par,
+               course_rating=payload.course_rating)
     await db.rounds.insert_one(rd.model_dump())
     return rd.model_dump()
 
@@ -675,6 +680,11 @@ async def update_score(scorecard_id: str, payload: ScoreUpdate, request: Request
                    old_value=old_val, new_value=int(payload.strokes),
                    edited_by_user_id=user.user_id, edited_by_name=user.name)
     await db.proof_logs.insert_one(log.model_dump())
+    await ws_manager.broadcast(f"round:{sc['round_id']}", {
+        "type": "score_update", "scorecard_id": scorecard_id, "hole": payload.hole,
+        "strokes": int(payload.strokes), "total": total, "plus_minus": plus_minus,
+        "edited_by": user.name,
+    })
     return {"ok": True, "total": total, "plus_minus": plus_minus}
 
 
@@ -704,6 +714,7 @@ async def send_chat(round_id: str, payload: ChatCreate, request: Request,
     msg = ChatMessage(round_id=round_id, card_id=payload.card_id, user_id=user.user_id,
                       user_name=user.name, text=payload.text)
     await db.chat_messages.insert_one(msg.model_dump())
+    await ws_manager.broadcast(f"round:{round_id}", {"type": "chat", "message": msg.model_dump()})
     return msg.model_dump()
 
 
@@ -726,13 +737,33 @@ async def get_chat(round_id: str, request: Request,
 
 # ============= HANDICAP =============
 async def _compute_handicap(league_id: str, member_id: str, par_per_hole: List[int]) -> float:
-    """Average plus_minus of last 5 completed scorecards for member."""
+    """Average plus_minus of last 5 completed scorecards for member (in strokes)."""
     scs = await db.scorecards.find({"league_id": league_id, "member_id": member_id, "total": {"$gt": 0}},
                                    {"_id": 0}).sort("updated_at", -1).to_list(5)
     if not scs:
         return 0.0
-    diffs = [s.get("plus_minus", 0) for s in scs]
+    # Prefer course_rating-based differentials when available for PDGA-like accuracy
+    diffs = []
+    for s in scs:
+        rd = await db.rounds.find_one({"id": s["round_id"]}, {"_id": 0}) or {}
+        rating = rd.get("course_rating") or sum(rd.get("par_per_hole", par_per_hole))
+        diffs.append(s.get("total", 0) - rating)
     return round(sum(diffs) / len(diffs), 2)
+
+
+async def _compute_player_rating(league_id: str, member_id: str) -> float:
+    """PDGA-style rating: 900 baseline + 10 points per stroke better than course rating (avg last 5)."""
+    scs = await db.scorecards.find({"league_id": league_id, "member_id": member_id, "total": {"$gt": 0}},
+                                   {"_id": 0}).sort("updated_at", -1).to_list(5)
+    if not scs:
+        return 0.0
+    diffs = []
+    for s in scs:
+        rd = await db.rounds.find_one({"id": s["round_id"]}, {"_id": 0}) or {}
+        rating = rd.get("course_rating") or sum(rd.get("par_per_hole", [3]*18))
+        # +10 pts per stroke under rating, -10 per stroke over
+        diffs.append((rating - s.get("total", 0)) * 10.0)
+    return round(900.0 + (sum(diffs) / len(diffs)), 1)
 
 
 @api_router.get("/leagues/{league_id}/handicaps")
@@ -745,10 +776,10 @@ async def get_handicaps(league_id: str, request: Request,
     result = []
     for m in members:
         h = await _compute_handicap(league_id, m["id"], [3]*18)
-        # count rounds
+        pr = await _compute_player_rating(league_id, m["id"])
         cnt = await db.scorecards.count_documents({"league_id": league_id, "member_id": m["id"], "total": {"$gt": 0}})
         result.append({"member_id": m["id"], "name": m["name"], "picture": m.get("picture"),
-                       "handicap": h, "rounds_played": cnt, "bag_tag": m["bag_tag"]})
+                       "handicap": h, "player_rating": pr, "rounds_played": cnt, "bag_tag": m["bag_tag"]})
     return result
 
 
@@ -908,6 +939,7 @@ async def create_announcement(league_id: str, payload: AnnouncementCreate, reque
     a = Announcement(league_id=league_id, title=payload.title, body=payload.body,
                      urgent=payload.urgent, author_id=user.user_id, author_name=user.name)
     await db.announcements.insert_one(a.model_dump())
+    await ws_manager.broadcast(f"league:{league_id}", {"type": "announcement", "announcement": a.model_dump()})
     return a.model_dump()
 
 
@@ -1025,6 +1057,226 @@ async def list_feed(league_id: str, request: Request,
     user = await get_current_user(request, session_token, authorization)
     await _require_member(league_id, user.user_id)
     return await db.feed_posts.find({"league_id": league_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+# ============= WEBSOCKETS =============
+from fastapi import WebSocket, WebSocketDisconnect
+from collections import defaultdict
+import json as _json
+import asyncio
+import random as _random
+import csv as _csv
+from io import StringIO
+
+class WSManager:
+    def __init__(self):
+        self.rooms: Dict[str, List[WebSocket]] = defaultdict(list)
+        self.lock = asyncio.Lock()
+
+    async def connect(self, room: str, ws: WebSocket):
+        await ws.accept()
+        async with self.lock:
+            self.rooms[room].append(ws)
+
+    async def disconnect(self, room: str, ws: WebSocket):
+        async with self.lock:
+            if ws in self.rooms.get(room, []):
+                self.rooms[room].remove(ws)
+
+    async def broadcast(self, room: str, message: dict):
+        payload = _json.dumps(message, default=str)
+        dead = []
+        for ws in list(self.rooms.get(room, [])):
+            try:
+                await ws.send_text(payload)
+            except Exception:
+                dead.append(ws)
+        if dead:
+            async with self.lock:
+                for ws in dead:
+                    if ws in self.rooms.get(room, []):
+                        self.rooms[room].remove(ws)
+
+ws_manager = WSManager()
+
+async def _validate_ws_token(token: str) -> Optional[dict]:
+    if not token:
+        return None
+    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if not session:
+        return None
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    return user
+
+@app.websocket("/api/ws/rounds/{round_id}")
+async def ws_round(websocket: WebSocket, round_id: str, token: str = Query(...)):
+    user = await _validate_ws_token(token)
+    if not user:
+        await websocket.close(code=4401)
+        return
+    rd = await db.rounds.find_one({"id": round_id}, {"_id": 0})
+    if not rd:
+        await websocket.close(code=4404)
+        return
+    m = await db.league_members.find_one({"league_id": rd["league_id"], "user_id": user["user_id"]}, {"_id": 0})
+    if not m:
+        await websocket.close(code=4403)
+        return
+    room = f"round:{round_id}"
+    await ws_manager.connect(room, websocket)
+    try:
+        # Initial hello
+        await websocket.send_text(_json.dumps({"type": "hello", "user": user.get("name")}))
+        while True:
+            # Passive listener - client can send heartbeats. We ignore payload.
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await ws_manager.disconnect(room, websocket)
+
+@app.websocket("/api/ws/leagues/{league_id}")
+async def ws_league(websocket: WebSocket, league_id: str, token: str = Query(...)):
+    user = await _validate_ws_token(token)
+    if not user:
+        await websocket.close(code=4401)
+        return
+    m = await db.league_members.find_one({"league_id": league_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not m:
+        await websocket.close(code=4403)
+        return
+    room = f"league:{league_id}"
+    await ws_manager.connect(room, websocket)
+    try:
+        await websocket.send_text(_json.dumps({"type": "hello"}))
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await ws_manager.disconnect(room, websocket)
+
+
+# ============= AUTO-PAIR (Random-Draw Doubles) =============
+class AutoPairPayload(BaseModel):
+    member_ids: List[str]  # checked-in players
+    card_size: int = 2  # 2 for doubles
+
+@api_router.post("/rounds/{round_id}/auto-pair")
+async def auto_pair(round_id: str, payload: AutoPairPayload, request: Request,
+                     session_token: Optional[str] = Cookie(None),
+                     authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    rd = await db.rounds.find_one({"id": round_id}, {"_id": 0})
+    if not rd:
+        raise HTTPException(status_code=404, detail="Round not found")
+    m = await _require_member(rd["league_id"], user.user_id)
+    if m.get("role") != "director":
+        raise HTTPException(status_code=403, detail="Only director")
+
+    # Clear existing cards for this round
+    await db.cards.delete_many({"round_id": round_id})
+    await db.scorecards.delete_many({"round_id": round_id})
+
+    ids = list(payload.member_ids)
+    _random.shuffle(ids)
+    size = max(1, int(payload.card_size))
+    cards_created = []
+    for i, chunk_start in enumerate(range(0, len(ids), size)):
+        chunk = ids[chunk_start:chunk_start + size]
+        label = chr(ord("A") + i)
+        card = Card(round_id=round_id, label=f"Card {label}", player_ids=chunk)
+        await db.cards.insert_one(card.model_dump())
+        for pid in chunk:
+            handicap = await _compute_handicap(rd["league_id"], pid, rd["par_per_hole"])
+            sc = Scorecard(round_id=round_id, league_id=rd["league_id"], member_id=pid,
+                           card_id=card.id, scores=[0]*rd["holes"], handicap_at_round=handicap)
+            await db.scorecards.insert_one(sc.model_dump())
+        cards_created.append(card.model_dump())
+
+    await ws_manager.broadcast(f"round:{round_id}", {"type": "cards_updated"})
+    return {"cards": cards_created}
+
+
+# ============= CSV EXPORTS =============
+def _csv_response(rows: List[List[Any]], filename: str) -> Response:
+    buf = StringIO()
+    w = _csv.writer(buf)
+    for r in rows:
+        w.writerow(r)
+    return Response(content=buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+@api_router.get("/leagues/{league_id}/standings.csv")
+async def standings_csv(league_id: str, request: Request,
+                          session_token: Optional[str] = Cookie(None),
+                          authorization: Optional[str] = Header(None),
+                          auth: Optional[str] = Query(None)):
+    hdr = authorization or (f"Bearer {auth}" if auth else None)
+    user = await get_current_user(request, session_token, hdr)
+    await _require_member(league_id, user.user_id)
+    members = await db.league_members.find({"league_id": league_id}, {"_id": 0}).to_list(500)
+    rows = [["Rank", "Player", "Points", "Rounds", "Handicap", "Player Rating", "Bag Tag"]]
+    data = []
+    for m in members:
+        h = await _compute_handicap(league_id, m["id"], [3]*18)
+        pr = await _compute_player_rating(league_id, m["id"])
+        cnt = await db.scorecards.count_documents({"league_id": league_id, "member_id": m["id"], "total": {"$gt": 0}})
+        data.append((m, h, pr, cnt))
+    data.sort(key=lambda t: (-t[0].get("total_points", 0), t[0]["bag_tag"]))
+    for i, (m, h, pr, cnt) in enumerate(data):
+        rows.append([i + 1, m["name"], m.get("total_points", 0), cnt, h, pr, m["bag_tag"]])
+    return _csv_response(rows, f"standings-{league_id}.csv")
+
+@api_router.get("/leagues/{league_id}/ledger.csv")
+async def ledger_csv(league_id: str, request: Request,
+                       session_token: Optional[str] = Cookie(None),
+                       authorization: Optional[str] = Header(None),
+                       auth: Optional[str] = Query(None)):
+    hdr = authorization or (f"Bearer {auth}" if auth else None)
+    user = await get_current_user(request, session_token, hdr)
+    await _require_member(league_id, user.user_id)
+    entries = await db.ledger.find({"league_id": league_id}, {"_id": 0}).sort("created_at", 1).to_list(2000)
+    rows = [["Date", "Kind", "Category", "Amount", "Note"]]
+    for e in entries:
+        rows.append([e["created_at"], e["kind"], e["category"], e["amount"], e.get("note", "")])
+    return _csv_response(rows, f"ledger-{league_id}.csv")
+
+
+# ============= PLAYER PROFILE =============
+@api_router.get("/leagues/{league_id}/players/{member_id}")
+async def player_profile(league_id: str, member_id: str, request: Request,
+                           session_token: Optional[str] = Cookie(None),
+                           authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    await _require_member(league_id, user.user_id)
+    member = await db.league_members.find_one({"id": member_id, "league_id": league_id}, {"_id": 0})
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+    scs = await db.scorecards.find({"league_id": league_id, "member_id": member_id, "total": {"$gt": 0}},
+                                   {"_id": 0}).sort("updated_at", 1).to_list(500)
+    history = []
+    for s in scs:
+        rd = await db.rounds.find_one({"id": s["round_id"]}, {"_id": 0}) or {}
+        history.append({
+            "round_id": s["round_id"],
+            "round_name": rd.get("name"),
+            "date": rd.get("date"),
+            "total": s.get("total"),
+            "plus_minus": s.get("plus_minus"),
+            "course_rating": rd.get("course_rating") or sum(rd.get("par_per_hole", [3]*18)),
+            "handicap_at_round": s.get("handicap_at_round", 0),
+        })
+    return {
+        "member": member,
+        "handicap": await _compute_handicap(league_id, member_id, [3]*18),
+        "player_rating": await _compute_player_rating(league_id, member_id),
+        "history": history,
+    }
 
 
 # ============= INCLUDE =============
