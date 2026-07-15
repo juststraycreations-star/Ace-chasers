@@ -94,6 +94,9 @@ class League(BaseModel):
     win_points: int = 10  # points for 1st place
     points_step: int = 2  # decrement per place
     ace_pool: float = 0.0
+    entry_fee: float = 0.0  # per-round entry fee
+    divisions: List[str] = Field(default_factory=lambda: ["Open"])
+    payout_split: Dict[str, float] = Field(default_factory=lambda: {"pool": 0.7, "ace": 0.2, "club": 0.1})
     director_id: str  # user_id
     created_at: str = Field(default_factory=now_iso)
 
@@ -104,7 +107,10 @@ class LeagueCreate(BaseModel):
     description: Optional[str] = ""
     win_points: int = 10
     points_step: int = 2
-    schedule: Optional[Dict[str, Any]] = None  # {weekday, start_date, weeks, time}
+    entry_fee: float = 0.0
+    divisions: Optional[List[str]] = None
+    payout_split: Optional[Dict[str, float]] = None
+    schedule: Optional[Dict[str, Any]] = None
 
 class Season(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -126,6 +132,8 @@ class Round(BaseModel):
     par_per_hole: List[int] = Field(default_factory=lambda: [3]*18)
     status: Literal["scheduled", "active", "completed"] = "scheduled"
     course_rating: Optional[float] = None
+    director_notes: Optional[str] = ""
+    ctp_holes: List[int] = Field(default_factory=list)
     created_at: str = Field(default_factory=now_iso)
 
 class LeagueMember(BaseModel):
@@ -137,6 +145,7 @@ class LeagueMember(BaseModel):
     picture: Optional[str] = None
     bag_tag: int  # rolling integer
     role: Literal["director", "player"] = "player"
+    division: str = "Open"
     total_points: float = 0.0
     joined_at: str = Field(default_factory=now_iso)
 
@@ -195,10 +204,11 @@ class LedgerEntry(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     league_id: str
     kind: Literal["debit", "credit"]
-    category: Literal["Ace Pool", "CTP Cash", "Club Payout", "Entry Fee", "Other"]
+    category: Literal["Ace Pool", "CTP Cash", "Club Payout", "Entry Fee", "Weekly Payout", "Club Fund", "Other"]
     amount: float
     note: str = ""
     round_id: Optional[str] = None
+    member_id: Optional[str] = None
     created_by: str
     created_at: str = Field(default_factory=now_iso)
 
@@ -419,6 +429,9 @@ async def create_league(payload: LeagueCreate, request: Request,
         name=payload.name, location=payload.location, format=payload.format,
         description=payload.description or "",
         win_points=payload.win_points, points_step=payload.points_step,
+        entry_fee=float(payload.entry_fee or 0),
+        divisions=payload.divisions or ["Open"],
+        payout_split=payload.payout_split or {"pool": 0.7, "ace": 0.2, "club": 0.1},
         director_id=user.user_id,
     )
     await db.leagues.insert_one(league.model_dump())
@@ -881,10 +894,11 @@ async def standings(league_id: str, request: Request,
 # ============= LEDGER =============
 class LedgerCreate(BaseModel):
     kind: Literal["debit", "credit"]
-    category: Literal["Ace Pool", "CTP Cash", "Club Payout", "Entry Fee", "Other"]
+    category: Literal["Ace Pool", "CTP Cash", "Club Payout", "Entry Fee", "Weekly Payout", "Club Fund", "Other"]
     amount: float
     note: Optional[str] = ""
     round_id: Optional[str] = None
+    member_id: Optional[str] = None
 
 @api_router.post("/leagues/{league_id}/ledger")
 async def add_ledger(league_id: str, payload: LedgerCreate, request: Request,
@@ -896,7 +910,7 @@ async def add_ledger(league_id: str, payload: LedgerCreate, request: Request,
         raise HTTPException(status_code=403, detail="Only director")
     entry = LedgerEntry(league_id=league_id, kind=payload.kind, category=payload.category,
                         amount=float(payload.amount), note=payload.note or "",
-                        round_id=payload.round_id, created_by=user.user_id)
+                        round_id=payload.round_id, member_id=payload.member_id, created_by=user.user_id)
     await db.ledger.insert_one(entry.model_dump())
     # Update ace pool total if applicable
     if payload.category == "Ace Pool":
@@ -1277,6 +1291,315 @@ async def player_profile(league_id: str, member_id: str, request: Request,
         "player_rating": await _compute_player_rating(league_id, member_id),
         "history": history,
     }
+
+
+# ============= CTP MODEL =============
+class CTPEntry(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    round_id: str
+    league_id: str
+    hole: int
+    member_id: str
+    member_name: str
+    feet: int
+    inches: float  # 0..11.99
+    created_at: str = Field(default_factory=now_iso)
+
+    @property
+    def total_inches(self) -> float:
+        return self.feet * 12 + self.inches
+
+def _to_inches(feet: int, inches: float) -> float:
+    return float(feet) * 12.0 + float(inches)
+
+
+# ============= ENTRY FEES (Escrow / 70-20-10 split) =============
+class EntryFeePayload(BaseModel):
+    round_id: Optional[str] = None
+    member_ids: List[str]  # players paying entry
+    amount_override: Optional[float] = None  # per-player fee override
+
+@api_router.post("/leagues/{league_id}/entry-fees/collect")
+async def collect_entry_fees(league_id: str, payload: EntryFeePayload, request: Request,
+                              session_token: Optional[str] = Cookie(None),
+                              authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    m = await _require_member(league_id, user.user_id)
+    if m.get("role") != "director":
+        raise HTTPException(status_code=403, detail="Only director")
+    lg = await db.leagues.find_one({"id": league_id}, {"_id": 0})
+    if not lg:
+        raise HTTPException(status_code=404, detail="League not found")
+    per_player = float(payload.amount_override if payload.amount_override is not None else lg.get("entry_fee", 0))
+    if per_player <= 0:
+        raise HTTPException(status_code=400, detail="Entry fee is 0. Set league.entry_fee or pass amount_override.")
+
+    split = lg.get("payout_split", {"pool": 0.7, "ace": 0.2, "club": 0.1})
+    pool_pct = float(split.get("pool", 0.7))
+    ace_pct = float(split.get("ace", 0.2))
+    club_pct = float(split.get("club", 0.1))
+
+    total = per_player * len(payload.member_ids)
+    # 1) Record raw entry-fee credits per member
+    for mid in payload.member_ids:
+        mem = await db.league_members.find_one({"id": mid, "league_id": league_id}, {"_id": 0})
+        note = f"Entry fee · {mem['name']}" if mem else "Entry fee"
+        e = LedgerEntry(league_id=league_id, kind="credit", category="Entry Fee",
+                         amount=per_player, note=note, round_id=payload.round_id, member_id=mid,
+                         created_by=user.user_id)
+        await db.ledger.insert_one(e.model_dump())
+
+    # 2) Auto-split debits from escrow into 3 buckets (as credits to those categories)
+    #    We use credit entries for each bucket so totals[category] tracks funds available.
+    buckets = [
+        ("Weekly Payout", total * pool_pct),
+        ("Ace Pool", total * ace_pct),
+        ("Club Fund", total * club_pct),
+    ]
+    for cat, amt in buckets:
+        e = LedgerEntry(league_id=league_id, kind="credit", category=cat, amount=round(amt, 2),
+                         note=f"Auto-split from {len(payload.member_ids)} × ${per_player:.2f} entries",
+                         round_id=payload.round_id, created_by=user.user_id)
+        await db.ledger.insert_one(e.model_dump())
+
+    # And a matching debit of the total entry fees so net stays zero
+    debit = LedgerEntry(league_id=league_id, kind="debit", category="Entry Fee",
+                         amount=round(total, 2), note="Entry-fee escrow disbursement",
+                         round_id=payload.round_id, created_by=user.user_id)
+    await db.ledger.insert_one(debit.model_dump())
+
+    # Update running ace_pool total
+    await db.leagues.update_one({"id": league_id}, {"$inc": {"ace_pool": round(total * ace_pct, 2)}})
+
+    return {
+        "collected_from": len(payload.member_ids),
+        "total": round(total, 2),
+        "split": {"weekly_payout": round(total * pool_pct, 2),
+                   "ace_pool": round(total * ace_pct, 2),
+                   "club_fund": round(total * club_pct, 2)},
+    }
+
+
+# ============= DIVISION UPDATE =============
+class DivisionPayload(BaseModel):
+    division: str
+
+@api_router.patch("/league-members/{member_id}/division")
+async def set_division(member_id: str, payload: DivisionPayload, request: Request,
+                        session_token: Optional[str] = Cookie(None),
+                        authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    m = await db.league_members.find_one({"id": member_id}, {"_id": 0})
+    if not m:
+        raise HTTPException(status_code=404, detail="Member not found")
+    caller = await _require_member(m["league_id"], user.user_id)
+    # Directors can update anyone; players can update themselves
+    if caller.get("role") != "director" and caller["id"] != member_id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    await db.league_members.update_one({"id": member_id}, {"$set": {"division": payload.division}})
+    return {"ok": True, "division": payload.division}
+
+
+# ============= DIRECTOR NOTES =============
+class DirectorNotesPayload(BaseModel):
+    director_notes: str
+    ctp_holes: Optional[List[int]] = None
+
+@api_router.patch("/rounds/{round_id}/director-notes")
+async def update_director_notes(round_id: str, payload: DirectorNotesPayload, request: Request,
+                                  session_token: Optional[str] = Cookie(None),
+                                  authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    rd = await db.rounds.find_one({"id": round_id}, {"_id": 0})
+    if not rd:
+        raise HTTPException(status_code=404, detail="Round not found")
+    m = await _require_member(rd["league_id"], user.user_id)
+    if m.get("role") != "director":
+        raise HTTPException(status_code=403, detail="Only director")
+    update = {"director_notes": payload.director_notes}
+    if payload.ctp_holes is not None:
+        update["ctp_holes"] = payload.ctp_holes
+    await db.rounds.update_one({"id": round_id}, {"$set": update})
+    await ws_manager.broadcast(f"round:{round_id}", {
+        "type": "director_notes", "director_notes": payload.director_notes,
+        "ctp_holes": update.get("ctp_holes", rd.get("ctp_holes", [])),
+    })
+    return {"ok": True}
+
+
+# ============= CTP ENTRIES =============
+class CTPCreate(BaseModel):
+    hole: int
+    feet: int = 0
+    inches: float = 0.0
+    member_id: Optional[str] = None  # if omitted, use caller's membership
+
+@api_router.post("/rounds/{round_id}/ctp")
+async def create_ctp(round_id: str, payload: CTPCreate, request: Request,
+                      session_token: Optional[str] = Cookie(None),
+                      authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    rd = await db.rounds.find_one({"id": round_id}, {"_id": 0})
+    if not rd:
+        raise HTTPException(status_code=404, detail="Round not found")
+    caller = await _require_member(rd["league_id"], user.user_id)
+    member_id = payload.member_id or caller["id"]
+    mem = await db.league_members.find_one({"id": member_id, "league_id": rd["league_id"]}, {"_id": 0})
+    if not mem:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if payload.hole < 1 or payload.hole > rd.get("holes", 18):
+        raise HTTPException(status_code=400, detail="Invalid hole")
+    if payload.feet < 0 or payload.inches < 0 or payload.inches >= 12:
+        raise HTTPException(status_code=400, detail="Invalid distance (inches must be 0..11.99)")
+    entry = CTPEntry(round_id=round_id, league_id=rd["league_id"], hole=payload.hole,
+                      member_id=member_id, member_name=mem["name"],
+                      feet=int(payload.feet), inches=float(payload.inches))
+    await db.ctp_entries.insert_one(entry.model_dump())
+    await ws_manager.broadcast(f"round:{round_id}", {"type": "ctp_entry", "entry": entry.model_dump()})
+    return entry.model_dump()
+
+
+@api_router.get("/rounds/{round_id}/ctp")
+async def list_ctp(round_id: str, request: Request,
+                    session_token: Optional[str] = Cookie(None),
+                    authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    rd = await db.rounds.find_one({"id": round_id}, {"_id": 0})
+    if not rd:
+        raise HTTPException(status_code=404, detail="Round not found")
+    await _require_member(rd["league_id"], user.user_id)
+    entries = await db.ctp_entries.find({"round_id": round_id}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    # Build leaderboard grouped by hole (best = smallest distance)
+    by_hole: Dict[int, List[dict]] = {}
+    for e in entries:
+        e["distance_inches"] = e["feet"] * 12 + e["inches"]
+        by_hole.setdefault(e["hole"], []).append(e)
+    leaderboard = {}
+    for hole, items in by_hole.items():
+        items.sort(key=lambda x: x["distance_inches"])
+        leaderboard[hole] = items
+    return {"entries": entries, "leaderboard": leaderboard, "ctp_holes": rd.get("ctp_holes", [])}
+
+
+@api_router.delete("/ctp/{entry_id}")
+async def delete_ctp(entry_id: str, request: Request,
+                       session_token: Optional[str] = Cookie(None),
+                       authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    e = await db.ctp_entries.find_one({"id": entry_id}, {"_id": 0})
+    if not e:
+        raise HTTPException(status_code=404, detail="Not found")
+    caller = await _require_member(e["league_id"], user.user_id)
+    # Own entries or director
+    if caller.get("role") != "director" and caller["id"] != e["member_id"]:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    await db.ctp_entries.delete_one({"id": entry_id})
+    await ws_manager.broadcast(f"round:{e['round_id']}", {"type": "ctp_deleted", "entry_id": entry_id})
+    return {"ok": True}
+
+
+# ============= PAYOUT DISTRIBUTION =============
+@api_router.get("/rounds/{round_id}/payout")
+async def get_payout(round_id: str, request: Request,
+                       session_token: Optional[str] = Cookie(None),
+                       authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    rd = await db.rounds.find_one({"id": round_id}, {"_id": 0})
+    if not rd:
+        raise HTTPException(status_code=404, detail="Round not found")
+    await _require_member(rd["league_id"], user.user_id)
+    lg = await db.leagues.find_one({"id": rd["league_id"]}, {"_id": 0})
+
+    # Weekly Payout pool available for this round: entries with round_id=round_id and category=Weekly Payout
+    pool_credits = await db.ledger.find({"league_id": rd["league_id"], "round_id": round_id,
+                                          "category": "Weekly Payout", "kind": "credit"}, {"_id": 0}).to_list(500)
+    pool_debits = await db.ledger.find({"league_id": rd["league_id"], "round_id": round_id,
+                                          "category": "Weekly Payout", "kind": "debit"}, {"_id": 0}).to_list(500)
+    pool_available = sum(e["amount"] for e in pool_credits) - sum(e["amount"] for e in pool_debits)
+
+    # Scorecards + members
+    scs = await db.scorecards.find({"round_id": round_id, "total": {"$gt": 0}}, {"_id": 0}).to_list(500)
+    members = await db.league_members.find({"league_id": rd["league_id"]}, {"_id": 0}).to_list(500)
+    mmap = {m["id"]: m for m in members}
+
+    # Group by division
+    divisions_out = {}
+    for s in scs:
+        mem = mmap.get(s["member_id"])
+        if not mem:
+            continue
+        div = mem.get("division", "Open")
+        divisions_out.setdefault(div, []).append({
+            "member_id": s["member_id"],
+            "name": mem["name"],
+            "picture": mem.get("picture"),
+            "total": s["total"],
+            "plus_minus": s.get("plus_minus", 0),
+            "handicap_at_round": s.get("handicap_at_round", 0),
+            "net": s.get("total", 0) - s.get("handicap_at_round", 0),
+        })
+
+    # Distribute pool across divisions proportional to # players, then payout curve within each division
+    # Curve: 50/30/20 top-3 payouts; if fewer players, only top gets everything.
+    payouts = {}
+    total_players = sum(len(v) for v in divisions_out.values()) or 1
+    for div, players in divisions_out.items():
+        players.sort(key=lambda p: (p["net"], p["total"]))
+        div_pool = round(pool_available * (len(players) / total_players), 2)
+        curve = [0.5, 0.3, 0.2][: min(3, len(players))]
+        remaining = 1 - sum(curve)
+        if remaining > 0 and curve:
+            curve[0] += remaining
+        div_payouts = []
+        for i, p in enumerate(players):
+            share = curve[i] if i < len(curve) else 0
+            amount = round(div_pool * share, 2)
+            div_payouts.append({
+                **p,
+                "place": i + 1,
+                "payout": amount,
+            })
+        payouts[div] = {
+            "players": div_payouts,
+            "pool": div_pool,
+        }
+
+    return {
+        "round_id": round_id,
+        "round_name": rd.get("name"),
+        "pool_available": round(pool_available, 2),
+        "divisions": payouts,
+        "payout_split": lg.get("payout_split", {"pool": 0.7, "ace": 0.2, "club": 0.1}),
+    }
+
+
+# ============= WEEKLY PAYOUT FINALIZE =============
+@api_router.post("/rounds/{round_id}/finalize-payout")
+async def finalize_payout(round_id: str, request: Request,
+                            session_token: Optional[str] = Cookie(None),
+                            authorization: Optional[str] = Header(None)):
+    """Convert the payout distribution into ledger debit entries against the Weekly Payout pool."""
+    user = await get_current_user(request, session_token, authorization)
+    rd = await db.rounds.find_one({"id": round_id}, {"_id": 0})
+    if not rd:
+        raise HTTPException(status_code=404, detail="Round not found")
+    m = await _require_member(rd["league_id"], user.user_id)
+    if m.get("role") != "director":
+        raise HTTPException(status_code=403, detail="Only director")
+    dist = await get_payout(round_id, request, session_token, authorization)
+    entries = []
+    for div, block in dist["divisions"].items():
+        for p in block["players"]:
+            if p["payout"] > 0:
+                e = LedgerEntry(league_id=rd["league_id"], kind="debit", category="Weekly Payout",
+                                 amount=float(p["payout"]),
+                                 note=f"Payout · {p['name']} ({div} · P{p['place']})",
+                                 round_id=round_id, member_id=p["member_id"],
+                                 created_by=user.user_id)
+                await db.ledger.insert_one(e.model_dump())
+                entries.append(e.model_dump())
+    return {"created": len(entries), "entries": entries}
 
 
 # ============= INCLUDE =============

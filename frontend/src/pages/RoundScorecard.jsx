@@ -4,7 +4,11 @@ import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useWebSocket } from "@/lib/ws";
 import { toast } from "sonner";
-import { CaretLeft, Minus, Plus, ChatCircleText, Terminal, ArrowsClockwise, UsersThree, Shuffle } from "@phosphor-icons/react";
+import { CaretLeft, Minus, Plus, ChatCircleText, Terminal, ArrowsClockwise, UsersThree, Shuffle, Ghost, Target, MoneyWavy } from "@phosphor-icons/react";
+import GhostOverlay from "@/components/GhostOverlay";
+import CTPLeaderboard from "@/components/CTPLeaderboard";
+import DirectorNotesBanner from "@/components/DirectorNotesBanner";
+import PayoutDistribution from "@/components/PayoutDistribution";
 
 function scoreClass(strokes, par) {
   if (!strokes) return "";
@@ -32,6 +36,10 @@ export default function RoundScorecard() {
   const [showBuilder, setShowBuilder] = useState(false);
   const [newCard, setNewCard] = useState({ label: "Card A", player_ids: [] });
   const [league, setLeague] = useState(null);
+  const [ghostMemberId, setGhostMemberId] = useState(null);
+  const [showCTP, setShowCTP] = useState(false);
+  const [ctpRefresh, setCtpRefresh] = useState(0);
+  const [showPayout, setShowPayout] = useState(false);
   const chatEnd = useRef(null);
 
   const load = async () => {
@@ -63,13 +71,16 @@ export default function RoundScorecard() {
     if (msg.type === "score_update") {
       load();
     } else if (msg.type === "chat") {
-      // Only append if it's for the currently-selected card
       const newMsg = msg.message;
       if (newMsg.card_id === selectedCardId || (!newMsg.card_id && !selectedCardId)) {
         setChat((prev) => (prev.some((m) => m.id === newMsg.id) ? prev : [...prev, newMsg]));
       }
     } else if (msg.type === "cards_updated") {
       load();
+    } else if (msg.type === "director_notes") {
+      load();
+    } else if (msg.type === "ctp_entry" || msg.type === "ctp_deleted") {
+      setCtpRefresh((v) => v + 1);
     }
   }, [load, selectedCardId]));
 
@@ -168,6 +179,8 @@ export default function RoundScorecard() {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
+        <DirectorNotesBanner round={round} isDirector={isDirector} onUpdated={load} />
+
         {/* Card picker */}
         <div className="flex items-center gap-2 mb-6 overflow-x-auto">
           {cards.map((c) => (
@@ -188,6 +201,12 @@ export default function RoundScorecard() {
               <Shuffle size={14} weight="bold" /> Auto-Pair
             </button>
           )}
+          <button data-testid="ctp-toggle-btn" onClick={() => setShowCTP(!showCTP)} className={`px-4 py-2 rounded-full text-sm border flex items-center gap-1 flex-shrink-0 ${showCTP ? "border-[#FF5C00]/40 bg-[#FF5C00]/10 text-[#FF9E00]" : "border-white/10 text-zinc-400 hover:border-white/25"}`}>
+            <Target size={14} weight="duotone" /> CTP
+          </button>
+          <button data-testid="payout-open-btn" onClick={() => setShowPayout(true)} className="px-4 py-2 rounded-full text-sm border border-white/10 text-zinc-400 hover:border-white/25 flex items-center gap-1 flex-shrink-0">
+            <MoneyWavy size={14} weight="duotone" /> Payouts
+          </button>
         </div>
 
         {showBuilder && (
@@ -229,6 +248,71 @@ export default function RoundScorecard() {
 
         {activeCard && (
           <div className="space-y-3" data-testid="active-card-scoring">
+            {/* Ghost selector: player picks another scorecard to overlay */}
+            {cardScorecards.length > 0 && (() => {
+              const myScorecard = cardScorecards.find((sc) => memberMap[sc.member_id]?.user_id === user?.user_id);
+              const otherScs = scorecards.filter((sc) => sc.id !== myScorecard?.id);
+              const ghostSc = otherScs.find((sc) => sc.member_id === ghostMemberId);
+              const ghostMember = ghostSc ? memberMap[ghostSc.member_id] : null;
+              return (
+                <div className="card-surface p-3 flex items-center gap-3 flex-wrap" data-testid="ghost-selector">
+                  <div className="flex items-center gap-2">
+                    <Ghost size={16} weight="duotone" className="text-[#FF9E00]" />
+                    <span className="font-mono-data text-[10px] text-zinc-500">GHOST</span>
+                  </div>
+                  <select
+                    data-testid="ghost-select"
+                    value={ghostMemberId || ""}
+                    onChange={(e) => setGhostMemberId(e.target.value || null)}
+                    className="h-9 bg-[#131316] border border-white/10 rounded-md px-2 text-sm min-w-[180px]"
+                  >
+                    <option value="">None</option>
+                    {otherScs.map((sc) => {
+                      const mm = memberMap[sc.member_id];
+                      return <option key={sc.id} value={sc.member_id}>{mm?.name || "Player"} · {sc.total || 0}</option>;
+                    })}
+                  </select>
+                  {ghostSc && myScorecard && (
+                    <div className="text-xs text-zinc-500 font-mono-data">
+                      OVERLAY ACTIVE · CURRENT DIFF <span className="text-white">{(myScorecard.total || 0) - (ghostSc.total || 0)}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Ghost overlay */}
+            {(() => {
+              const myScorecard = cardScorecards.find((sc) => memberMap[sc.member_id]?.user_id === user?.user_id);
+              const ghostSc = ghostMemberId ? scorecards.find((sc) => sc.member_id === ghostMemberId) : null;
+              const ghostMember = ghostSc ? memberMap[ghostSc.member_id] : null;
+              if (!myScorecard || !ghostSc) return null;
+              return (
+                <GhostOverlay
+                  playerScorecard={myScorecard}
+                  ghostScorecard={ghostSc}
+                  ghostName={ghostMember?.name || "Ghost"}
+                  parPerHole={round.par_per_hole}
+                  currentHole={currentHole}
+                  onClose={() => setGhostMemberId(null)}
+                />
+              );
+            })()}
+
+            {/* CTP widget */}
+            {showCTP && (() => {
+              const myScorecard = cardScorecards.find((sc) => memberMap[sc.member_id]?.user_id === user?.user_id);
+              return (
+                <CTPLeaderboard
+                  roundId={roundId}
+                  currentHole={currentHole}
+                  currentMemberId={myScorecard?.member_id}
+                  isDirector={isDirector}
+                  refresh={ctpRefresh}
+                />
+              );
+            })()}
+
             {cardScorecards.map((sc) => {
               const m = memberMap[sc.member_id];
               const holeScore = sc.scores[currentHole - 1];
@@ -309,6 +393,15 @@ export default function RoundScorecard() {
             <span className={`inline-block w-1.5 h-1.5 rounded-full ${connected ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`}></span>
             {connected ? "LIVE · WEBSOCKET CONNECTED" : "RECONNECTING…"}
           </div>
+        )}
+
+        {showPayout && (
+          <PayoutDistribution
+            roundId={roundId}
+            leagueName={league?.name}
+            isDirector={isDirector}
+            onClose={() => setShowPayout(false)}
+          />
         )}
       </div>
 

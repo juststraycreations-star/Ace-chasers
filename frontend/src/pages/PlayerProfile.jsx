@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import api, { API } from "@/lib/api";
+import api from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import AppHeader from "@/components/AppHeader";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { CaretLeft, TrendUp, Trophy } from "@phosphor-icons/react";
+import { CaretLeft, TrendUp, Trophy, PencilSimple, Check } from "@phosphor-icons/react";
+import { toast } from "sonner";
 
 export default function PlayerProfile() {
   const { leagueId, memberId } = useParams();
@@ -59,9 +61,33 @@ export default function PlayerProfile() {
             <div className="flex-1 min-w-[200px]">
               <div className="font-mono-data text-xs text-zinc-500 mb-1">PLAYER PROFILE</div>
               <h1 className="font-display text-4xl tracking-tighter">{member.name}</h1>
-              <div className="mt-2 flex flex-wrap gap-2">
+              <div className="mt-2 flex flex-wrap gap-2 items-center">
                 <div className="chip-orange px-2 py-1 rounded-md text-[10px] font-mono-data">BAG TAG #{member.bag_tag}</div>
                 {member.role === "director" && <div className="chip-green px-2 py-1 rounded-md text-[10px] font-mono-data">DIRECTOR</div>}
+                {editingDiv ? (
+                  <div className="flex items-center gap-1">
+                    <select
+                      data-testid="profile-division-select"
+                      value={divVal}
+                      onChange={(e) => setDivVal(e.target.value)}
+                      className="h-7 bg-[#131316] border border-white/10 rounded-md px-2 text-xs"
+                    >
+                      {(league?.divisions || ["Open"]).map((d) => <option key={d}>{d}</option>)}
+                    </select>
+                    <button data-testid="profile-division-save" onClick={saveDivision} className="p-1 rounded bg-emerald-500/20 text-emerald-300"><Check size={12} weight="bold" /></button>
+                  </div>
+                ) : (
+                  <div
+                    data-testid="profile-division-chip"
+                    className="chip-orange px-2 py-1 rounded-md text-[10px] font-mono-data flex items-center gap-1 cursor-pointer"
+                    onClick={() => {
+                      if (league?.is_director || user?.user_id === member.user_id) setEditingDiv(true);
+                    }}
+                  >
+                    {member.division || "Open"}
+                    {(league?.is_director || user?.user_id === member.user_id) && <PencilSimple size={10} />}
+                  </div>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-3 gap-4 sm:min-w-[360px]">

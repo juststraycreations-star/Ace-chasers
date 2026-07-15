@@ -28,6 +28,8 @@ export default function CreateLeague() {
     weeks: 8,
     start_date: new Date().toISOString().slice(0, 10),
     course_rating: 54,
+    entry_fee: 10,
+    divisions: "Open, MPO, FPO",
   });
   const [creating, setCreating] = useState(false);
 
@@ -46,6 +48,8 @@ export default function CreateLeague() {
         description: form.description,
         win_points: Number(form.win_points),
         points_step: Number(form.points_step),
+        entry_fee: Number(form.entry_fee || 0),
+        divisions: form.divisions.split(",").map((d) => d.trim()).filter(Boolean),
         schedule: {
           weeks: Number(form.weeks),
           start_date: new Date(form.start_date).toISOString(),
@@ -245,6 +249,45 @@ export default function CreateLeague() {
                     </span>
                   </div>
                 ))}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-white/5 space-y-4">
+                <div className="flex items-center gap-2 text-zinc-400">
+                  <Coins size={18} weight="duotone" />
+                  <div className="font-mono-data text-xs">ENTRY FEE ESCROW · AUTO-SPLIT 70 / 20 / 10</div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs text-zinc-500">Entry Fee ($)</Label>
+                    <Input
+                      data-testid="wizard-entry-fee"
+                      type="number"
+                      min={0}
+                      step="0.5"
+                      value={form.entry_fee}
+                      onChange={(e) => setForm({ ...form, entry_fee: e.target.value })}
+                      className="mt-2 h-12 bg-[#131316] border-white/10 font-mono-data max-w-[220px]"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-zinc-500">Divisions (comma-separated)</Label>
+                    <Input
+                      data-testid="wizard-divisions"
+                      value={form.divisions}
+                      onChange={(e) => setForm({ ...form, divisions: e.target.value })}
+                      placeholder="Open, MPO, FPO"
+                      className="mt-2 h-12 bg-[#131316] border-white/10"
+                    />
+                  </div>
+                </div>
+                {Number(form.entry_fee) > 0 && (
+                  <div className="terminal">
+                    <div className="ts">// PER-PLAYER SPLIT · ${Number(form.entry_fee).toFixed(2)}</div>
+                    <div><span className="ts">[WEEKLY PAYOUT]</span> → <span className="val">${(Number(form.entry_fee) * 0.7).toFixed(2)} (70%)</span></div>
+                    <div><span className="ts">[ROLLING ACE POOL]</span> → <span className="val">${(Number(form.entry_fee) * 0.2).toFixed(2)} (20%)</span></div>
+                    <div><span className="ts">[CLUB FUND]</span> → <span className="val">${(Number(form.entry_fee) * 0.1).toFixed(2)} (10%)</span></div>
+                  </div>
+                )}
               </div>
             </div>
           )}

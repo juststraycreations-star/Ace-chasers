@@ -57,6 +57,7 @@ export default function StandingsTab({ leagueId }) {
               <tr>
                 <th style={{ width: "60px" }}>Rank</th>
                 <th>Player</th>
+                <th style={{ width: "80px" }}>Division</th>
                 <th style={{ textAlign: "right" }}>Points</th>
                 <th style={{ textAlign: "right" }}>Rounds</th>
                 <th style={{ textAlign: "right" }}>Rating</th>
@@ -65,7 +66,9 @@ export default function StandingsTab({ leagueId }) {
               </tr>
             </thead>
             <tbody>
-              {standings.map((p, i) => (
+              {standings.map((p, i) => {
+                const mem = members.find((m) => m.id === p.member_id);
+                return (
                 <tr
                   key={p.member_id}
                   data-testid={`standings-row-${i}`}
@@ -89,6 +92,9 @@ export default function StandingsTab({ leagueId }) {
                       <span className="font-medium text-zinc-100 font-sans normal-case tracking-normal">{p.name}</span>
                     </div>
                   </td>
+                  <td>
+                    <span className="chip-orange px-2 py-0.5 rounded text-[10px] font-mono-data" data-testid={`standings-division-${i}`}>{mem?.division || "Open"}</span>
+                  </td>
                   <td style={{ textAlign: "right" }} className="text-[#FF9E00]">{p.total_points}</td>
                   <td style={{ textAlign: "right" }}>{p.rounds_played}</td>
                   <td style={{ textAlign: "right" }} className="font-medium">
@@ -99,7 +105,7 @@ export default function StandingsTab({ leagueId }) {
                   </td>
                   <td style={{ textAlign: "right" }} className="text-zinc-300">{p.bag_tag}</td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         </div>
