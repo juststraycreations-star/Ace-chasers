@@ -62,12 +62,12 @@ function EntryFeeEscrowCard({ leagueId, onCollected }) {
         <div>
           <div className="font-mono-data text-xs text-zinc-500 mb-1">ENTRY FEE ESCROW</div>
           <h3 className="font-display text-xl flex items-center gap-2">
-            <UsersFour weight="fill" className="text-[#FF9E00]" /> Collect + Auto-Split
+            <UsersFour weight="fill" className="text-[#F5C542]" /> Collect + Auto-Split
           </h3>
         </div>
         <div className="text-right">
           <div className="font-mono-data text-[10px] text-zinc-500">FEE / PLAYER</div>
-          <div className="font-mega text-2xl text-[#FF9E00]">${perPlayer.toFixed(2)}</div>
+          <div className="font-mega text-2xl text-[#F5C542]">${perPlayer.toFixed(2)}</div>
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
@@ -75,7 +75,7 @@ function EntryFeeEscrowCard({ leagueId, onCollected }) {
           data-testid="escrow-round-select"
           value={roundId}
           onChange={(e) => setRoundId(e.target.value)}
-          className="h-10 bg-[#131316] border border-white/10 rounded-md px-3 text-sm"
+          className="h-10 bg-[#2a5f3d] border border-white/10 rounded-md px-3 text-sm"
         >
           <option value="">No round association</option>
           {rounds.map((r) => (
@@ -95,7 +95,7 @@ function EntryFeeEscrowCard({ leagueId, onCollected }) {
               key={m.id}
               data-testid={`escrow-member-${m.id}`}
               onClick={() => toggle(m.id)}
-              className={`p-2 rounded-lg border text-left text-xs ${on ? "border-[#FF5C00] bg-[#FF5C00]/10" : "border-white/10 bg-[#131316]"}`}
+              className={`p-2 rounded-lg border text-left text-xs ${on ? "border-[#F5C542] bg-[#F5C542]/10" : "border-white/10 bg-[#2a5f3d]"}`}
             >
               <div className="font-mono-data text-[10px] text-zinc-500">#{m.bag_tag} · {m.division}</div>
               <div className="font-medium truncate">{m.name}</div>
@@ -179,7 +179,7 @@ export default function LedgerTab({ leagueId, isDirector }) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <div className="font-mono-data text-xs text-zinc-500 mb-1">FINANCIAL LEDGER</div>
-            <h3 className="font-display text-2xl flex items-center gap-2"><Coins weight="fill" className="text-[#FF9E00]" /> Debit / Credit</h3>
+            <h3 className="font-display text-2xl flex items-center gap-2"><Coins weight="fill" className="text-[#F5C542]" /> Debit / Credit</h3>
           </div>
           <div className="text-right">
             <div className="font-mono-data text-[10px] text-zinc-500">NET BALANCE</div>
@@ -203,7 +203,7 @@ export default function LedgerTab({ leagueId, isDirector }) {
               data-testid="ledger-kind"
               value={form.kind}
               onChange={(e) => setForm({ ...form, kind: e.target.value })}
-              className="h-11 bg-[#131316] border border-white/10 rounded-md px-3 text-sm"
+              className="h-11 bg-[#2a5f3d] border border-white/10 rounded-md px-3 text-sm"
             >
               <option value="credit">Credit (in)</option>
               <option value="debit">Debit (out)</option>
@@ -212,7 +212,7 @@ export default function LedgerTab({ leagueId, isDirector }) {
               data-testid="ledger-category"
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className="h-11 bg-[#131316] border border-white/10 rounded-md px-3 text-sm"
+              className="h-11 bg-[#2a5f3d] border border-white/10 rounded-md px-3 text-sm"
             >
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -223,14 +223,14 @@ export default function LedgerTab({ leagueId, isDirector }) {
               step="0.01"
               value={form.amount}
               onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              className="h-11 bg-[#131316] border-white/10"
+              className="h-11 bg-[#2a5f3d] border-white/10"
             />
             <Input
               data-testid="ledger-note"
               placeholder="Note (optional)"
               value={form.note}
               onChange={(e) => setForm({ ...form, note: e.target.value })}
-              className="h-11 bg-[#131316] border-white/10"
+              className="h-11 bg-[#2a5f3d] border-white/10"
             />
             <button data-testid="ledger-submit" disabled={busy} className="btn-primary text-sm flex items-center justify-center gap-1">
               <Plus size={14} weight="bold" /> Record

@@ -45,7 +45,7 @@ export default function CTPLeaderboard({ roundId, currentHole, currentMemberId, 
     <div className="card-surface p-5" data-testid="ctp-leaderboard">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <Target size={20} weight="duotone" className="text-[#FF9E00]" />
+          <Target size={20} weight="duotone" className="text-[#F5C542]" />
           <div>
             <div className="font-mono-data text-[10px] text-zinc-500">CLOSEST TO PIN</div>
             <div className="font-display text-lg">Hole {currentHole}{isCtpHole && <span className="ml-2 chip-orange px-2 py-0.5 rounded text-[10px] font-mono-data">CTP HOLE</span>}</div>
@@ -64,7 +64,7 @@ export default function CTPLeaderboard({ roundId, currentHole, currentMemberId, 
               value={form.feet}
               onChange={(e) => setForm({ ...form, feet: e.target.value })}
               placeholder="0"
-              className="w-full h-10 bg-[#131316] border border-white/10 rounded-md px-3 font-mono-data"
+              className="w-full h-10 bg-[#2a5f3d] border border-white/10 rounded-md px-3 font-mono-data"
             />
           </div>
           <div className="flex-1">
@@ -78,7 +78,7 @@ export default function CTPLeaderboard({ roundId, currentHole, currentMemberId, 
               value={form.inches}
               onChange={(e) => setForm({ ...form, inches: e.target.value })}
               placeholder="0"
-              className="w-full h-10 bg-[#131316] border border-white/10 rounded-md px-3 font-mono-data"
+              className="w-full h-10 bg-[#2a5f3d] border border-white/10 rounded-md px-3 font-mono-data"
             />
           </div>
         </div>
@@ -90,9 +90,9 @@ export default function CTPLeaderboard({ roundId, currentHole, currentMemberId, 
       ) : (
         <div className="space-y-1.5" data-testid="ctp-hole-list">
           {holeEntries.map((e, i) => (
-            <div key={e.id} className={`flex items-center justify-between p-2 rounded border ${i === 0 ? "bg-[#FF5C00]/8 border-[#FF5C00]/30" : "bg-[#131316] border-white/6"}`} data-testid={`ctp-entry-${e.id}`}>
+            <div key={e.id} className={`flex items-center justify-between p-2 rounded border ${i === 0 ? "bg-[#F5C542]/8 border-[#F5C542]/30" : "bg-[#2a5f3d] border-white/6"}`} data-testid={`ctp-entry-${e.id}`}>
               <div className="flex items-center gap-2 min-w-0">
-                <span className={`font-mega text-lg ${i === 0 ? "text-[#FF9E00]" : "text-zinc-500"}`}>{i + 1}</span>
+                <span className={`font-mega text-lg ${i === 0 ? "text-[#F5C542]" : "text-zinc-500"}`}>{i + 1}</span>
                 <div className="truncate text-sm">{e.member_name}</div>
               </div>
               <div className="flex items-center gap-3">

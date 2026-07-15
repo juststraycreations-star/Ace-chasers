@@ -10,7 +10,7 @@ export default function Landing() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) navigate("/dashboard", { replace: true });
+    if (user) navigate("/leagues", { replace: true });
   }, [user, navigate]);
 
   return (
@@ -18,14 +18,14 @@ export default function Landing() {
       {/* Hero background */}
       <div className="absolute inset-0 -z-10">
         <img src={HERO_IMG} alt="" className="w-full h-full object-cover opacity-40" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/80 to-[#09090B]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/80 to-[#1f4d2e]" />
       </div>
 
       <div className="max-w-7xl mx-auto px-6 pt-8 pb-24">
         {/* Nav */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#FF5C00] flex items-center justify-center shadow-[0_0_32px_-4px_rgba(255,92,0,0.7)]">
+            <div className="w-10 h-10 rounded-xl bg-[#F5C542] flex items-center justify-center shadow-[0_0_32px_-4px_rgba(255,92,0,0.7)]">
               <Trophy size={22} weight="fill" color="#0a0a0a" />
             </div>
             <div>
@@ -48,7 +48,7 @@ export default function Landing() {
             NEW · REAL-TIME SCORECARDS
           </div>
           <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl tracking-tighter leading-[0.95]">
-            Run your <span className="text-[#FF5C00]">disc golf league</span><br />
+            Run your <span className="text-[#F5C542]">disc golf league</span><br />
             like a pro tour.
           </h1>
           <p className="mt-8 text-lg text-zinc-400 max-w-2xl font-medium">
@@ -83,7 +83,7 @@ export default function Landing() {
             { icon: <ChatCircle size={22} weight="duotone" />, title: "Private Clubhouse", desc: "Pinned announcements, story grid, lost & found, and auto-generated Hot Round recaps." },
           ].map((f, i) => (
             <div key={i} className="card-surface p-6" data-testid={`landing-feature-${i}`}>
-              <div className="w-10 h-10 rounded-lg bg-[#FF5C00]/12 border border-[#FF5C00]/30 flex items-center justify-center text-[#FF9E00] mb-4">
+              <div className="w-10 h-10 rounded-lg bg-[#F5C542]/12 border border-[#F5C542]/30 flex items-center justify-center text-[#F5C542] mb-4">
                 {f.icon}
               </div>
               <div className="font-display text-lg mb-2">{f.title}</div>

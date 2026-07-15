@@ -141,12 +141,12 @@ export default function RoundScorecard() {
     } catch (e) { toast.error(e?.response?.data?.detail || "Auto-pair failed"); }
   };
 
-  if (!round) return <div className="min-h-screen bg-[#09090B] flex items-center justify-center text-zinc-500 font-mono-data text-xs">LOADING…</div>;
+  if (!round) return <div className="min-h-screen bg-[#1f4d2e] flex items-center justify-center text-zinc-500 font-mono-data text-xs">LOADING…</div>;
 
   const par = round.par_per_hole[currentHole - 1];
 
   return (
-    <div className="min-h-screen bg-[#09090B] pb-32" data-testid="round-scorecard-page">
+    <div className="min-h-screen bg-[#1f4d2e] pb-32" data-testid="round-scorecard-page">
       {/* Sticky header */}
       <div className="scorecard-header">
         <div className="max-w-4xl mx-auto px-4 py-3">
@@ -156,7 +156,7 @@ export default function RoundScorecard() {
             </button>
             <div className="text-center">
               <div className="font-mono-data text-[10px] text-zinc-500">HOLE {currentHole} · PAR</div>
-              <div className="font-mega text-4xl leading-none text-[#FF9E00]">{par}</div>
+              <div className="font-mega text-4xl leading-none text-[#F5C542]">{par}</div>
             </div>
             <div className="text-right">
               <div className="font-mono-data text-[10px] text-zinc-500">ROUND</div>
@@ -171,7 +171,7 @@ export default function RoundScorecard() {
                 key={i}
                 data-testid={`hole-nav-${i+1}`}
                 onClick={() => setCurrentHole(i + 1)}
-                className={`flex-shrink-0 w-9 h-9 rounded-lg text-xs font-bold transition-colors ${currentHole === i + 1 ? "bg-[#FF5C00] text-black" : "bg-white/5 text-zinc-400 hover:bg-white/10"}`}
+                className={`flex-shrink-0 w-9 h-9 rounded-lg text-xs font-bold transition-colors ${currentHole === i + 1 ? "bg-[#F5C542] text-black" : "bg-white/5 text-zinc-400 hover:bg-white/10"}`}
               >{i + 1}</button>
             ))}
           </div>
@@ -188,7 +188,7 @@ export default function RoundScorecard() {
               key={c.id}
               data-testid={`card-tab-${c.id}`}
               onClick={() => setSelectedCardId(c.id)}
-              className={`px-4 py-2 rounded-full text-sm flex-shrink-0 border ${selectedCardId === c.id ? "bg-[#FF5C00]/15 border-[#FF5C00] text-white" : "border-white/10 text-zinc-400"}`}
+              className={`px-4 py-2 rounded-full text-sm flex-shrink-0 border ${selectedCardId === c.id ? "bg-[#F5C542]/15 border-[#F5C542] text-white" : "border-white/10 text-zinc-400"}`}
             >
               {c.label} <span className="text-[10px] font-mono-data ml-1 opacity-70">·{c.player_ids.length}</span>
             </button>
@@ -197,11 +197,11 @@ export default function RoundScorecard() {
             <Plus size={14} weight="bold" /> New Card
           </button>
           {isDirector && (leagueFormat === "Random-Draw Doubles" || leagueFormat === "BYOP" || leagueFormat === "Team") && (
-            <button data-testid="auto-pair-btn" onClick={autoPair} className="px-4 py-2 rounded-full text-sm border border-[#FF5C00]/40 bg-[#FF5C00]/10 text-[#FF9E00] hover:bg-[#FF5C00]/20 flex items-center gap-1 flex-shrink-0">
+            <button data-testid="auto-pair-btn" onClick={autoPair} className="px-4 py-2 rounded-full text-sm border border-[#F5C542]/40 bg-[#F5C542]/10 text-[#F5C542] hover:bg-[#F5C542]/20 flex items-center gap-1 flex-shrink-0">
               <Shuffle size={14} weight="bold" /> Auto-Pair
             </button>
           )}
-          <button data-testid="ctp-toggle-btn" onClick={() => setShowCTP(!showCTP)} className={`px-4 py-2 rounded-full text-sm border flex items-center gap-1 flex-shrink-0 ${showCTP ? "border-[#FF5C00]/40 bg-[#FF5C00]/10 text-[#FF9E00]" : "border-white/10 text-zinc-400 hover:border-white/25"}`}>
+          <button data-testid="ctp-toggle-btn" onClick={() => setShowCTP(!showCTP)} className={`px-4 py-2 rounded-full text-sm border flex items-center gap-1 flex-shrink-0 ${showCTP ? "border-[#F5C542]/40 bg-[#F5C542]/10 text-[#F5C542]" : "border-white/10 text-zinc-400 hover:border-white/25"}`}>
             <Target size={14} weight="duotone" /> CTP
           </button>
           <button data-testid="payout-open-btn" onClick={() => setShowPayout(true)} className="px-4 py-2 rounded-full text-sm border border-white/10 text-zinc-400 hover:border-white/25 flex items-center gap-1 flex-shrink-0">
@@ -216,7 +216,7 @@ export default function RoundScorecard() {
               data-testid="new-card-label"
               value={newCard.label}
               onChange={(e) => setNewCard({ ...newCard, label: e.target.value })}
-              className="w-full h-11 bg-[#131316] border border-white/10 rounded-md px-3 mb-3"
+              className="w-full h-11 bg-[#2a5f3d] border border-white/10 rounded-md px-3 mb-3"
               placeholder="Card Label"
             />
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
@@ -227,7 +227,7 @@ export default function RoundScorecard() {
                     key={m.id}
                     data-testid={`pick-member-${m.id}`}
                     onClick={() => setNewCard({ ...newCard, player_ids: picked ? newCard.player_ids.filter((x) => x !== m.id) : [...newCard.player_ids, m.id] })}
-                    className={`p-3 rounded-lg border text-left text-sm ${picked ? "border-[#FF5C00] bg-[#FF5C00]/12" : "border-white/10 bg-[#131316]"}`}
+                    className={`p-3 rounded-lg border text-left text-sm ${picked ? "border-[#F5C542] bg-[#F5C542]/12" : "border-white/10 bg-[#2a5f3d]"}`}
                   >
                     <div className="text-xs text-zinc-500 font-mono-data">#{m.bag_tag}</div>
                     <div className="font-medium">{m.name}</div>
@@ -257,14 +257,14 @@ export default function RoundScorecard() {
               return (
                 <div className="card-surface p-3 flex items-center gap-3 flex-wrap" data-testid="ghost-selector">
                   <div className="flex items-center gap-2">
-                    <Ghost size={16} weight="duotone" className="text-[#FF9E00]" />
+                    <Ghost size={16} weight="duotone" className="text-[#F5C542]" />
                     <span className="font-mono-data text-[10px] text-zinc-500">GHOST</span>
                   </div>
                   <select
                     data-testid="ghost-select"
                     value={ghostMemberId || ""}
                     onChange={(e) => setGhostMemberId(e.target.value || null)}
-                    className="h-9 bg-[#131316] border border-white/10 rounded-md px-2 text-sm min-w-[180px]"
+                    className="h-9 bg-[#2a5f3d] border border-white/10 rounded-md px-2 text-sm min-w-[180px]"
                   >
                     <option value="">None</option>
                     {otherScs.map((sc) => {
@@ -340,7 +340,7 @@ export default function RoundScorecard() {
                       <button
                         data-testid={`score-plus-${sc.id}`}
                         onClick={() => updateScore(sc.id, currentHole, (holeScore || par) + (holeScore ? 1 : 1))}
-                        className="w-11 h-11 rounded-lg bg-[#FF5C00]/15 border border-[#FF5C00]/40 text-[#FF9E00] flex items-center justify-center hover:bg-[#FF5C00]/25"
+                        className="w-11 h-11 rounded-lg bg-[#F5C542]/15 border border-[#F5C542]/40 text-[#F5C542] flex items-center justify-center hover:bg-[#F5C542]/25"
                       ><Plus weight="bold" /></button>
                       <button
                         data-testid={`proof-btn-${sc.id}`}
@@ -411,7 +411,7 @@ export default function RoundScorecard() {
           <button
             data-testid="chat-toggle-btn"
             onClick={() => setChatOpen(!chatOpen)}
-            className="fixed bottom-6 right-6 z-30 w-14 h-14 rounded-full bg-[#FF5C00] text-black shadow-2xl flex items-center justify-center hover:scale-105 transition-transform"
+            className="fixed bottom-6 right-6 z-30 w-14 h-14 rounded-full bg-[#F5C542] text-black shadow-2xl flex items-center justify-center hover:scale-105 transition-transform"
           >
             <ChatCircleText size={22} weight="fill" />
           </button>
@@ -424,7 +424,7 @@ export default function RoundScorecard() {
               <div className="flex-1 overflow-y-auto p-3 space-y-2">
                 {chat.length === 0 && <div className="text-zinc-500 text-xs text-center py-4">Say hi 👋</div>}
                 {chat.map((m) => (
-                  <div key={m.id} className={`p-2 rounded-lg text-sm ${m.user_id === user?.user_id ? "bg-[#FF5C00]/15 border border-[#FF5C00]/25 ml-6" : "bg-white/5 border border-white/8 mr-6"}`} data-testid={`chat-msg-${m.id}`}>
+                  <div key={m.id} className={`p-2 rounded-lg text-sm ${m.user_id === user?.user_id ? "bg-[#F5C542]/15 border border-[#F5C542]/25 ml-6" : "bg-white/5 border border-white/8 mr-6"}`} data-testid={`chat-msg-${m.id}`}>
                     <div className="text-[10px] font-mono-data text-zinc-500 mb-0.5">{m.user_name} · {new Date(m.timestamp).toLocaleTimeString()}</div>
                     <div>{m.text}</div>
                   </div>
@@ -438,7 +438,7 @@ export default function RoundScorecard() {
                   onChange={(e) => setChatText(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && sendChat()}
                   placeholder="Message + 🥏"
-                  className="flex-1 h-10 bg-[#131316] border border-white/10 rounded-md px-3 text-sm"
+                  className="flex-1 h-10 bg-[#2a5f3d] border border-white/10 rounded-md px-3 text-sm"
                 />
                 <button data-testid="chat-send-btn" onClick={sendChat} className="btn-primary text-xs px-4">Send</button>
               </div>

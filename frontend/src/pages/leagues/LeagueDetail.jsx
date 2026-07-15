@@ -52,7 +52,7 @@ export default function LeagueDetail() {
   };
 
   if (!league) return (
-    <div className="min-h-screen bg-[#09090B]"><AppHeader /><div className="max-w-7xl mx-auto p-10 text-zinc-500 font-mono-data text-xs">LOADING…</div></div>
+    <div className="min-h-screen bg-[#1f4d2e]"><AppHeader /><div className="max-w-7xl mx-auto p-10 text-zinc-500 font-mono-data text-xs">LOADING…</div></div>
   );
 
   const checkInUrl = `${window.location.origin}/leagues/${leagueId}?join=1`;
@@ -65,7 +65,7 @@ export default function LeagueDetail() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#09090B]" data-testid="league-detail-page">
+    <div className="min-h-screen bg-[#1f4d2e]" data-testid="league-detail-page">
       <AppHeader />
       <main className="max-w-7xl mx-auto px-6 py-8">
         {/* Header */}
@@ -80,8 +80,8 @@ export default function LeagueDetail() {
               <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-zinc-400">
                 <div className="flex items-center gap-1"><MapPin size={14} weight="duotone" /> {league.location}</div>
                 <div className="flex items-center gap-1"><Users size={14} weight="duotone" /> {league.member_count} players</div>
-                <div className="flex items-center gap-1 font-mono-data text-xs"><Coins size={14} weight="duotone" /> ACE POOL <span className="text-[#FF9E00]">${(league.ace_pool || 0).toFixed(0)}</span></div>
-                {league.my_bag_tag && <div className="font-mono-data text-xs">MY BAG TAG <span className="text-[#FF9E00]">#{league.my_bag_tag}</span></div>}
+                <div className="flex items-center gap-1 font-mono-data text-xs"><Coins size={14} weight="duotone" /> ACE POOL <span className="text-[#F5C542]">${(league.ace_pool || 0).toFixed(0)}</span></div>
+                {league.my_bag_tag && <div className="font-mono-data text-xs">MY BAG TAG <span className="text-[#F5C542]">#{league.my_bag_tag}</span></div>}
               </div>
               {league.description && <p className="mt-3 text-sm text-zinc-400 max-w-2xl">{league.description}</p>}
             </div>
@@ -118,7 +118,7 @@ export default function LeagueDetail() {
               key={t.key}
               data-testid={`tab-${t.key}`}
               onClick={() => setTab(t.key)}
-              className={`px-4 py-2 rounded-lg text-sm flex items-center gap-2 flex-shrink-0 transition-colors ${tab === t.key ? "bg-[#FF5C00] text-black font-bold" : "bg-white/5 text-zinc-300 hover:bg-white/10"}`}
+              className={`px-4 py-2 rounded-lg text-sm flex items-center gap-2 flex-shrink-0 transition-colors ${tab === t.key ? "bg-[#F5C542] text-black font-bold" : "bg-white/5 text-zinc-300 hover:bg-white/10"}`}
             >
               {t.icon} {t.label}
             </button>

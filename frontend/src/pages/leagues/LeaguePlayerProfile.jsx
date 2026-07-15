@@ -23,7 +23,7 @@ export default function PlayerProfile() {
 
   if (!profile) {
     return (
-      <div className="min-h-screen bg-[#09090B]">
+      <div className="min-h-screen bg-[#1f4d2e]">
         <AppHeader />
         <div className="max-w-4xl mx-auto p-10 text-zinc-500 font-mono-data text-xs">LOADING…</div>
       </div>
@@ -42,7 +42,7 @@ export default function PlayerProfile() {
   const bestRound = history.reduce((best, h) => (!best || h.plus_minus < best.plus_minus ? h : best), null);
 
   return (
-    <div className="min-h-screen bg-[#09090B]" data-testid="player-profile-page">
+    <div className="min-h-screen bg-[#1f4d2e]" data-testid="player-profile-page">
       <AppHeader />
       <main className="max-w-5xl mx-auto px-6 py-8">
         <button data-testid="back-to-league-btn" onClick={() => navigate(`/leagues/${leagueId}`)} className="text-zinc-400 hover:text-white flex items-center gap-1 text-sm mb-6">
@@ -70,7 +70,7 @@ export default function PlayerProfile() {
                       data-testid="profile-division-select"
                       value={divVal}
                       onChange={(e) => setDivVal(e.target.value)}
-                      className="h-7 bg-[#131316] border border-white/10 rounded-md px-2 text-xs"
+                      className="h-7 bg-[#2a5f3d] border border-white/10 rounded-md px-2 text-xs"
                     >
                       {(league?.divisions || ["Open"]).map((d) => <option key={d}>{d}</option>)}
                     </select>
@@ -93,7 +93,7 @@ export default function PlayerProfile() {
             <div className="grid grid-cols-3 gap-4 sm:min-w-[360px]">
               <div className="text-center">
                 <div className="font-mono-data text-[10px] text-zinc-500 mb-1">PLAYER RATING</div>
-                <div className="font-mega text-3xl text-[#FF9E00]" data-testid="profile-rating">{player_rating || "—"}</div>
+                <div className="font-mega text-3xl text-[#F5C542]" data-testid="profile-rating">{player_rating || "—"}</div>
               </div>
               <div className="text-center">
                 <div className="font-mono-data text-[10px] text-zinc-500 mb-1">HANDICAP</div>
@@ -114,7 +114,7 @@ export default function PlayerProfile() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <div className="font-mono-data text-xs text-zinc-500 mb-1">TRENDS</div>
-                <h3 className="font-display text-xl flex items-center gap-2"><TrendUp size={18} weight="fill" className="text-[#FF9E00]" /> Round-by-Round</h3>
+                <h3 className="font-display text-xl flex items-center gap-2"><TrendUp size={18} weight="fill" className="text-[#F5C542]" /> Round-by-Round</h3>
               </div>
             </div>
             <div style={{ width: "100%", height: 240, minHeight: 240 }}>
@@ -128,7 +128,7 @@ export default function PlayerProfile() {
                     formatter={(value, name) => [value, name === "diff" ? "vs rating" : name]}
                   />
                   <ReferenceLine y={0} stroke="#3f3f46" strokeDasharray="3 3" />
-                  <Line type="monotone" dataKey="diff" stroke="#FF5C00" strokeWidth={2.5} dot={{ r: 3, fill: "#FF9E00" }} activeDot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="diff" stroke="#F5C542" strokeWidth={2.5} dot={{ r: 3, fill: "#F5C542" }} activeDot={{ r: 5 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -138,7 +138,7 @@ export default function PlayerProfile() {
 
         <div className="card-surface p-6 mt-6" data-testid="profile-history-table">
           <div className="font-mono-data text-xs text-zinc-500 mb-1">ROUND HISTORY</div>
-          <h3 className="font-display text-xl mb-4 flex items-center gap-2"><Trophy weight="fill" className="text-[#FF9E00]" size={18} /> {history.length} Rounds Played</h3>
+          <h3 className="font-display text-xl mb-4 flex items-center gap-2"><Trophy weight="fill" className="text-[#F5C542]" size={18} /> {history.length} Rounds Played</h3>
           {history.length === 0 ? (
             <div className="text-zinc-500 text-sm">No completed rounds yet.</div>
           ) : (
@@ -159,7 +159,7 @@ export default function PlayerProfile() {
                     const diff = h.total - h.course_rating;
                     const isBest = bestRound && bestRound.round_id === h.round_id;
                     return (
-                      <tr key={h.round_id + i} className={isBest ? "bg-[#FF5C00]/5" : ""}>
+                      <tr key={h.round_id + i} className={isBest ? "bg-[#F5C542]/5" : ""}>
                         <td className="text-zinc-500">{h.date ? new Date(h.date).toLocaleDateString() : "—"}</td>
                         <td className="font-sans normal-case tracking-normal">{h.round_name || "Round"}{isBest && <span className="ml-2 chip-orange px-1.5 py-0.5 rounded text-[9px]">BEST</span>}</td>
                         <td style={{ textAlign: "right" }}>{h.total}</td>

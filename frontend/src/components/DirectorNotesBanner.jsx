@@ -23,9 +23,9 @@ export default function DirectorNotesBanner({ round, isDirector, onUpdated }) {
 
   return (
     <div className="sticky top-[100px] z-20 mb-4" data-testid="director-notes-banner">
-      <div className={`rounded-lg p-3 border ${empty ? "bg-zinc-900/70 border-white/8" : "bg-[#FF5C00]/12 border-[#FF5C00]/40"} backdrop-blur-lg`}>
+      <div className={`rounded-lg p-3 border ${empty ? "bg-zinc-900/70 border-white/8" : "bg-[#F5C542]/12 border-[#F5C542]/40"} backdrop-blur-lg`}>
         <div className="flex items-start gap-3">
-          <div className={`p-2 rounded-md ${empty ? "bg-white/5 text-zinc-400" : "bg-[#FF5C00]/20 text-[#FF9E00]"}`}>
+          <div className={`p-2 rounded-md ${empty ? "bg-white/5 text-zinc-400" : "bg-[#F5C542]/20 text-[#F5C542]"}`}>
             <Megaphone size={16} weight="fill" />
           </div>
           <div className="flex-1 min-w-0">

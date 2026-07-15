@@ -34,13 +34,13 @@ export default function PayoutDistribution({ roundId, leagueName, isDirector, on
           <div>
             <div className="font-mono-data text-xs text-zinc-500 mb-1">PAYOUT DISTRIBUTION</div>
             <div className="font-display text-2xl flex items-center gap-2">
-              <MoneyWavy weight="fill" className="text-[#FF9E00]" size={22} /> {data.round_name}
+              <MoneyWavy weight="fill" className="text-[#F5C542]" size={22} /> {data.round_name}
             </div>
           </div>
           <button data-testid="payout-close-btn" onClick={onClose} className="text-zinc-500 hover:text-white text-2xl leading-none">×</button>
         </div>
 
-        <div className="mb-6 p-4 rounded-lg bg-[#131316] border border-white/6 flex items-center justify-between">
+        <div className="mb-6 p-4 rounded-lg bg-[#2a5f3d] border border-white/6 flex items-center justify-between">
           <div>
             <div className="font-mono-data text-[10px] text-zinc-500">POOL AVAILABLE</div>
             <div className="font-mega text-3xl text-emerald-400">${data.pool_available.toFixed(2)}</div>
@@ -76,13 +76,13 @@ export default function PayoutDistribution({ roundId, leagueName, isDirector, on
                     {block.players.map((p, i) => (
                       <tr key={p.member_id} data-testid={`payout-row-${div}-${i}`}>
                         <td>
-                          <span className={`font-mega text-xl ${i === 0 ? "text-[#FF9E00]" : "text-zinc-500"}`}>{p.place}</span>
+                          <span className={`font-mega text-xl ${i === 0 ? "text-[#F5C542]" : "text-zinc-500"}`}>{p.place}</span>
                         </td>
                         <td>
                           <div className="flex items-center gap-2">
                             {p.picture ? <img src={p.picture} alt="" className="w-6 h-6 rounded-full" /> : <div className="w-6 h-6 rounded-full bg-zinc-800 text-[10px] flex items-center justify-center">{p.name?.charAt(0)}</div>}
                             <span className="font-sans normal-case tracking-normal text-zinc-100">{p.name}</span>
-                            {i === 0 && <Trophy weight="fill" className="text-[#FF9E00]" size={14} />}
+                            {i === 0 && <Trophy weight="fill" className="text-[#F5C542]" size={14} />}
                           </div>
                         </td>
                         <td style={{ textAlign: "right" }}>{p.total}</td>

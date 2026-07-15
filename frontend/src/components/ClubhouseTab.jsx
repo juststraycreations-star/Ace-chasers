@@ -145,12 +145,12 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
         <button
           data-testid="clubhouse-tab-feed"
           onClick={() => setTab("feed")}
-          className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${tab === "feed" ? "border-[#FF5C00] text-white" : "border-transparent text-zinc-500 hover:text-white"}`}
+          className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${tab === "feed" ? "border-[#F5C542] text-white" : "border-transparent text-zinc-500 hover:text-white"}`}
         >Feed</button>
         <button
           data-testid="clubhouse-tab-lostfound"
           onClick={() => setTab("lost-found")}
-          className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${tab === "lost-found" ? "border-[#FF5C00] text-white" : "border-transparent text-zinc-500 hover:text-white"}`}
+          className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${tab === "lost-found" ? "border-[#F5C542] text-white" : "border-transparent text-zinc-500 hover:text-white"}`}
         >Lost &amp; Found</button>
       </div>
 
@@ -161,7 +161,7 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
             <div className="card-surface p-6" data-testid="announcements-block">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <PushPin size={16} weight="fill" className="text-[#FF9E00]" />
+                  <PushPin size={16} weight="fill" className="text-[#F5C542]" />
                   <div className="font-display text-lg">Pinned Announcements</div>
                 </div>
                 {isDirector && (
@@ -172,8 +172,8 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
               </div>
               {showAnnForm && isDirector && (
                 <div className="mb-4 space-y-2 p-4 border border-white/8 rounded-lg bg-[#111114]" data-testid="announcement-form">
-                  <Input data-testid="ann-title" placeholder="Title" value={newAnn.title} onChange={(e) => setNewAnn({ ...newAnn, title: e.target.value })} className="bg-[#131316] border-white/10" />
-                  <Textarea data-testid="ann-body" placeholder="Announcement details…" value={newAnn.body} onChange={(e) => setNewAnn({ ...newAnn, body: e.target.value })} className="bg-[#131316] border-white/10" />
+                  <Input data-testid="ann-title" placeholder="Title" value={newAnn.title} onChange={(e) => setNewAnn({ ...newAnn, title: e.target.value })} className="bg-[#2a5f3d] border-white/10" />
+                  <Textarea data-testid="ann-body" placeholder="Announcement details…" value={newAnn.body} onChange={(e) => setNewAnn({ ...newAnn, body: e.target.value })} className="bg-[#2a5f3d] border-white/10" />
                   <div className="flex items-center gap-3">
                     <label className="flex items-center gap-2 text-xs text-zinc-400">
                       <input data-testid="ann-urgent" type="checkbox" checked={newAnn.urgent} onChange={(e) => setNewAnn({ ...newAnn, urgent: e.target.checked })} /> Urgent
@@ -185,7 +185,7 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
               <div className="space-y-3">
                 {announcements.length === 0 && <div className="text-zinc-500 text-sm">No announcements. All quiet on the course.</div>}
                 {announcements.map((a) => (
-                  <div key={a.id} className={`p-4 rounded-lg border ${a.urgent ? "border-red-500/40 bg-red-500/8" : "border-white/8 bg-[#131316]"}`} data-testid={`announcement-${a.id}`}>
+                  <div key={a.id} className={`p-4 rounded-lg border ${a.urgent ? "border-red-500/40 bg-red-500/8" : "border-white/8 bg-[#2a5f3d]"}`} data-testid={`announcement-${a.id}`}>
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
                         {a.urgent && <Warning size={16} weight="fill" className="text-red-400" />}
@@ -209,7 +209,7 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
 
           {/* New post */}
           <div className="card-surface p-6" data-testid="new-post">
-            <Textarea data-testid="post-input" placeholder="Share a thought with the league…" value={newPost} onChange={(e) => setNewPost(e.target.value)} className="bg-[#131316] border-white/10 min-h-[70px]" />
+            <Textarea data-testid="post-input" placeholder="Share a thought with the league…" value={newPost} onChange={(e) => setNewPost(e.target.value)} className="bg-[#2a5f3d] border-white/10 min-h-[70px]" />
             <div className="flex justify-end mt-2">
               <button data-testid="post-submit" onClick={submitPost} className="btn-primary text-xs">Post</button>
             </div>
@@ -221,13 +221,13 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
               <div key={p.id} className="tracing-beam" data-testid={`feed-recap-${p.id}`}>
                 <div className="tracing-beam-inner">
                   <div className="flex items-center gap-2 mb-3">
-                    <Fire weight="fill" className="text-[#FF5C00]" />
+                    <Fire weight="fill" className="text-[#F5C542]" />
                     <div className="font-display text-lg">{p.title}</div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {p.meta?.hot_round && (
                       <div className="p-4 rounded-lg bg-[#151518] border border-white/8">
-                        <div className="text-[10px] font-mono-data text-[#FF9E00] mb-2">🔥 HOT ROUND</div>
+                        <div className="text-[10px] font-mono-data text-[#F5C542] mb-2">🔥 HOT ROUND</div>
                         <div className="font-display text-xl">{p.meta.hot_round.name}</div>
                         <div className="text-xs text-zinc-400 mt-1 font-mono-data">
                           {p.meta.hot_round.plus_minus > 0 ? `+${p.meta.hot_round.plus_minus}` : p.meta.hot_round.plus_minus} · {p.meta.hot_round.total} strokes
@@ -273,17 +273,17 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
           <div className="card-surface p-6">
             <div className="font-display text-lg mb-3">Report a Lost or Found Disc</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input data-testid="lf-title" placeholder="Star Destroyer · Orange · 175g" value={lfForm.title} onChange={(e) => setLfForm({ ...lfForm, title: e.target.value })} className="bg-[#131316] border-white/10" />
+              <Input data-testid="lf-title" placeholder="Star Destroyer · Orange · 175g" value={lfForm.title} onChange={(e) => setLfForm({ ...lfForm, title: e.target.value })} className="bg-[#2a5f3d] border-white/10" />
               <input
                 ref={lfImgRef}
                 data-testid="lf-image"
                 type="file"
                 accept="image/*"
                 onChange={(e) => setLfImage(e.target.files?.[0])}
-                className="text-xs text-zinc-400 file:mr-3 file:px-3 file:py-2 file:rounded-md file:border-0 file:bg-[#FF5C00] file:text-black file:font-bold"
+                className="text-xs text-zinc-400 file:mr-3 file:px-3 file:py-2 file:rounded-md file:border-0 file:bg-[#F5C542] file:text-black file:font-bold"
               />
             </div>
-            <Textarea data-testid="lf-description" placeholder="Where / when. Any details?" value={lfForm.description} onChange={(e) => setLfForm({ ...lfForm, description: e.target.value })} className="mt-3 bg-[#131316] border-white/10" />
+            <Textarea data-testid="lf-description" placeholder="Where / when. Any details?" value={lfForm.description} onChange={(e) => setLfForm({ ...lfForm, description: e.target.value })} className="mt-3 bg-[#2a5f3d] border-white/10" />
             <div className="mt-3 flex justify-end">
               <button data-testid="lf-submit" onClick={submitLostFound} className="btn-primary text-xs flex items-center gap-1">
                 <Plus size={12} weight="bold" /> Post to Lost & Found

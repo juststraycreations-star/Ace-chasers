@@ -40,7 +40,7 @@ export default function StandingsTab({ leagueId }) {
           <div>
             <div className="font-mono-data text-xs text-zinc-500 mb-1">LEADERBOARD</div>
             <h3 className="font-display text-2xl flex items-center gap-2">
-              <Trophy weight="fill" className="text-[#FF9E00]" size={22} /> Season Standings
+              <Trophy weight="fill" className="text-[#F5C542]" size={22} /> Season Standings
             </h3>
           </div>
           <button
@@ -76,7 +76,7 @@ export default function StandingsTab({ leagueId }) {
                   className="cursor-pointer hover:bg-white/[0.03]"
                 >
                   <td>
-                    <span className={`font-mega text-xl ${i === 0 ? "text-[#FF9E00]" : "text-zinc-300"}`}>
+                    <span className={`font-mega text-xl ${i === 0 ? "text-[#F5C542]" : "text-zinc-300"}`}>
                       {String(i + 1).padStart(2, "0")}
                     </span>
                   </td>
@@ -95,7 +95,7 @@ export default function StandingsTab({ leagueId }) {
                   <td>
                     <span className="chip-orange px-2 py-0.5 rounded text-[10px] font-mono-data" data-testid={`standings-division-${i}`}>{mem?.division || "Open"}</span>
                   </td>
-                  <td style={{ textAlign: "right" }} className="text-[#FF9E00]">{p.total_points}</td>
+                  <td style={{ textAlign: "right" }} className="text-[#F5C542]">{p.total_points}</td>
                   <td style={{ textAlign: "right" }}>{p.rounds_played}</td>
                   <td style={{ textAlign: "right" }} className="font-medium">
                     {hmap[p.member_id]?.player_rating ? hmap[p.member_id].player_rating : "—"}

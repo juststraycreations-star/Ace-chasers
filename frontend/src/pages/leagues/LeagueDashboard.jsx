@@ -40,7 +40,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#09090B]" data-testid="dashboard-page">
+    <div className="min-h-screen bg-[#1f4d2e]" data-testid="dashboard-page">
       <AppHeader />
       <main className="max-w-7xl mx-auto px-6 py-10">
         <div className="flex items-end justify-between mb-8">
@@ -50,7 +50,7 @@ export default function Dashboard() {
           </div>
           <button
             data-testid="dashboard-create-league-btn"
-            onClick={() => navigate("/create-league")}
+            onClick={() => navigate("/leagues/new")}
             className="btn-primary flex items-center gap-2"
           >
             <Plus size={16} weight="bold" /> New League
@@ -65,7 +65,7 @@ export default function Dashboard() {
             <div className="text-zinc-400 mb-6">Create your first league or join an existing one below.</div>
             <button
               data-testid="dashboard-empty-create-btn"
-              onClick={() => navigate("/create-league")}
+              onClick={() => navigate("/leagues/new")}
               className="btn-primary"
             >Create a League</button>
           </div>
@@ -77,11 +77,11 @@ export default function Dashboard() {
               key={l.id}
               data-testid={`dashboard-league-card-${l.id}`}
               onClick={() => navigate(`/leagues/${l.id}`)}
-              className="card-surface p-6 text-left hover:border-[#FF5C00]/50 transition-colors group"
+              className="card-surface p-6 text-left hover:border-[#F5C542]/50 transition-colors group"
             >
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <div className="font-display text-xl group-hover:text-[#FF9E00] transition-colors">{l.name}</div>
+                  <div className="font-display text-xl group-hover:text-[#F5C542] transition-colors">{l.name}</div>
                   <div className="text-sm text-zinc-500 flex items-center gap-1 mt-1">
                     <MapPin size={14} weight="duotone" /> {l.location}
                   </div>
@@ -95,7 +95,7 @@ export default function Dashboard() {
                   <Users size={14} weight="duotone" /> {l.member_count} players
                 </div>
                 <div className="font-mono-data text-xs text-zinc-500">
-                  ACE POOL <span className="text-[#FF9E00]">${(l.ace_pool || 0).toFixed(0)}</span>
+                  ACE POOL <span className="text-[#F5C542]">${(l.ace_pool || 0).toFixed(0)}</span>
                 </div>
               </div>
             </button>

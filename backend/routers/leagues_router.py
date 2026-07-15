@@ -105,18 +105,44 @@ async def _upsert_league_user(uid: str, fb_user: dict) -> dict:
     """Ensure a `users` row exists for this Firebase uid so the rest of the
     league code — which reads/writes `db.users` on `user_id` — has a record
     to hang data off. Non-destructive; only fills missing fields."""
-    existing = await db.users.find_one({"user_id": uid}, {"_id": 0})
+    # Ace Chasers users collection is keyed by `uid` (unique index). The
+    # league code expects a `user_id` field, so we map uid<->user_id and
+    # upsert on uid to avoid duplicate-key errors on the shared collection.
+    existing = await db.users.find_one({"uid": uid}, {"_id": 0})
+    fallback_name = (
+        (fb_user.get("name") or fb_user.get("email") or "player").split("@")[0].strip()
+        or "player"
+    )
     if existing:
+        # Existing Ace Chasers docs might lack `user_id` or `name`
+        # (email/password Firebase signups have no displayName). Backfill
+        # both so the league User model validates and league queries work.
+        patch = {}
+        if not existing.get("user_id"):
+            patch["user_id"] = uid
+            existing["user_id"] = uid
+        if not existing.get("name"):
+            name_val = existing.get("displayName") or fallback_name
+            patch["name"] = name_val
+            existing["name"] = name_val
+        if not existing.get("email") and fb_user.get("email"):
+            patch["email"] = fb_user["email"]
+            existing["email"] = fb_user["email"]
+        if patch:
+            await db.users.update_one({"uid": uid}, {"$set": patch})
+        # Ensure email is at least an empty string for the Pydantic User model
+        existing.setdefault("email", fb_user.get("email") or "")
         return existing
     doc = {
+        "uid": uid,
         "user_id": uid,
-        "email": fb_user.get("email"),
-        "name": (fb_user.get("name") or fb_user.get("email") or "").split("@")[0].strip(),
+        "email": fb_user.get("email") or "",
+        "name": fallback_name,
         "picture": fb_user.get("picture") or fb_user.get("profilePictureUrl"),
         "handle": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.users.insert_one(doc)
+    await db.users.update_one({"uid": uid}, {"$setOnInsert": doc}, upsert=True)
     doc.pop("_id", None)
     return doc
 

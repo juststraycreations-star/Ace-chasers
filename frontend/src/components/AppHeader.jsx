@@ -9,8 +9,8 @@ export default function AppHeader() {
   return (
     <header className="sticky top-0 z-30 glass border-b border-white/5">
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-        <Link to="/dashboard" data-testid="header-home-link" className="flex items-center gap-3 group">
-          <div className="w-9 h-9 rounded-lg bg-[#FF5C00] flex items-center justify-center shadow-[0_0_24px_-4px_rgba(255,92,0,0.7)]">
+        <Link to="/leagues" data-testid="header-home-link" className="flex items-center gap-3 group">
+          <div className="w-9 h-9 rounded-lg bg-[#F5C542] flex items-center justify-center shadow-[0_0_24px_-4px_rgba(255,92,0,0.7)]">
             <Trophy size={20} weight="fill" color="#0a0a0a" />
           </div>
           <div>
@@ -22,14 +22,14 @@ export default function AppHeader() {
         <nav className="flex items-center gap-3">
           <button
             data-testid="header-dashboard-btn"
-            onClick={() => navigate("/dashboard")}
+            onClick={() => navigate("/leagues")}
             className="hidden sm:flex items-center gap-2 text-sm text-zinc-300 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5"
           >
             <House size={16} weight="duotone" /> Leagues
           </button>
           <button
             data-testid="header-create-league-btn"
-            onClick={() => navigate("/create-league")}
+            onClick={() => navigate("/leagues/new")}
             className="btn-primary text-sm flex items-center gap-2"
           >
             <Plus size={16} weight="bold" /> Create League

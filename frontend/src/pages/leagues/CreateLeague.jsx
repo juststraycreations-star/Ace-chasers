@@ -66,7 +66,7 @@ export default function CreateLeague() {
   const steps = ["Identity", "Format", "Season", "Payouts"];
 
   return (
-    <div className="min-h-screen bg-[#09090B]">
+    <div className="min-h-screen bg-[#1f4d2e]">
       <AppHeader />
       <main className="max-w-3xl mx-auto px-6 py-10" data-testid="create-league-page">
         <div className="mb-8">
@@ -82,8 +82,8 @@ export default function CreateLeague() {
             const done = s < step;
             return (
               <div key={label} className="flex-1 flex items-center gap-2">
-                <div className={`h-1.5 rounded-full flex-1 ${done ? "bg-[#FF5C00]" : active ? "bg-[#FF5C00]/60" : "bg-white/8"}`}></div>
-                <div className={`font-mono-data text-[10px] ${active ? "text-[#FF9E00]" : done ? "text-white" : "text-zinc-600"}`}>{label}</div>
+                <div className={`h-1.5 rounded-full flex-1 ${done ? "bg-[#F5C542]" : active ? "bg-[#F5C542]/60" : "bg-white/8"}`}></div>
+                <div className={`font-mono-data text-[10px] ${active ? "text-[#F5C542]" : done ? "text-white" : "text-zinc-600"}`}>{label}</div>
               </div>
             );
           })}
@@ -99,7 +99,7 @@ export default function CreateLeague() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="Thursday Night Ace Chasers"
-                  className="mt-2 h-12 bg-[#131316] border-white/10 text-lg font-display"
+                  className="mt-2 h-12 bg-[#2a5f3d] border-white/10 text-lg font-display"
                 />
               </div>
               <div>
@@ -111,7 +111,7 @@ export default function CreateLeague() {
                     value={form.location}
                     onChange={(e) => setForm({ ...form, location: e.target.value })}
                     placeholder="Blue Ribbon Pines DGC, MN"
-                    className="h-12 pl-9 bg-[#131316] border-white/10"
+                    className="h-12 pl-9 bg-[#2a5f3d] border-white/10"
                   />
                 </div>
               </div>
@@ -122,7 +122,7 @@ export default function CreateLeague() {
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   placeholder="Weekly casual league. All skill levels welcome."
-                  className="mt-2 bg-[#131316] border-white/10 min-h-[100px]"
+                  className="mt-2 bg-[#2a5f3d] border-white/10 min-h-[100px]"
                 />
               </div>
             </div>
@@ -137,11 +137,11 @@ export default function CreateLeague() {
                     key={f.key}
                     data-testid={`wizard-format-${f.key.replace(/[^a-z]/gi, '').toLowerCase()}`}
                     onClick={() => setForm({ ...form, format: f.key })}
-                    className={`p-5 rounded-lg text-left border transition-all ${form.format === f.key ? "border-[#FF5C00] bg-[#FF5C00]/10" : "border-white/10 hover:border-white/25 bg-[#131316]"}`}
+                    className={`p-5 rounded-lg text-left border transition-all ${form.format === f.key ? "border-[#F5C542] bg-[#F5C542]/10" : "border-white/10 hover:border-white/25 bg-[#2a5f3d]"}`}
                   >
                     <div className="flex items-start justify-between">
                       <div className="font-display text-lg">{f.key}</div>
-                      {form.format === f.key && <Check size={20} weight="bold" className="text-[#FF9E00]" />}
+                      {form.format === f.key && <Check size={20} weight="bold" className="text-[#F5C542]" />}
                     </div>
                     <div className="text-xs text-zinc-500 mt-1">{f.desc}</div>
                   </button>
@@ -164,7 +164,7 @@ export default function CreateLeague() {
                     type="date"
                     value={form.start_date}
                     onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-                    className="mt-2 h-12 bg-[#131316] border-white/10"
+                    className="mt-2 h-12 bg-[#2a5f3d] border-white/10"
                   />
                 </div>
                 <div>
@@ -176,7 +176,7 @@ export default function CreateLeague() {
                     max={52}
                     value={form.weeks}
                     onChange={(e) => setForm({ ...form, weeks: e.target.value })}
-                    className="mt-2 h-12 bg-[#131316] border-white/10"
+                    className="mt-2 h-12 bg-[#2a5f3d] border-white/10"
                   />
                 </div>
               </div>
@@ -193,7 +193,7 @@ export default function CreateLeague() {
                   max={90}
                   value={form.course_rating}
                   onChange={(e) => setForm({ ...form, course_rating: e.target.value })}
-                  className="mt-2 h-12 bg-[#131316] border-white/10 font-mono-data max-w-[220px]"
+                  className="mt-2 h-12 bg-[#2a5f3d] border-white/10 font-mono-data max-w-[220px]"
                 />
               </div>
               <div className="terminal">
@@ -225,7 +225,7 @@ export default function CreateLeague() {
                     min={1}
                     value={form.win_points}
                     onChange={(e) => setForm({ ...form, win_points: e.target.value })}
-                    className="mt-2 h-12 bg-[#131316] border-white/10 font-mono-data"
+                    className="mt-2 h-12 bg-[#2a5f3d] border-white/10 font-mono-data"
                   />
                 </div>
                 <div>
@@ -236,7 +236,7 @@ export default function CreateLeague() {
                     min={0}
                     value={form.points_step}
                     onChange={(e) => setForm({ ...form, points_step: e.target.value })}
-                    className="mt-2 h-12 bg-[#131316] border-white/10 font-mono-data"
+                    className="mt-2 h-12 bg-[#2a5f3d] border-white/10 font-mono-data"
                   />
                 </div>
               </div>
@@ -266,7 +266,7 @@ export default function CreateLeague() {
                       step="0.5"
                       value={form.entry_fee}
                       onChange={(e) => setForm({ ...form, entry_fee: e.target.value })}
-                      className="mt-2 h-12 bg-[#131316] border-white/10 font-mono-data max-w-[220px]"
+                      className="mt-2 h-12 bg-[#2a5f3d] border-white/10 font-mono-data max-w-[220px]"
                     />
                   </div>
                   <div>
@@ -276,7 +276,7 @@ export default function CreateLeague() {
                       value={form.divisions}
                       onChange={(e) => setForm({ ...form, divisions: e.target.value })}
                       placeholder="Open, MPO, FPO"
-                      className="mt-2 h-12 bg-[#131316] border-white/10"
+                      className="mt-2 h-12 bg-[#2a5f3d] border-white/10"
                     />
                   </div>
                 </div>

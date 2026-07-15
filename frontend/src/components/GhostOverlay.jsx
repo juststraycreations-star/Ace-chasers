@@ -29,7 +29,7 @@ export default function GhostOverlay({ playerScorecard, ghostScorecard, ghostNam
     <div className="card-surface p-5 mb-4" data-testid="ghost-overlay">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Ghost size={22} weight="duotone" className="text-[#FF9E00]" />
+          <Ghost size={22} weight="duotone" className="text-[#F5C542]" />
           <div>
             <div className="font-mono-data text-[10px] text-zinc-500">GHOST MATCH-PLAY</div>
             <div className="font-display text-lg">vs {ghostName}</div>
@@ -50,7 +50,7 @@ export default function GhostOverlay({ playerScorecard, ghostScorecard, ghostNam
             <tr className="text-zinc-500 font-mono-data text-[10px]">
               <th className="text-left py-1 px-2">HOLE</th>
               {rows.map((r) => (
-                <th key={r.hole} className={`px-1 py-1 ${r.hole === currentHole ? "text-[#FF9E00]" : ""}`}>{r.hole}</th>
+                <th key={r.hole} className={`px-1 py-1 ${r.hole === currentHole ? "text-[#F5C542]" : ""}`}>{r.hole}</th>
               ))}
             </tr>
           </thead>
@@ -62,7 +62,7 @@ export default function GhostOverlay({ playerScorecard, ghostScorecard, ghostNam
             <tr>
               <td className="text-emerald-300 py-1 px-2 font-medium">You</td>
               {rows.map((r) => (
-                <td key={r.hole} className={`text-center px-1 py-1 ${r.hole === currentHole ? "bg-[#FF5C00]/12" : ""}`}>
+                <td key={r.hole} className={`text-center px-1 py-1 ${r.hole === currentHole ? "bg-[#F5C542]/12" : ""}`}>
                   {r.ps || "—"}
                 </td>
               ))}
@@ -70,7 +70,7 @@ export default function GhostOverlay({ playerScorecard, ghostScorecard, ghostNam
             <tr>
               <td className="text-purple-300 py-1 px-2 font-medium">Ghost</td>
               {rows.map((r) => (
-                <td key={r.hole} className={`text-center px-1 py-1 ${r.hole === currentHole ? "bg-[#FF5C00]/12" : ""}`}>
+                <td key={r.hole} className={`text-center px-1 py-1 ${r.hole === currentHole ? "bg-[#F5C542]/12" : ""}`}>
                   {r.gs || "—"}
                 </td>
               ))}
