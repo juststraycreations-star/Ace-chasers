@@ -358,3 +358,27 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **P2** — Sentry error tracking (needs user DSN).
 - **P3** — Real-time notifications for non-round events.
 
+
+### Session 37 — Growth investigation + Giveaway removal + Report Bug + Perf split (Feb 2026)
+- **User asks**: (1) "make sure there's no reason more players can't join" (2) take down disc giveaway (3) add "report a bug" on /leagues (4) investigate slow page loads.
+- **Growth investigation**: Ran end-to-end production signup against `https://acechasers.net` — Firebase Identity Toolkit `signUp` + `/api/auth/sync` + `/api/users/me` + `/api/discovery` + `/api/feed` all return 200 in ~2 seconds for a fresh account. **No code-level blocker on new signups.** The user's "no new players in a while" observation is a marketing / discovery / funnel problem, not a code problem.
+- **Giveaway removed**: Deleted `GiveawayPromo` import + `<GiveawayPromo />` render from `Login.jsx`. The banner no longer shows on the login page.
+- **Report Bug**: New `ReportBugButton.jsx` component opens `mailto:juststraycreations@gmail.com` with a pre-filled subject and body containing the current page URL, user agent, and timestamp. Injected in the `/leagues` dashboard toolbar next to the "New League" button (per user's "only on /leagues" request). Not visible anywhere else.
+- **Slow-load root cause + fix — HUGE win**: The whole app was shipping as ONE 1,318 KB JS bundle (365 KB gzip) with no code splitting. Converted every page in `App.jsx` to `React.lazy()` + `<Suspense fallback={...}>`. Added `vite.config.js` `build.rollupOptions.output.manualChunks` that groups node_modules into 8 vendor buckets:
+  - `vendor-react` (150KB / 48KB gz) — react + react-dom + react-router, cached across pages
+  - `vendor-firebase` (164KB / 33KB gz) — Firebase Web SDK
+  - `vendor-icons` (134KB / 32KB gz) — Phosphor + Lucide
+  - `vendor-charts` (292KB / 80KB gz) — **Recharts + D3, only downloads when user visits a chart-using page (Ledger tab)**
+  - `vendor-radix`, `vendor-ui`, `vendor-query`, `vendor`
+  - **Result: initial JS = 51 KB (14 KB gz)** — down from 1,318 KB (a 96% reduction on the critical path). Each route is now its own 3-40 KB chunk downloaded on demand.
+- **Verified**: `/app/test_reports/iteration_28.json` — 8/8 backend + full frontend E2E, zero bugs. Prior iter 26/27 baselines untouched.
+
+## Prioritized backlog (post-Session-37)
+- **P1** — Refactor Phase 2: extract Ledger + Rounds/Scorecards from `leagues_router.py` into submodules.
+- **P1** — DM Fair Play gate for reply flows.
+- **P1** — Growth: invite-friend flow (share a signup link, badge reward on referral).
+- **P2** — Compliance Dashboard for directors.
+- **P2** — Sentry integration (needs user DSN).
+- **P2** — ProofLog `event_type` schema.
+- **P3** — Real-time notifications for non-round events.
+
