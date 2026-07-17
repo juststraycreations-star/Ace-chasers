@@ -11,6 +11,29 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    build: {
+      // Warn only above 900KB (React + Firebase + Radix vendors alone are
+      // dense). Real split targets are enforced by manualChunks below.
+      chunkSizeWarningLimit: 900,
+      rollupOptions: {
+        output: {
+          // Vendor chunks let the browser cache the (rarely-changing) 3rd-
+          // party JS separately from our app code so shipping a new build
+          // only invalidates ~50KB, not 1.3MB.
+          manualChunks: (id) => {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('firebase')) return 'vendor-firebase';
+            if (id.includes('@radix-ui')) return 'vendor-radix';
+            if (id.includes('recharts') || id.includes('d3-')) return 'vendor-charts';
+            if (id.includes('@phosphor-icons') || id.includes('lucide-react')) return 'vendor-icons';
+            if (id.includes('react-router') || id.includes('react-dom') || id.includes('/react/')) return 'vendor-react';
+            if (id.includes('@tanstack')) return 'vendor-query';
+            if (id.includes('date-fns') || id.includes('sonner') || id.includes('cmdk') || id.includes('zod')) return 'vendor-ui';
+            return 'vendor';
+          },
+        },
+      },
+    },
     optimizeDeps: {
       // Recharts imports `react-is` at bundle time; forcing it in
       // optimizeDeps ensures esbuild can resolve it from node_modules.

@@ -9,7 +9,6 @@ import { firebaseConfigured, getFirebaseAuth, googleProvider } from '../lib/fire
 import { clearDevSession, makeDevSession } from '../lib/devAuth';
 import { api } from '../lib/api';
 import CacheNoticeModal from '../components/CacheNoticeModal';
-import GiveawayPromo from '../components/GiveawayPromo';
 import DiscIcon from '../components/DiscIcon';
 
 const CACHE_DISMISSED_KEY = 'ace_cache_notice_dismissed_v1';
@@ -151,8 +150,6 @@ export default function Login() {
           </h1>
           <p className="text-gray-600">Connect with local players</p>
         </div>
-
-        <GiveawayPromo />
 
         <form onSubmit={handleEmailLogin} className="space-y-4" data-testid="login-form">
           {error && (

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import AppHeader from "@/components/AppHeader";
+import ReportBugButton from "@/components/ReportBugButton";
 import { Plus, MapPin, Users, TrendUp } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -55,13 +56,16 @@ export default function Dashboard() {
             <div className="font-mono-data text-xs text-zinc-500 mb-2">MY DASHBOARD</div>
             <h1 className="font-display text-4xl sm:text-5xl tracking-tighter">Your Leagues</h1>
           </div>
-          <button
-            data-testid="dashboard-create-league-btn"
-            onClick={() => navigate("/leagues/new")}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus size={16} weight="bold" /> New League
-          </button>
+          <div className="flex items-center gap-3">
+            <ReportBugButton />
+            <button
+              data-testid="dashboard-create-league-btn"
+              onClick={() => navigate("/leagues/new")}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Plus size={16} weight="bold" /> New League
+            </button>
+          </div>
         </div>
 
         {loading && <div className="text-zinc-500 font-mono-data text-xs">LOADING…</div>}
