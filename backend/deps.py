@@ -34,6 +34,7 @@ def user_to_profile(doc: dict, *, email_verified: Optional[bool] = None) -> Prof
         profilePictureUrl=doc.get("profilePictureUrl"),
         bannerUrl=doc.get("bannerUrl"),
         privacy=doc.get("privacy") or {},
+        dmTermsAgreedAt=doc.get("dm_terms_agreed_at"),
     )
 
 

@@ -125,13 +125,17 @@ async def _upsert_league_user(uid: str, fb_user: dict) -> dict:
             name_val = existing.get("displayName") or fallback_name
             patch["name"] = name_val
             existing["name"] = name_val
-        if not existing.get("email") and fb_user.get("email"):
-            patch["email"] = fb_user["email"]
-            existing["email"] = fb_user["email"]
+        # Coerce email to a non-null string. Some pre-existing Ace Chasers
+        # user docs have `email: None` (Firebase Google sign-in only kept
+        # displayName). The Pydantic User model requires email: str, so a
+        # None here would 500 every authenticated /api/leagues* call and
+        # bounce the user back to /leagues/new with just a toast.
+        if not existing.get("email"):
+            email_val = fb_user.get("email") or ""
+            patch["email"] = email_val
+            existing["email"] = email_val
         if patch:
             await db.users.update_one({"uid": uid}, {"$set": patch})
-        # Ensure email is at least an empty string for the Pydantic User model
-        existing.setdefault("email", fb_user.get("email") or "")
         return existing
     doc = {
         "uid": uid,
@@ -798,6 +802,89 @@ async def finalize_scorecard(scorecard_id: str, payload: ScorecardFinalizePayloa
     }
 
 
+# ============= ROUND SWEEP FINALIZE (DIRECTOR) =============
+class RoundSweepFinalizePayload(BaseModel):
+    # Same certification pattern as the per-scorecard finalize. The
+    # director MUST tick the certification checkbox in the sweep modal;
+    # the API rejects the payload otherwise. Only unfinalized scorecards
+    # for the round are updated; already-certified rows are skipped.
+    certified: bool = False
+    complete_round: bool = True  # also flip round.status -> completed
+
+
+@api_router.post("/rounds/{round_id}/finalize")
+async def finalize_round_sweep(round_id: str, payload: RoundSweepFinalizePayload,
+                                request: Request,
+                                session_token: Optional[str] = Cookie(None),
+                                authorization: Optional[str] = Header(None)):
+    """Sweep-certify every scorecard on the round in one action. Director-only.
+    Certification is required. Each affected scorecard gets a ProofLog audit
+    entry stamped with the director's user_id and name, and optionally the
+    round is marked completed (running the same standings recompute that the
+    per-round /status endpoint uses).
+    """
+    user = await get_current_user(request, session_token, authorization)
+    if not payload.certified:
+        raise HTTPException(
+            status_code=400,
+            detail="Certification required. You must attest that the scores are accurate before finalizing.",
+        )
+    rd = await db.rounds.find_one({"id": round_id}, {"_id": 0})
+    if not rd:
+        raise HTTPException(status_code=404, detail="Round not found")
+    m = await _require_member(rd["league_id"], user.user_id)
+    if m.get("role") != "director":
+        raise HTTPException(status_code=403, detail="Only director can sweep-finalize a round")
+
+    now = now_iso()
+    open_scs = await db.scorecards.find(
+        {"round_id": round_id, "finalized": {"$ne": True}}, {"_id": 0}
+    ).to_list(500)
+    certified_ids = []
+    for sc in open_scs:
+        await db.scorecards.update_one(
+            {"id": sc["id"]},
+            {"$set": {
+                "finalized": True,
+                "certified": True,
+                "certified_by_user_id": user.user_id,
+                "certified_by_name": f"{user.name} · DIRECTOR SWEEP",
+                "certified_at": now,
+                "updated_at": now,
+            }},
+        )
+        audit = ProofLog(
+            scorecard_id=sc["id"],
+            round_id=round_id,
+            hole=0,
+            old_value=0,
+            new_value=int(sc.get("total") or 0),
+            edited_by_user_id=user.user_id,
+            edited_by_name=f"{user.name} · DIRECTOR SWEEP-CERTIFIED",
+        )
+        await db.proof_logs.insert_one(audit.model_dump())
+        certified_ids.append(sc["id"])
+
+    round_status = rd.get("status")
+    if payload.complete_round and round_status != "completed":
+        await db.rounds.update_one({"id": round_id}, {"$set": {"status": "completed"}})
+        await _finalize_round(round_id)
+        round_status = "completed"
+
+    await ws_manager.broadcast(
+        f"round:{round_id}",
+        {"type": "score_update", "sweep_finalized": True, "count": len(certified_ids)},
+    )
+    return {
+        "ok": True,
+        "certified_scorecard_ids": certified_ids,
+        "already_finalized": (await db.scorecards.count_documents({"round_id": round_id})) - len(certified_ids),
+        "round_status": round_status,
+        "certified_by_user_id": user.user_id,
+        "certified_at": now,
+    }
+
+
 # ============= CLUBHOUSE FAIR PLAY AGREEMENT =============
 @api_router.post("/leagues/{league_id}/clubhouse/agree")
 async def agree_clubhouse_terms(league_id: str, request: Request,
@@ -1046,140 +1133,10 @@ async def list_ledger(league_id: str, request: Request,
 
 
 # ============= FEED & CLUBHOUSE =============
-class AnnouncementCreate(BaseModel):
-    title: str
-    body: str
-    urgent: bool = False
-
-@api_router.post("/leagues/{league_id}/announcements")
-async def create_announcement(league_id: str, payload: AnnouncementCreate, request: Request,
-                                session_token: Optional[str] = Cookie(None),
-                                authorization: Optional[str] = Header(None)):
-    user = await get_current_user(request, session_token, authorization)
-    m = await _require_member(league_id, user.user_id)
-    if m.get("role") != "director":
-        raise HTTPException(status_code=403, detail="Only director")
-    a = Announcement(league_id=league_id, title=payload.title, body=payload.body,
-                     urgent=payload.urgent, author_id=user.user_id, author_name=user.name)
-    await db.announcements.insert_one(a.model_dump())
-    await ws_manager.broadcast(f"league:{league_id}", {"type": "announcement", "announcement": a.model_dump()})
-    return a.model_dump()
-
-
-@api_router.get("/leagues/{league_id}/announcements")
-async def list_announcements(league_id: str, request: Request,
-                              session_token: Optional[str] = Cookie(None),
-                              authorization: Optional[str] = Header(None)):
-    user = await get_current_user(request, session_token, authorization)
-    await _require_member(league_id, user.user_id)
-    return await db.announcements.find({"league_id": league_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
-
-
-@api_router.delete("/announcements/{announcement_id}")
-async def delete_announcement(announcement_id: str, request: Request,
-                                session_token: Optional[str] = Cookie(None),
-                                authorization: Optional[str] = Header(None)):
-    user = await get_current_user(request, session_token, authorization)
-    a = await db.announcements.find_one({"id": announcement_id}, {"_id": 0})
-    if not a:
-        raise HTTPException(status_code=404, detail="Not found")
-    m = await _require_member(a["league_id"], user.user_id)
-    if m.get("role") != "director":
-        raise HTTPException(status_code=403, detail="Only director")
-    await db.announcements.delete_one({"id": announcement_id})
-    return {"ok": True}
-
-
-class LostFoundCreate(BaseModel):
-    title: str
-    description: str
-    image_path: Optional[str] = None
-
-@api_router.post("/leagues/{league_id}/lost-found")
-async def create_lost_found(league_id: str, payload: LostFoundCreate, request: Request,
-                              session_token: Optional[str] = Cookie(None),
-                              authorization: Optional[str] = Header(None)):
-    user = await get_current_user(request, session_token, authorization)
-    await _require_member(league_id, user.user_id)
-    lf = LostFound(league_id=league_id, title=payload.title, description=payload.description,
-                    image_path=payload.image_path, author_id=user.user_id, author_name=user.name)
-    await db.lost_found.insert_one(lf.model_dump())
-    return lf.model_dump()
-
-
-@api_router.get("/leagues/{league_id}/lost-found")
-async def list_lost_found(league_id: str, request: Request,
-                            session_token: Optional[str] = Cookie(None),
-                            authorization: Optional[str] = Header(None)):
-    user = await get_current_user(request, session_token, authorization)
-    await _require_member(league_id, user.user_id)
-    return await db.lost_found.find({"league_id": league_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
-
-
-@api_router.patch("/lost-found/{item_id}/resolve")
-async def resolve_lost_found(item_id: str, request: Request,
-                               session_token: Optional[str] = Cookie(None),
-                               authorization: Optional[str] = Header(None)):
-    user = await get_current_user(request, session_token, authorization)
-    item = await db.lost_found.find_one({"id": item_id}, {"_id": 0})
-    if not item:
-        raise HTTPException(status_code=404, detail="Not found")
-    await _require_member(item["league_id"], user.user_id)
-    await db.lost_found.update_one({"id": item_id}, {"$set": {"resolved": True}})
-    return {"ok": True}
-
-
-class StoryCreate(BaseModel):
-    image_path: str
-    caption: Optional[str] = ""
-
-@api_router.post("/leagues/{league_id}/stories")
-async def create_story(league_id: str, payload: StoryCreate, request: Request,
-                        session_token: Optional[str] = Cookie(None),
-                        authorization: Optional[str] = Header(None)):
-    user = await get_current_user(request, session_token, authorization)
-    await _require_member(league_id, user.user_id)
-    s = StoryPost(league_id=league_id, image_path=payload.image_path, caption=payload.caption or "",
-                   author_id=user.user_id, author_name=user.name, author_picture=user.picture)
-    await db.stories.insert_one(s.model_dump())
-    return s.model_dump()
-
-
-@api_router.get("/leagues/{league_id}/stories")
-async def list_stories(league_id: str, request: Request,
-                         session_token: Optional[str] = Cookie(None),
-                         authorization: Optional[str] = Header(None)):
-    user = await get_current_user(request, session_token, authorization)
-    await _require_member(league_id, user.user_id)
-    # Show stories from the last 48 hours
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
-    return await db.stories.find({"league_id": league_id, "created_at": {"$gte": cutoff}},
-                                   {"_id": 0}).sort("created_at", -1).to_list(100)
-
-
-class FeedPostCreate(BaseModel):
-    body: str
-    title: Optional[str] = None
-
-@api_router.post("/leagues/{league_id}/feed")
-async def create_feed_post(league_id: str, payload: FeedPostCreate, request: Request,
-                             session_token: Optional[str] = Cookie(None),
-                             authorization: Optional[str] = Header(None)):
-    user = await get_current_user(request, session_token, authorization)
-    await _require_member(league_id, user.user_id)
-    p = FeedPost(league_id=league_id, kind="post", title=payload.title, body=payload.body,
-                  author_id=user.user_id, author_name=user.name, author_picture=user.picture)
-    await db.feed_posts.insert_one(p.model_dump())
-    return p.model_dump()
-
-
-@api_router.get("/leagues/{league_id}/feed")
-async def list_feed(league_id: str, request: Request,
-                      session_token: Optional[str] = Cookie(None),
-                      authorization: Optional[str] = Header(None)):
-    user = await get_current_user(request, session_token, authorization)
-    await _require_member(league_id, user.user_id)
-    return await db.feed_posts.find({"league_id": league_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+# NOTE: Endpoints for announcements, lost-found, stories, and league feed
+# were extracted into `leagues_clubhouse_router.py` (phase 1 of the
+# leagues_router refactor). It is imported at the BOTTOM of this file
+# (after ws_manager is defined) so we don't hit a circular import.
 
 
 # ============= WEBSOCKETS =============
@@ -1714,3 +1671,11 @@ async def finalize_payout(round_id: str, request: Request,
 # The router is included by the main Ace Chasers server.py with the /api
 # prefix. CORS is handled globally by the main app. No shutdown handler
 # is needed here — the main app owns the Mongo client lifecycle.
+
+# ============= PHASED REFACTOR: SUBMODULE REGISTRATION =============
+# Import league submodules AFTER all shared symbols (api_router, db, models,
+# ws_manager, helper functions) are defined so the submodules can safely
+# `from .leagues_router import ...` without hitting a circular import.
+# Each submodule attaches its endpoints to the same `api_router`, so the
+# public URL surface is unchanged.
+from . import leagues_clubhouse_router  # noqa: E402,F401

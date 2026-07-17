@@ -109,6 +109,25 @@ async def update_me(payload: ProfileIn, current=Depends(get_current_user)):
     return user_to_profile(doc, email_verified=claims_email_verified(current.get("claims") or {}))
 
 
+@router.post("/api/users/me/dm-terms/agree", response_model=ProfileOut)
+async def agree_dm_terms(current=Depends(get_current_user)):
+    """First-time DM Fair Play terms agreement. Persists dm_terms_agreed_at on
+    the user's profile document so the DM invite prompt only appears once
+    per user across all league and non-league DM surfaces."""
+    db = get_db()
+    doc = await db.users.find_one({"uid": current["uid"]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found — call /api/auth/sync first")
+    if not doc.get("dm_terms_agreed_at"):
+        now = datetime.now(timezone.utc).isoformat()
+        await db.users.update_one(
+            {"uid": current["uid"]},
+            {"$set": {"dm_terms_agreed_at": now}},
+        )
+        doc["dm_terms_agreed_at"] = now
+    return user_to_profile(doc, email_verified=claims_email_verified(current.get("claims") or {}))
+
+
 @router.get("/api/users/{uid}", response_model=ProfileOut)
 async def get_user_by_uid(uid: str, current=Depends(get_current_user)):
     """Public profile view of any user. Email is stripped unless it's the

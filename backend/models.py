@@ -59,6 +59,10 @@ class ProfileOut(BaseModel):
     aceClub: Optional[bool] = None
     aceClubCount: Optional[int] = None
     privacy: dict = Field(default_factory=dict)
+    # Timestamp when the user first agreed to the DM Fair Play terms.
+    # Null = user has never sent/accepted a DM and must be prompted on
+    # their first outbound message. Set by POST /api/users/me/dm-terms/agree.
+    dmTermsAgreedAt: Optional[str] = None
 
 
 # --- Discovery / Swipes / Likes / Matches ----------------------------------

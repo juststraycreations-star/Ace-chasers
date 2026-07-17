@@ -5,6 +5,7 @@ import AppHeader from "@/components/AppHeader";
 import StandingsTab from "@/components/StandingsTab";
 import LedgerTab from "@/components/LedgerTab";
 import ClubhouseTab from "@/components/ClubhouseTab";
+import ClubhouseAgreementModal from "@/components/ClubhouseAgreementModal";
 import { useAuth } from "@/context/AuthContext";
 import LeagueLiveNotifier from "@/components/LeagueLiveNotifier";
 import { MapPin, Users, Trophy, Coins, ChatCircle, Calendar, Plus, PlayCircle, CheckCircle, QrCode } from "@phosphor-icons/react";
@@ -164,6 +165,16 @@ export default function LeagueDetail() {
         {tab === "standings" && <StandingsTab leagueId={leagueId} />}
         {tab === "ledger" && <LedgerTab leagueId={leagueId} isDirector={league.is_director} />}
         {tab === "clubhouse" && <ClubhouseTab leagueId={leagueId} isDirector={league.is_director} currentUser={user} />}
+
+        {/* Fair Play Agreement modal — covers Announcements-only viewers and
+            every other private league surface. Renders once per league until
+            the member ticks "I Agree". */}
+        {league.is_member && league.my_clubhouse_agreed === false && (
+          <ClubhouseAgreementModal
+            leagueId={leagueId}
+            onAgree={() => setLeague((prev) => prev ? { ...prev, my_clubhouse_agreed: true } : prev)}
+          />
+        )}
       </main>
     </div>
   );

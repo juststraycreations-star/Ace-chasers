@@ -43,6 +43,11 @@ export default function RoundScorecard() {
   const [certifyForScorecardId, setCertifyForScorecardId] = useState(null);
   const [certifyChecked, setCertifyChecked] = useState(false);
   const [certifying, setCertifying] = useState(false);
+  // Director-only sweep finalize
+  const [showSweep, setShowSweep] = useState(false);
+  const [sweepChecked, setSweepChecked] = useState(false);
+  const [sweepComplete, setSweepComplete] = useState(true);
+  const [sweeping, setSweeping] = useState(false);
   const chatEnd = useRef(null);
 
   const load = async () => {
@@ -134,6 +139,30 @@ export default function RoundScorecard() {
       );
     } finally {
       setCertifying(false);
+    }
+  };
+
+  const sweepFinalizeRound = async () => {
+    if (!sweepChecked) return;
+    setSweeping(true);
+    try {
+      const { data } = await api.post(`/rounds/${roundId}/finalize`, {
+        certified: true,
+        complete_round: sweepComplete,
+      });
+      const n = data.certified_scorecard_ids?.length || 0;
+      toast.success(
+        `Sweep-finalized ${n} scorecard${n === 1 ? "" : "s"} · Proof of Score updated`
+      );
+      setShowSweep(false);
+      setSweepChecked(false);
+      await load();
+    } catch (e) {
+      toast.error(
+        e?.response?.data?.detail || "Sweep-finalize failed. Certification required."
+      );
+    } finally {
+      setSweeping(false);
     }
   };
 
@@ -235,6 +264,16 @@ export default function RoundScorecard() {
           <button data-testid="payout-open-btn" onClick={() => setShowPayout(true)} className="px-4 py-2 rounded-full text-sm border border-gray-200 text-zinc-400 hover:border-white/25 flex items-center gap-1 flex-shrink-0">
             <MoneyWavy size={14} weight="duotone" /> Payouts
           </button>
+          {isDirector && (
+            <button
+              data-testid="sweep-finalize-btn"
+              onClick={() => { setShowSweep(true); setSweepChecked(false); }}
+              className="px-4 py-2 rounded-full text-sm border border-[#F5C542]/40 bg-[#F5C542]/10 text-[#F5C542] hover:bg-[#F5C542]/20 flex items-center gap-1 flex-shrink-0 font-mono-data uppercase tracking-wider"
+              title="Certify every scorecard on this round in one action"
+            >
+              Sweep Finalize
+            </button>
+          )}
         </div>
 
         {showBuilder && (
@@ -495,6 +534,115 @@ export default function RoundScorecard() {
             </div>
           </div>
         )}
+
+        {/* Sweep-Finalize (director) — certifies every scorecard on the round */}
+        {showSweep && (() => {
+          const openCount = scorecards.filter((s) => !s.finalized).length;
+          const doneCount = scorecards.length - openCount;
+          return (
+            <div
+              className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+              onClick={() => !sweeping && setShowSweep(false)}
+              data-testid="sweep-finalize-modal"
+            >
+              <div
+                className="bg-white rounded-2xl border border-gray-200 max-w-lg w-full p-6 shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="mb-4">
+                  <div className="font-mono-data text-[10px] text-zinc-500 tracking-wider">
+                    ROUND SWEEP · DIRECTOR CERTIFICATION
+                  </div>
+                  <div className="font-display text-2xl tracking-tight mt-1">
+                    Finalize Every Scorecard
+                  </div>
+                </div>
+                <p className="text-sm text-gray-700 leading-relaxed">
+                  You are about to sweep-certify <span className="font-bold text-gray-900">{openCount}</span> open
+                  {openCount === 1 ? " scorecard" : " scorecards"} on
+                  {" "}<span className="font-bold text-gray-900">{round.name}</span>. Already-certified
+                  cards ({doneCount}) will be skipped. All affected rows will be
+                  locked from further edits and logged in the Proof of Score
+                  audit trail with your director user ID.
+                </p>
+
+                <div className="mt-3 max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                  {scorecards.length === 0 && (
+                    <div className="p-3 text-xs text-zinc-500">No scorecards on this round yet.</div>
+                  )}
+                  {scorecards.map((sc) => {
+                    const mm = memberMap[sc.member_id];
+                    return (
+                      <div
+                        key={sc.id}
+                        className="flex items-center justify-between px-3 py-2 text-xs"
+                        data-testid={`sweep-row-${sc.id}`}
+                      >
+                        <span className="text-gray-800">
+                          <span className="font-mono-data text-[10px] text-zinc-500 mr-2">#{mm?.bag_tag ?? "?"}</span>
+                          {mm?.name ?? "Player"} · <span className="font-mono-data">{sc.total || 0}</span>
+                        </span>
+                        {sc.finalized ? (
+                          <span className="text-emerald-600 font-mono-data text-[10px] uppercase">Certified</span>
+                        ) : (
+                          <span className="text-[#F5C542] font-mono-data text-[10px] uppercase">Open</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <label className="mt-4 flex items-center gap-2 text-xs text-gray-700">
+                  <input
+                    type="checkbox"
+                    data-testid="sweep-complete-round-checkbox"
+                    checked={sweepComplete}
+                    onChange={(e) => setSweepComplete(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-400 text-[#F5C542] focus:ring-[#F5C542]"
+                  />
+                  Also mark the round <span className="font-bold">completed</span> and recompute standings.
+                </label>
+
+                <label
+                  className="mt-3 flex items-start gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100"
+                  data-testid="sweep-cert-label"
+                >
+                  <input
+                    type="checkbox"
+                    data-testid="sweep-cert-checkbox"
+                    checked={sweepChecked}
+                    onChange={(e) => setSweepChecked(e.target.checked)}
+                    className="mt-1 w-4 h-4 rounded border-gray-400 text-[#F5C542] focus:ring-[#F5C542]"
+                  />
+                  <span className="text-xs text-gray-800 leading-snug">
+                    I certify that these scores are accurate. I understand that
+                    submitting updates the automated digital Bag Tag matrix and
+                    logs my user ID in the Proof of Score audit trail.
+                  </span>
+                </label>
+
+                <div className="mt-5 flex items-center justify-end gap-2">
+                  <button
+                    data-testid="sweep-cancel-btn"
+                    onClick={() => setShowSweep(false)}
+                    disabled={sweeping}
+                    className="text-xs px-4 py-2 rounded-lg text-zinc-600 hover:text-gray-900 disabled:opacity-40"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    data-testid="sweep-confirm-btn"
+                    onClick={sweepFinalizeRound}
+                    disabled={!sweepChecked || sweeping || openCount === 0}
+                    className="text-sm px-4 py-2 rounded-lg bg-[#F5C542] text-black font-bold hover:bg-[#f5cf5a] disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {sweeping ? "Finalizing…" : `Finalize ${openCount} Card${openCount === 1 ? "" : "s"}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Round total footer */}
         {activeCard && (

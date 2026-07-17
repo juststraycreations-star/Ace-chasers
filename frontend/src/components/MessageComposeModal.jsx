@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { resolveImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
 import { useMatchStore } from '../store/matchStore';
+import { useAuthStore } from '../store/authStore';
 
 /**
  * MessageComposeModal
@@ -28,13 +30,32 @@ export default function MessageComposeModal({
 }) {
   const friends = useMatchStore((s) => s.friends);
   const fetchFriends = useMatchStore((s) => s.fetchFriends);
+  const dmTermsAgreedAt = useAuthStore((s) => s.profile?.dmTermsAgreedAt);
+  const patchProfile = useAuthStore((s) => s.patchProfile);
 
   const [recipient, setRecipient] = useState(initialRecipient);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const [agreeing, setAgreeing] = useState(false);
   const textareaRef = useRef(null);
+
+  const needsDmAgreement = !dmTermsAgreedAt;
+
+  const acceptDmTerms = async () => {
+    setAgreeing(true);
+    try {
+      const { data } = await api.post('/users/me/dm-terms/agree');
+      // The auth store's `profile` shape mirrors ProfileOut so we can spread
+      // the returned payload directly.
+      patchProfile?.(data);
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Could not record agreement');
+    } finally {
+      setAgreeing(false);
+    }
+  };
 
   useEffect(() => {
     if (pickFromFriends && (!friends || friends.length === 0)) {
@@ -70,6 +91,10 @@ export default function MessageComposeModal({
   const handleSend = async () => {
     const body = text.trim();
     if (!body || !recipient || sending) return;
+    if (needsDmAgreement) {
+      setError('Please accept the DM Fair Play terms before sending.');
+      return;
+    }
     setSending(true);
     setError('');
     try {
@@ -186,6 +211,35 @@ export default function MessageComposeModal({
               )}
             </div>
 
+            {needsDmAgreement && (
+              <div
+                className="rounded-lg border border-[#F5C542]/60 bg-[#F5C542]/10 p-4 space-y-3"
+                data-testid="dm-terms-gate"
+              >
+                <p className="text-sm text-gray-800 leading-snug">
+                  Before sending your first DM invite, please review our
+                  Fair Play Terms. By agreeing, you commit to respectful,
+                  transparent communication with other Ace Chasers players.
+                </p>
+                <Link
+                  to="/legal/privacy"
+                  data-testid="dm-terms-privacy-link"
+                  className="inline-block text-[11px] font-mono-data uppercase tracking-wider text-[#8a6d10] hover:underline"
+                >
+                  Read the full Privacy & Terms →
+                </Link>
+                <button
+                  type="button"
+                  onClick={acceptDmTerms}
+                  disabled={agreeing}
+                  data-testid="dm-terms-agree-btn"
+                  className="w-full bg-[#F5C542] hover:bg-[#f5cf5a] disabled:opacity-50 text-black font-bold px-4 py-2 rounded-lg transition text-sm"
+                >
+                  {agreeing ? 'Saving…' : 'I Agree · Continue'}
+                </button>
+              </div>
+            )}
+
             <textarea
               ref={textareaRef}
               value={text}
@@ -216,7 +270,7 @@ export default function MessageComposeModal({
               <button
                 type="button"
                 onClick={handleSend}
-                disabled={sending || !text.trim()}
+                disabled={sending || !text.trim() || needsDmAgreement}
                 className="bg-disc-green hover:bg-disc-green/90 disabled:opacity-50 text-white font-bold px-5 py-2 rounded-lg transition"
                 data-testid="message-compose-send"
               >
