@@ -3,6 +3,8 @@
       "target": {
         "namespace": "android_app",
         "package_name": "net.acechasers.twa",
-        "sha256_cert_fingerprints": ["4B:C9:4E:5A:64:7E:2E:1C:77:48:1C:7F:70:F4:A4:A7:62:9E:18:E0:49:C3:01:8E:57:65:98:CE:82:64:2C:D2"]
+        "sha256_cert_fingerprints": [
+          "7D:63:D0:21:DD:83:A3:54:DF:0D:FB:BD:3A:A9:D1:51:00:E1:A8:FA:CD:0E:75:1B:1C:2D:1F:75:AF:7C:97:7A"
+        ]
       }
     }]
