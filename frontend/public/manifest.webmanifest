@@ -17,8 +17,8 @@
   "related_applications": [
     {
       "platform": "play",
-      "url": "https://play.google.com/store/apps/details?id=net.acechasers.twa",
-      "id": "net.acechasers.twa"
+      "url": "https://play.google.com/store/apps/details?id=acechasers.net",
+      "id": "acechasers.net"
     }
   ],
   "launch_handler": {
