@@ -337,3 +337,24 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **P2** — Break `leagues_router.py` (1,700+ lines) into `league_seasons`, `league_rounds`, `league_ledger`, `league_clubhouse` submodules.
 - **P2** — Integrate Sentry for production error tracking (needs user DSN).
 - **P3** — Real-time notifications via Firestore listener or websockets for non-round events.
+
+### Session 36 — Create-League P0 fix + Sweep-Finalize + DM Fair Play + Router refactor Phase 1 (Feb 2026)
+- **User report**: "Why can I not create a test league in preview — when you click create it loops you back to the create page just blank." + follow-ups on the roadmap.
+- **P0 ROOT CAUSE FOUND & FIXED**: 3 pre-existing user docs had `email: None` and 170 had `name: None`. On every `/api/leagues*` call, `_upsert_league_user` returned the doc, and Pydantic `User(email: str)` threw a `ValidationError` → 500 → the frontend toast fired and the wizard stayed put. Root fix: `leagues_router.py` `_upsert_league_user` now coerces `email: None` → `""` on both the existing-user backfill branch and initial insert branch. Backfilled dirty docs directly in Mongo (3 email:None + 170 name:None).
+- **Sweep-Finalize (director sweep)**: NEW `POST /api/rounds/{round_id}/finalize` with `{certified: bool, complete_round: bool}` — director-only, rejects `certified=false` with 400, certifies all open scorecards, stamps `certified_by_name` with `DIRECTOR SWEEP`, writes one ProofLog audit row per card with `edited_by_name` containing `DIRECTOR SWEEP-CERTIFIED`, optionally marks the round completed. Frontend: `sweep-finalize-btn` (director-only) + `sweep-finalize-modal` listing every card with per-card certified/open state, `sweep-cert-checkbox` (mandatory), `sweep-complete-round-checkbox` (defaults on).
+- **Extended Clubhouse Agreement**:
+  - Hoisted `ClubhouseAgreementModal` from `ClubhouseTab.jsx` up to `LeagueDetail.jsx` — now covers Announcements-only viewers plus any private tab (Rounds/Standings/Ledger/Clubhouse) on first visit.
+  - NEW `ProfileOut.dmTermsAgreedAt` field on the user profile.
+  - NEW `POST /api/users/me/dm-terms/agree` endpoint (idempotent, returns full ProfileOut).
+  - `MessageComposeModal.jsx` now shows `dm-terms-gate` + `dm-terms-agree-btn` for the first outbound DM invite. Send button disabled until agreement is captured.
+- **leagues_router Refactor Phase 1**: Extracted the Clubhouse content endpoints (announcements, lost-found, stories, feed) into `leagues_clubhouse_router.py` (174 lines) — same `api_router` instance is reused so URL surface is unchanged. Circular-import safely resolved by placing the submodule import at the bottom of `leagues_router.py`. Monolith shrunk 1804 → 1681 lines.
+- **Verified**: `/app/test_reports/iteration_27.json` — 15/15 new backend + full P0 E2E in Chromium (fresh signup → wizard → `/leagues/{id}` navigation confirmed, no blank loop). Iter 25/26 baselines preserved. Zero bugs.
+
+## Prioritized backlog (post-Session-36)
+- **P1** — Refactor Phase 2: extract Ledger (POST/GET/CSV export + entry-fee escrow) + Rounds/Scorecards into their own submodules. Estimated 2 phases.
+- **P1** — DM invite gate: add the same `dmTermsAgreedAt` prompt to reply-flows (currently only guards the first outbound-from-compose modal).
+- **P2** — Compliance Dashboard for directors: per-league metrics (% cards certified this round, Fair Play agreement recency, unresolved lost & found, ledger deltas).
+- **P2** — ProofLog schema: add explicit `event_type` (score_edit / individual_certify / director_sweep) instead of overloading `hole=0` + name suffix.
+- **P2** — Sentry error tracking (needs user DSN).
+- **P3** — Real-time notifications for non-round events.
+
