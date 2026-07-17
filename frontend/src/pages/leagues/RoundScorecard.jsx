@@ -141,17 +141,17 @@ export default function RoundScorecard() {
     } catch (e) { toast.error(e?.response?.data?.detail || "Auto-pair failed"); }
   };
 
-  if (!round) return <div className="min-h-screen bg-[#1f4d2e] flex items-center justify-center text-zinc-500 font-mono-data text-xs">LOADING…</div>;
+  if (!round) return <div className="min-h-screen bg-white flex items-center justify-center text-zinc-500 font-mono-data text-xs">LOADING…</div>;
 
   const par = round.par_per_hole[currentHole - 1];
 
   return (
-    <div className="min-h-screen bg-[#1f4d2e] pb-32" data-testid="round-scorecard-page">
+    <div className="min-h-screen bg-white pb-32" data-testid="round-scorecard-page">
       {/* Sticky header */}
       <div className="scorecard-header">
         <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            <button data-testid="back-to-league-btn" onClick={() => navigate(`/leagues/${round.league_id}`)} className="text-zinc-400 hover:text-white flex items-center gap-1 text-sm">
+            <button data-testid="back-to-league-btn" onClick={() => navigate(`/leagues/${round.league_id}`)} className="text-zinc-400 hover:text-gray-900 flex items-center gap-1 text-sm">
               <CaretLeft size={16} /> Back
             </button>
             <div className="text-center">
@@ -188,7 +188,7 @@ export default function RoundScorecard() {
               key={c.id}
               data-testid={`card-tab-${c.id}`}
               onClick={() => setSelectedCardId(c.id)}
-              className={`px-4 py-2 rounded-full text-sm flex-shrink-0 border ${selectedCardId === c.id ? "bg-[#F5C542]/15 border-[#F5C542] text-white" : "border-white/10 text-zinc-400"}`}
+              className={`px-4 py-2 rounded-full text-sm flex-shrink-0 border ${selectedCardId === c.id ? "bg-[#F5C542]/15 border-[#F5C542] text-gray-900" : "border-gray-200 text-zinc-400"}`}
             >
               {c.label} <span className="text-[10px] font-mono-data ml-1 opacity-70">·{c.player_ids.length}</span>
             </button>
@@ -201,10 +201,10 @@ export default function RoundScorecard() {
               <Shuffle size={14} weight="bold" /> Auto-Pair
             </button>
           )}
-          <button data-testid="ctp-toggle-btn" onClick={() => setShowCTP(!showCTP)} className={`px-4 py-2 rounded-full text-sm border flex items-center gap-1 flex-shrink-0 ${showCTP ? "border-[#F5C542]/40 bg-[#F5C542]/10 text-[#F5C542]" : "border-white/10 text-zinc-400 hover:border-white/25"}`}>
+          <button data-testid="ctp-toggle-btn" onClick={() => setShowCTP(!showCTP)} className={`px-4 py-2 rounded-full text-sm border flex items-center gap-1 flex-shrink-0 ${showCTP ? "border-[#F5C542]/40 bg-[#F5C542]/10 text-[#F5C542]" : "border-gray-200 text-zinc-400 hover:border-white/25"}`}>
             <Target size={14} weight="duotone" /> CTP
           </button>
-          <button data-testid="payout-open-btn" onClick={() => setShowPayout(true)} className="px-4 py-2 rounded-full text-sm border border-white/10 text-zinc-400 hover:border-white/25 flex items-center gap-1 flex-shrink-0">
+          <button data-testid="payout-open-btn" onClick={() => setShowPayout(true)} className="px-4 py-2 rounded-full text-sm border border-gray-200 text-zinc-400 hover:border-white/25 flex items-center gap-1 flex-shrink-0">
             <MoneyWavy size={14} weight="duotone" /> Payouts
           </button>
         </div>
@@ -216,7 +216,7 @@ export default function RoundScorecard() {
               data-testid="new-card-label"
               value={newCard.label}
               onChange={(e) => setNewCard({ ...newCard, label: e.target.value })}
-              className="w-full h-11 bg-[#2a5f3d] border border-white/10 rounded-md px-3 mb-3"
+              className="w-full h-11 bg-white border border-gray-200 border border-gray-200 rounded-md px-3 mb-3"
               placeholder="Card Label"
             />
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
@@ -227,7 +227,7 @@ export default function RoundScorecard() {
                     key={m.id}
                     data-testid={`pick-member-${m.id}`}
                     onClick={() => setNewCard({ ...newCard, player_ids: picked ? newCard.player_ids.filter((x) => x !== m.id) : [...newCard.player_ids, m.id] })}
-                    className={`p-3 rounded-lg border text-left text-sm ${picked ? "border-[#F5C542] bg-[#F5C542]/12" : "border-white/10 bg-[#2a5f3d]"}`}
+                    className={`p-3 rounded-lg border text-left text-sm ${picked ? "border-[#F5C542] bg-[#F5C542]/12" : "border-gray-200 bg-white border border-gray-200"}`}
                   >
                     <div className="text-xs text-zinc-500 font-mono-data">#{m.bag_tag}</div>
                     <div className="font-medium">{m.name}</div>
@@ -264,7 +264,7 @@ export default function RoundScorecard() {
                     data-testid="ghost-select"
                     value={ghostMemberId || ""}
                     onChange={(e) => setGhostMemberId(e.target.value || null)}
-                    className="h-9 bg-[#2a5f3d] border border-white/10 rounded-md px-2 text-sm min-w-[180px]"
+                    className="h-9 bg-white border border-gray-200 border border-gray-200 rounded-md px-2 text-sm min-w-[180px]"
                   >
                     <option value="">None</option>
                     {otherScs.map((sc) => {
@@ -274,7 +274,7 @@ export default function RoundScorecard() {
                   </select>
                   {ghostSc && myScorecard && (
                     <div className="text-xs text-zinc-500 font-mono-data">
-                      OVERLAY ACTIVE · CURRENT DIFF <span className="text-white">{(myScorecard.total || 0) - (ghostSc.total || 0)}</span>
+                      OVERLAY ACTIVE · CURRENT DIFF <span className="text-gray-900">{(myScorecard.total || 0) - (ghostSc.total || 0)}</span>
                     </div>
                   )}
                 </div>
@@ -324,7 +324,7 @@ export default function RoundScorecard() {
                       <div className="min-w-0">
                         <div className="font-medium truncate">{m?.name ?? "Player"}</div>
                         <div className="font-mono-data text-[10px] text-zinc-500">
-                          TOTAL <span className="text-white">{sc.total}</span> · {sc.plus_minus > 0 ? `+${sc.plus_minus}` : sc.plus_minus} · HCP {sc.handicap_at_round > 0 ? `+${sc.handicap_at_round}` : sc.handicap_at_round}
+                          TOTAL <span className="text-gray-900">{sc.total}</span> · {sc.plus_minus > 0 ? `+${sc.plus_minus}` : sc.plus_minus} · HCP {sc.handicap_at_round > 0 ? `+${sc.handicap_at_round}` : sc.handicap_at_round}
                         </div>
                       </div>
                     </div>
@@ -332,7 +332,7 @@ export default function RoundScorecard() {
                       <button
                         data-testid={`score-minus-${sc.id}`}
                         onClick={() => updateScore(sc.id, currentHole, (holeScore || par) - 1)}
-                        className="w-11 h-11 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10"
+                        className="w-11 h-11 rounded-lg bg-white/5 border border-gray-200 flex items-center justify-center hover:bg-white/10"
                       ><Minus weight="bold" /></button>
                       <div className={`hole-cell ${scoreClass(holeScore, par)}`} data-testid={`score-cell-${sc.id}`} style={{ width: 56, height: 56 }}>
                         {holeScore || "—"}
@@ -345,7 +345,7 @@ export default function RoundScorecard() {
                       <button
                         data-testid={`proof-btn-${sc.id}`}
                         onClick={() => openProof(sc.id)}
-                        className="ml-1 text-zinc-500 hover:text-white p-2"
+                        className="ml-1 text-zinc-500 hover:text-gray-900 p-2"
                         title="Proof of Score"
                       ><Terminal size={16} weight="duotone" /></button>
                     </div>
@@ -373,7 +373,7 @@ export default function RoundScorecard() {
                   <div className="font-mono-data text-xs text-zinc-500">PROOF OF SCORE</div>
                   <div className="font-display text-xl">Audit Log</div>
                 </div>
-                <button data-testid="close-proof-btn" onClick={() => setShowProofFor(null)} className="text-zinc-500 hover:text-white">×</button>
+                <button data-testid="close-proof-btn" onClick={() => setShowProofFor(null)} className="text-zinc-500 hover:text-gray-900">×</button>
               </div>
               <div className="terminal">
                 {proof.length === 0 && <div>// no edits yet</div>}
@@ -417,9 +417,9 @@ export default function RoundScorecard() {
           </button>
           {chatOpen && (
             <div className="fixed bottom-24 right-6 z-30 w-[min(360px,calc(100vw-2rem))] glass rounded-2xl overflow-hidden flex flex-col" style={{ maxHeight: "60vh" }} data-testid="chat-drawer">
-              <div className="p-3 border-b border-white/10 flex items-center justify-between">
+              <div className="p-3 border-b border-gray-200 flex items-center justify-between">
                 <div className="font-display text-sm">Card Chat · {activeCard.label}</div>
-                <button onClick={() => setChatOpen(false)} className="text-zinc-500 hover:text-white text-xl leading-none">×</button>
+                <button onClick={() => setChatOpen(false)} className="text-zinc-500 hover:text-gray-900 text-xl leading-none">×</button>
               </div>
               <div className="flex-1 overflow-y-auto p-3 space-y-2">
                 {chat.length === 0 && <div className="text-zinc-500 text-xs text-center py-4">Say hi 👋</div>}
@@ -431,14 +431,14 @@ export default function RoundScorecard() {
                 ))}
                 <div ref={chatEnd} />
               </div>
-              <div className="p-2 border-t border-white/10 flex gap-2">
+              <div className="p-2 border-t border-gray-200 flex gap-2">
                 <input
                   data-testid="chat-input"
                   value={chatText}
                   onChange={(e) => setChatText(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && sendChat()}
                   placeholder="Message + 🥏"
-                  className="flex-1 h-10 bg-[#2a5f3d] border border-white/10 rounded-md px-3 text-sm"
+                  className="flex-1 h-10 bg-white border border-gray-200 border border-gray-200 rounded-md px-3 text-sm"
                 />
                 <button data-testid="chat-send-btn" onClick={sendChat} className="btn-primary text-xs px-4">Send</button>
               </div>

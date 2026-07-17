@@ -40,7 +40,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#1f4d2e]" data-testid="dashboard-page">
+    <div className="min-h-screen bg-white" data-testid="dashboard-page">
       <AppHeader />
       <main className="max-w-7xl mx-auto px-6 py-10">
         <div className="flex items-end justify-between mb-8">
@@ -90,7 +90,7 @@ export default function Dashboard() {
                   {l.format}
                 </div>
               </div>
-              <div className="flex items-center justify-between pt-4 border-t border-white/5">
+              <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                 <div className="flex items-center gap-2 text-xs text-zinc-500">
                   <Users size={14} weight="duotone" /> {l.member_count} players
                 </div>
@@ -119,7 +119,7 @@ export default function Dashboard() {
                   <button
                     data-testid={`browse-join-btn-${l.id}`}
                     onClick={() => join(l.id)}
-                    className="mt-4 w-full py-2 border border-white/10 rounded-full text-sm hover:bg-white/5"
+                    className="mt-4 w-full py-2 border border-gray-200 rounded-full text-sm hover:bg-white/5"
                   >Join League</button>
                 </div>
               ))}

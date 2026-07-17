@@ -23,7 +23,7 @@ export default function PlayerProfile() {
 
   if (!profile) {
     return (
-      <div className="min-h-screen bg-[#1f4d2e]">
+      <div className="min-h-screen bg-white">
         <AppHeader />
         <div className="max-w-4xl mx-auto p-10 text-zinc-500 font-mono-data text-xs">LOADING…</div>
       </div>
@@ -42,10 +42,10 @@ export default function PlayerProfile() {
   const bestRound = history.reduce((best, h) => (!best || h.plus_minus < best.plus_minus ? h : best), null);
 
   return (
-    <div className="min-h-screen bg-[#1f4d2e]" data-testid="player-profile-page">
+    <div className="min-h-screen bg-white" data-testid="player-profile-page">
       <AppHeader />
       <main className="max-w-5xl mx-auto px-6 py-8">
-        <button data-testid="back-to-league-btn" onClick={() => navigate(`/leagues/${leagueId}`)} className="text-zinc-400 hover:text-white flex items-center gap-1 text-sm mb-6">
+        <button data-testid="back-to-league-btn" onClick={() => navigate(`/leagues/${leagueId}`)} className="text-zinc-400 hover:text-gray-900 flex items-center gap-1 text-sm mb-6">
           <CaretLeft size={16} /> Back to League
         </button>
 
@@ -70,7 +70,7 @@ export default function PlayerProfile() {
                       data-testid="profile-division-select"
                       value={divVal}
                       onChange={(e) => setDivVal(e.target.value)}
-                      className="h-7 bg-[#2a5f3d] border border-white/10 rounded-md px-2 text-xs"
+                      className="h-7 bg-white border border-gray-200 border border-gray-200 rounded-md px-2 text-xs"
                     >
                       {(league?.divisions || ["Open"]).map((d) => <option key={d}>{d}</option>)}
                     </select>
