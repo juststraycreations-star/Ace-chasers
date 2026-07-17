@@ -307,3 +307,33 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **Frontend integration**: new `context/AuthContext.jsx` bridges Firebase Zustand store → league `useAuth()`. Vite gained `@` path alias + `optimizeDeps.esbuildOptions.alias` + `optimizeDeps.include: ['react-is']`. `lib/api.js` gained named `API` export. Routes: `/leagues`, `/leagues/new`, `/leagues/:id`, `/leagues/:id/players/:userId`, `/rounds/:roundId`. Nav "Leagues" tab added.
 - **Verified via screenshot**: `/leagues` renders LeagueDashboard with empty state, zero page errors, backend router responds to authenticated Firebase requests.
 - **Follow-ups**: testing-agent regression pass on merged app; theme reconciliation (league dark/orange vs Ace Chasers disc-green); route the LeagueLanding page; add tests for 40+ new API routes.
+
+
+### Session 34 — League theme reconciliation & redirect fix (Feb 2026)
+- Verified iter 25 regression fix: League nav buttons no longer redirect to /feed. Root cause was auth bridge duplicate-key (E11000) on `users.uid` + 5 stale `/dashboard`/`/create-league` route strings; testing agent patched both.
+- Background colors on all imported league pages switched from black → white to match Ace Chasers.
+
+### Session 35 — Legal compliance UI + backend enforcement (Feb 2026)
+- **User request**: integrate legal compliance wrappers, disclaimers, and terms of service text UI components into League Dashboard and Ledger views.
+- **Ledger Privacy Disclaimer**: new `/app/frontend/src/components/LedgerDisclaimer.jsx` reused inside `CreateLeague.jsx` step-4 payouts and `LedgerTab.jsx`. Copy: "Ace Chasers provides an automated calculation ledger utility. Real-world financial pool management and payouts are the sole responsibility of the League Director." Links to `/legal/privacy`.
+- **Legal page**: new `/app/frontend/src/pages/legal/Privacy.jsx` at route `/legal/privacy` (public, works signed-out). Four sections: Ledger Utility Disclosure, Proof of Score Audit Trail, Fair Play Terms · Private Clubhouse, Data & Privacy.
+- **Scorecard Submission Certification** (frontend): `RoundScorecard.jsx` — each active scorecard row now has `finalize-btn-{sc.id}`. Clicking opens `finalize-modal` with `finalize-cert-checkbox` (required copy: "I certify that these scores are accurate. I understand that submitting updates the automated digital Bag Tag matrix and logs my user ID in the Proof of Score audit trail."). `finalize-confirm-btn` stays disabled until checkbox is ticked. Row shows `finalized-badge-{sc.id}` after success.
+- **Scorecard Certification** (backend, `leagues_router.py`):
+  - `Scorecard` model gained `finalized`, `certified`, `certified_by_user_id`, `certified_by_name`, `certified_at`.
+  - NEW `POST /api/scorecards/{scorecard_id}/finalize` with `{certified: bool}` payload. Rejects `certified=false` with 400 "Certification required...". On success writes cert fields + a ProofLog audit entry + WS broadcast.
+  - `PATCH /api/scorecards/{id}/score` now returns 409 "Scorecard already finalized" if the row is locked.
+- **Clubhouse First-Time Fair Play Agreement**:
+  - `LeagueMember` model gained `clubhouse_agreed` (default false) and `clubhouse_agreed_at`.
+  - NEW `POST /api/leagues/{league_id}/clubhouse/agree` persists the flag + timestamp.
+  - `GET /api/leagues/{league_id}` exposes `my_clubhouse_agreed` for the current user.
+  - New `ClubhouseAgreementModal.jsx` overlays the Clubhouse tab until the member clicks "I Agree"; persistent per-league.
+- **Iter 25 follow-ups shipped**: `LeagueDashboard.jsx` load() now uses `Promise.allSettled` so a failing `/leagues/browse` doesn't kill the dashboard; `AppHeader.jsx` trophy shadow rgba(255,92,0) → rgba(245,197,66); `LeagueLanding.jsx` + `VictoryCard.jsx` orange rgba/`#FF5C00` remnants swapped to disc-gold.
+- **Verified**: `/app/test_reports/iteration_26.json` — 10/10 new backend tests + prior 64/64 regression green. Zero bugs.
+
+## Prioritized backlog
+- **P1** — Wire the Clubhouse Agreement modal for other private surfaces (Announcements-only view, DM invites) that share the same trust model.
+- **P1** — Add "finalize round" (director-level) sweep action that requires certification of all cards in one modal.
+- **P2** — Convert `ProofLog` schema to include an explicit `event_type` field (score_edit / certification / director_note) instead of overloading `hole=0` + name suffix.
+- **P2** — Break `leagues_router.py` (1,700+ lines) into `league_seasons`, `league_rounds`, `league_ledger`, `league_clubhouse` submodules.
+- **P2** — Integrate Sentry for production error tracking (needs user DSN).
+- **P3** — Real-time notifications via Firestore listener or websockets for non-round events.
