@@ -25,7 +25,7 @@ export default function Landing() {
         {/* Nav */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#F5C542] flex items-center justify-center shadow-[0_0_32px_-4px_rgba(255,92,0,0.7)]">
+            <div className="w-10 h-10 rounded-xl bg-[#F5C542] flex items-center justify-center shadow-[0_0_32px_-4px_rgba(245,197,66,0.7)]">
               <Trophy size={22} weight="fill" color="#0a0a0a" />
             </div>
             <div>

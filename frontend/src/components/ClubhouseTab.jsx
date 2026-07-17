@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import api from "@/lib/api";
 import AuthImage from "./AuthImage";
 import Lightbox from "./Lightbox";
+import ClubhouseAgreementModal from "./ClubhouseAgreementModal";
 import { toast } from "sonner";
 import { PushPin, Warning, ImageSquare, Plus, Fire, TrendUp, Trash, CheckCircle } from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,22 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
   const [showAnnForm, setShowAnnForm] = useState(false);
   const [lfForm, setLfForm] = useState({ title: "", description: "" });
   const [lightbox, setLightbox] = useState(null); // {path, caption}
+  // First-time Fair Play Terms overlay. null = still loading, false = must
+  // show modal, true = already agreed.
+  const [clubhouseAgreed, setClubhouseAgreed] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get(`/leagues/${leagueId}`);
+        if (!cancelled) setClubhouseAgreed(!!data.my_clubhouse_agreed);
+      } catch {
+        if (!cancelled) setClubhouseAgreed(true); // fail-open so the feed still renders
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [leagueId]);
 
   const load = async () => {
     try {
@@ -103,6 +120,12 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
 
   return (
     <div className="space-y-6" data-testid="clubhouse-tab">
+      {clubhouseAgreed === false && (
+        <ClubhouseAgreementModal
+          leagueId={leagueId}
+          onAgree={() => setClubhouseAgreed(true)}
+        />
+      )}
       {/* Story grid */}
       <div className="card-surface p-6">
         <div className="flex items-center justify-between mb-4">

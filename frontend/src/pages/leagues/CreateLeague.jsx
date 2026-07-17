@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { CaretLeft, CaretRight, Check, MapPin, Calendar, Coins } from "@phosphor-icons/react";
+import LedgerDisclaimer from "@/components/LedgerDisclaimer";
 
 const FORMATS = [
   { key: "Singles", desc: "Every player plays their own card." },
@@ -212,6 +213,7 @@ export default function CreateLeague() {
 
           {step === 4 && (
             <div className="space-y-6" data-testid="wizard-step-payouts">
+              <LedgerDisclaimer testid="wizard-ledger-disclaimer" />
               <div className="flex items-center gap-2 text-zinc-400">
                 <Coins size={18} weight="duotone" />
                 <div className="font-mono-data text-xs">WIN ALLOCATION FORMULA</div>

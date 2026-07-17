@@ -10,7 +10,7 @@ export default function AppHeader() {
     <header className="sticky top-0 z-30 glass border-b border-white/5">
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <Link to="/leagues" data-testid="header-home-link" className="flex items-center gap-3 group">
-          <div className="w-9 h-9 rounded-lg bg-[#F5C542] flex items-center justify-center shadow-[0_0_24px_-4px_rgba(255,92,0,0.7)]">
+          <div className="w-9 h-9 rounded-lg bg-[#F5C542] flex items-center justify-center shadow-[0_0_24px_-4px_rgba(245,197,66,0.7)]">
             <Trophy size={20} weight="fill" color="#0a0a0a" />
           </div>
           <div>

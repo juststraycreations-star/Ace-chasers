@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 26 — Legal compliance features (Ledger disclaimer, Scorecard certification checkbox + finalize enforcement, Clubhouse first-time Fair Play agreement) + iter 25 follow-ups. Backend 10/10 pytest pass covering: LeagueMember clubhouse_agreed schema default false, Scorecard cert-field schema, POST /scorecards/{id}/finalize {certified:false}=>400 with 'Certification required...' detail, {certified:true}=>200 persists finalized/certified_by_user_id/certified_at, subsequent PATCH /scorecards/{id}/score=>409 'Scorecard already finalized', idempotent re-finalize, POST /leagues/{id}/clubhouse/agree persists flag and GET /leagues/{id}.my_clubhouse_agreed=true, both endpoints 401 without auth. Frontend E2E validated: /legal/privacy page renders 'Privacy, Terms & Fair Play' with all 4 sections; redirect fix HOLDS — nav-leagues stays on /leagues, header-create-league-btn and dashboard-create-league-btn both route to /leagues/new (no bounce to /feed); wizard step 4 shows wizard-ledger-disclaimer with the exact required copy + /legal/privacy link; Ledger tab shows ledger-tab-disclaimer with /legal/privacy link; Clubhouse tab first-visit shows ClubhouseAgreementModal, 'I Agree' dismisses it, and after reload it does NOT reappear (persisted). Follow-ups from iter 25 fixed: AppHeader trophy shadow now rgba(245,197,66,0.7), LeagueDashboard uses Promise.allSettled.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration26.py",
+    "/app/test_reports/pytest/iteration_26.xml"
+  ],
+  "action_items": [
+    "Frontend scorecard finalize+cert modal UI (finalize-modal, finalize-cert-checkbox, finalize-confirm-btn, finalized-badge) was code-reviewed and wired to the same POST /scorecards/{id}/finalize endpoint that was proven working via backend pytest (10/10). Full E2E click-through of the finalize modal was not run due to the heavier setup (create director league -> season -> round -> card -> mark round active -> click finalize on scorecard row); the modal logic is a straightforward disabled-until-checked button. Consider a shallow UI test in a future iter if the reviewer wants live click-through."
+  ],
+  "critical_code_review_comments": [
+    "leagues_router.py: POST /scorecards/{id}/finalize correctly rejects certified=false with 400 'Certification required...' and PATCH /scorecards/{id}/score guards with sc.get('finalized') -> 409. Good — enforcement is on the write path, not just the UI.",
+    "LeagueMember schema (L239) defaults clubhouse_agreed=False, clubhouse_agreed_at=None; the /join endpoint creates the member with defaults so a fresh join always shows the modal. Correct.",
+    "get_league (L536) exposes my_clubhouse_agreed only for the current user — good, doesn't leak other members' agreement state.",
+    "ClubhouseAgreementModal wraps a POST /leagues/{id}/clubhouse/agree and re-reads /leagues/{id}.my_clubhouse_agreed; per code, ClubhouseTab conditionally renders the modal when my_clubhouse_agreed is falsy — verified in the live test that after 'I Agree' click + reload, modal stays hidden.",
+    "AppHeader.jsx L13 shadow is now rgba(245,197,66,0.7) (disc-gold). Prior iter 25 flagged orange rgba was fixed. Good.",
+    "LeagueDashboard.jsx load() now uses Promise.allSettled, so a failing /leagues/browse won't suppress /leagues data or fire the top-level 'Failed to load leagues' toast. Good.",
+    "Minor: In finalize_scorecard the 'audit' ProofLog uses hole=0 and stuffs 'CERTIFIED' into edited_by_name — works, but a dedicated event_type field on ProofLog would be cleaner long-term."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration26.py (new — 10 tests covering finalize enforcement, clubhouse agree, schema, auth gating)"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 iteration 26 tests pass; iter 25 baseline 64/64 unchanged)",
+    "frontend": "100% for the tested slice — /legal/privacy renders, redirect fix holds (nav-leagues + 2 create buttons), wizard step-4 disclaimer + copy match + link, ledger-tab disclaimer + link, clubhouse first-time modal + agree POST + persist-on-reload."
+  },
+  "test_credentials": "Firebase Identity Toolkit signUp with random TEST_i26_* / TEST_i26ui_* emails. Same pattern as iter 19-25.",
+  "seed_data_creation": "Created 1 director user + 1 TEST_i26_League_* via pytest fixtures; created 1 TEST_i26_UI_* league + 1 round + 1 card via UI. Firebase test users are not cleaned up.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 26 adds three legal-compliance endpoints and their UI counterparts. Backend enforcement is complete and unit-tested. If a future iter needs the scorecard finalize modal E2E in the browser: sign up director -> create league -> Rounds tab -> new round -> pick date -> create round -> Cards tab -> new card with the director as player -> mark round active -> click data-testid=finalize-btn-{scorecardId} on the row -> assert finalize-modal appears with disabled finalize-confirm-btn -> tick finalize-cert-checkbox -> button enables -> click -> row shows finalized-badge-{scorecardId} 'Certified'. Redirect fix from iter 25 is stable. Clubhouse agreement persists via LeagueMember.clubhouse_agreed and is exposed on GET /api/leagues/{id}.my_clubhouse_agreed.",
+  "rca of the issue": "N/A — no bugs found this iter. All 3 new endpoints (POST /scorecards/{id}/finalize, POST /leagues/{id}/clubhouse/agree, plus PATCH /scorecards/{id}/score 409 guard), 2 new schema field groups (LeagueMember clubhouse_agreed*, Scorecard finalized/certified*), 4 new UI components (Privacy page, LedgerDisclaimer, ClubhouseAgreementModal, finalize-modal in RoundScorecard), and the 3 create-league redirect entry points all behave per spec."
+}

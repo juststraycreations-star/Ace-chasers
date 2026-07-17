@@ -13,19 +13,26 @@ export default function Dashboard() {
 
   const load = async () => {
     setLoading(true);
-    try {
-      const [mine, all] = await Promise.all([
-        api.get("/leagues"),
-        api.get("/leagues/browse"),
-      ]);
-      setMyLeagues(mine.data);
-      const mineIds = new Set(mine.data.map((l) => l.id));
-      setBrowse(all.data.filter((l) => !mineIds.has(l.id)));
-    } catch (e) {
-      toast.error("Failed to load leagues");
-    } finally {
-      setLoading(false);
+    // Use allSettled so a broken /leagues/browse (e.g. 500) doesn't
+    // suppress the /leagues data or fire a scary top-level toast.
+    const [mineRes, allRes] = await Promise.allSettled([
+      api.get("/leagues"),
+      api.get("/leagues/browse"),
+    ]);
+    let mineIds = new Set();
+    if (mineRes.status === "fulfilled") {
+      setMyLeagues(mineRes.value.data);
+      mineIds = new Set(mineRes.value.data.map((l) => l.id));
+    } else {
+      toast.error("Failed to load your leagues");
     }
+    if (allRes.status === "fulfilled") {
+      setBrowse(allRes.value.data.filter((l) => !mineIds.has(l.id)));
+    } else {
+      // Non-fatal: dashboard still usable; just no browse suggestions.
+      setBrowse([]);
+    }
+    setLoading(false);
   };
 
   useEffect(() => { load(); }, []);

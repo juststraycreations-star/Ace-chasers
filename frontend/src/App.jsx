@@ -21,6 +21,7 @@ import CreateLeague from './pages/leagues/CreateLeague';
 import LeagueDetail from './pages/leagues/LeagueDetail';
 import RoundScorecard from './pages/leagues/RoundScorecard';
 import LeaguePlayerProfile from './pages/leagues/LeaguePlayerProfile';
+import Privacy from './pages/legal/Privacy';
 import { AuthProvider as LeagueAuthProvider } from './context/AuthContext';
 
 function AppRoutes() {
@@ -46,10 +47,12 @@ function AppRoutes() {
           <>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<SignUp />} />
+            <Route path="/legal/privacy" element={<Privacy />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </>
         ) : (
           <>
+            <Route path="/legal/privacy" element={<Privacy />} />
             <Route path="/feed" element={<Feed />} />
             <Route path="/bagcheck" element={<BagCheck />} />
             <Route path="/courses" element={<Courses />} />

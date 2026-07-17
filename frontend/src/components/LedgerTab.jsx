@@ -3,6 +3,7 @@ import api, { API } from "../lib/api";
 import { toast } from "sonner";
 import { Coins, ArrowUpRight, ArrowDownRight, Plus, DownloadSimple, UsersFour } from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";
+import LedgerDisclaimer from "./LedgerDisclaimer";
 
 function EntryFeeEscrowCard({ leagueId, onCollected }) {
   const [members, setMembers] = useState([]);
@@ -157,6 +158,7 @@ export default function LedgerTab({ leagueId, isDirector }) {
 
   return (
     <div className="space-y-6" data-testid="ledger-tab">
+      <LedgerDisclaimer testid="ledger-tab-disclaimer" />
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {["Weekly Payout", "Ace Pool", "Club Fund", "CTP Cash"].map((cat) => {
           const t = totals[cat] || { credit: 0, debit: 0 };

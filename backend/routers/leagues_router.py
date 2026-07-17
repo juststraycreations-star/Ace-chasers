@@ -247,6 +247,10 @@ class LeagueMember(BaseModel):
     role: Literal["director", "player"] = "player"
     division: str = "Open"
     total_points: float = 0.0
+    # Fair Play Terms agreement for the private Clubhouse feed. Persisted
+    # per-league so the welcome overlay only renders once per member.
+    clubhouse_agreed: bool = False
+    clubhouse_agreed_at: Optional[str] = None
     joined_at: str = Field(default_factory=now_iso)
 
 class Card(BaseModel):
@@ -274,6 +278,14 @@ class Scorecard(BaseModel):
     plus_minus: int = 0  # vs par
     handicap_at_round: float = 0.0
     version: int = 1
+    # Certification / Proof-of-Score audit trail. Once finalized, the
+    # score card is locked from further edits and the certifying user_id
+    # is recorded here + into the proof_logs collection.
+    finalized: bool = False
+    certified: bool = False
+    certified_by_user_id: Optional[str] = None
+    certified_by_name: Optional[str] = None
+    certified_at: Optional[str] = None
     updated_at: str = Field(default_factory=now_iso)
     created_at: str = Field(default_factory=now_iso)
 
@@ -521,6 +533,7 @@ async def get_league(league_id: str, request: Request,
     lg["is_member"] = bool(membership)
     lg["is_director"] = bool(membership and membership.get("role") == "director")
     lg["my_bag_tag"] = membership.get("bag_tag") if membership else None
+    lg["my_clubhouse_agreed"] = bool(membership and membership.get("clubhouse_agreed"))
     lg["member_count"] = await db.league_members.count_documents({"league_id": league_id})
     return lg
 
@@ -682,6 +695,8 @@ async def update_score(scorecard_id: str, payload: ScoreUpdate, request: Request
 
     idx = payload.hole - 1
     old_val = sc["scores"][idx]
+    if sc.get("finalized"):
+        raise HTTPException(status_code=409, detail="Scorecard already finalized")
     scores = list(sc["scores"])
     scores[idx] = int(payload.strokes)
     # totals
@@ -716,6 +731,92 @@ async def get_proof(scorecard_id: str, request: Request,
     await get_current_user(request, session_token, authorization)
     logs = await db.proof_logs.find({"scorecard_id": scorecard_id}, {"_id": 0}).sort("timestamp", -1).to_list(500)
     return logs
+
+
+# ============= SCORECARD FINALIZE / CERTIFY =============
+class ScorecardFinalizePayload(BaseModel):
+    # The player or card captain MUST tick the certification checkbox in
+    # the UI; the API rejects the payload otherwise. This value is
+    # persisted onto the scorecard document as an authoritative record
+    # that a human user reviewed and attested to the scores.
+    certified: bool = False
+
+
+@api_router.post("/scorecards/{scorecard_id}/finalize")
+async def finalize_scorecard(scorecard_id: str, payload: ScorecardFinalizePayload,
+                             request: Request,
+                             session_token: Optional[str] = Cookie(None),
+                             authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    if not payload.certified:
+        # Reject the payload if the certification checkbox was not ticked
+        # in the UI. This is the enforcement point requested by the
+        # legal compliance workflow.
+        raise HTTPException(
+            status_code=400,
+            detail="Certification required. You must attest that the scores are accurate before finalizing.",
+        )
+    sc = await db.scorecards.find_one({"id": scorecard_id}, {"_id": 0})
+    if not sc:
+        raise HTTPException(status_code=404, detail="Scorecard not found")
+    await _require_member(sc["league_id"], user.user_id)
+    if sc.get("finalized"):
+        return {"ok": True, "already_finalized": True}
+    now = now_iso()
+    await db.scorecards.update_one(
+        {"id": scorecard_id},
+        {"$set": {
+            "finalized": True,
+            "certified": True,
+            "certified_by_user_id": user.user_id,
+            "certified_by_name": user.name,
+            "certified_at": now,
+            "updated_at": now,
+        }},
+    )
+    # Log the certification into the Proof of Score audit trail so it
+    # persists alongside every hole edit.
+    audit = ProofLog(
+        scorecard_id=scorecard_id,
+        round_id=sc["round_id"],
+        hole=0,
+        old_value=0,
+        new_value=int(sc.get("total") or 0),
+        edited_by_user_id=user.user_id,
+        edited_by_name=f"{user.name} · CERTIFIED",
+    )
+    await db.proof_logs.insert_one(audit.model_dump())
+    await ws_manager.broadcast(
+        f"round:{sc['round_id']}",
+        {"type": "score_update", "scorecard_id": scorecard_id, "finalized": True},
+    )
+    return {
+        "ok": True,
+        "finalized": True,
+        "certified_by_user_id": user.user_id,
+        "certified_at": now,
+    }
+
+
+# ============= CLUBHOUSE FAIR PLAY AGREEMENT =============
+@api_router.post("/leagues/{league_id}/clubhouse/agree")
+async def agree_clubhouse_terms(league_id: str, request: Request,
+                                 session_token: Optional[str] = Cookie(None),
+                                 authorization: Optional[str] = Header(None)):
+    """First-time Fair Play Terms agreement for the Clubhouse feed.
+    Persists { clubhouse_agreed: True, clubhouse_agreed_at } on the
+    LeagueMember doc so the welcome modal only renders once per member.
+    """
+    user = await get_current_user(request, session_token, authorization)
+    m = await _require_member(league_id, user.user_id)
+    if m.get("clubhouse_agreed"):
+        return {"ok": True, "already_agreed": True, "clubhouse_agreed_at": m.get("clubhouse_agreed_at")}
+    now = now_iso()
+    await db.league_members.update_one(
+        {"id": m["id"]},
+        {"$set": {"clubhouse_agreed": True, "clubhouse_agreed_at": now}},
+    )
+    return {"ok": True, "clubhouse_agreed": True, "clubhouse_agreed_at": now}
 
 
 # ============= CHAT =============

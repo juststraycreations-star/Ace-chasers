@@ -40,6 +40,9 @@ export default function RoundScorecard() {
   const [showCTP, setShowCTP] = useState(false);
   const [ctpRefresh, setCtpRefresh] = useState(0);
   const [showPayout, setShowPayout] = useState(false);
+  const [certifyForScorecardId, setCertifyForScorecardId] = useState(null);
+  const [certifyChecked, setCertifyChecked] = useState(false);
+  const [certifying, setCertifying] = useState(false);
   const chatEnd = useRef(null);
 
   const load = async () => {
@@ -107,6 +110,31 @@ export default function RoundScorecard() {
       const { data } = await api.get(`/scorecards/${scorecardId}/proof`);
       setProof(data);
     } catch {}
+  };
+
+  const openCertify = (scorecardId) => {
+    setCertifyForScorecardId(scorecardId);
+    setCertifyChecked(false);
+  };
+
+  const finalizeScorecard = async () => {
+    if (!certifyChecked || !certifyForScorecardId) return;
+    setCertifying(true);
+    try {
+      await api.post(`/scorecards/${certifyForScorecardId}/finalize`, {
+        certified: true,
+      });
+      toast.success("Scorecard finalized · logged to Proof of Score");
+      setCertifyForScorecardId(null);
+      setCertifyChecked(false);
+      await load();
+    } catch (e) {
+      toast.error(
+        e?.response?.data?.detail || "Finalize failed. Certification required."
+      );
+    } finally {
+      setCertifying(false);
+    }
   };
 
   const sendChat = async () => {
@@ -348,6 +376,25 @@ export default function RoundScorecard() {
                         className="ml-1 text-zinc-500 hover:text-gray-900 p-2"
                         title="Proof of Score"
                       ><Terminal size={16} weight="duotone" /></button>
+                      {!sc.finalized && (
+                        <button
+                          data-testid={`finalize-btn-${sc.id}`}
+                          onClick={() => openCertify(sc.id)}
+                          className="ml-1 text-xs px-3 py-2 rounded-lg bg-[#F5C542]/15 border border-[#F5C542]/40 text-[#F5C542] hover:bg-[#F5C542]/25 flex items-center gap-1 font-mono-data uppercase tracking-wider"
+                          title="Finalize this scorecard"
+                        >
+                          Finalize
+                        </button>
+                      )}
+                      {sc.finalized && (
+                        <span
+                          data-testid={`finalized-badge-${sc.id}`}
+                          className="ml-1 text-[10px] px-2 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-500 font-mono-data uppercase"
+                          title={sc.certified_at ? `Certified ${new Date(sc.certified_at).toLocaleString()}` : "Certified"}
+                        >
+                          Certified
+                        </span>
+                      )}
                     </div>
                   </div>
                   {/* Full holes strip */}
@@ -382,6 +429,68 @@ export default function RoundScorecard() {
                     <span className="ts">[{new Date(p.timestamp).toLocaleTimeString()}]</span> H{p.hole} <span className="val">{p.old_value}→{p.new_value}</span> · {p.edited_by_name}
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Finalize Round / Certification modal */}
+        {certifyForScorecardId && (
+          <div
+            className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => !certifying && setCertifyForScorecardId(null)}
+            data-testid="finalize-modal"
+          >
+            <div
+              className="bg-white rounded-2xl border border-gray-200 max-w-md w-full p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4">
+                <div className="font-mono-data text-[10px] text-zinc-500 tracking-wider">
+                  SUBMIT SCORECARD · CERTIFICATION REQUIRED
+                </div>
+                <div className="font-display text-2xl tracking-tight mt-1">
+                  Finalize Round
+                </div>
+              </div>
+              <p className="text-sm text-gray-700 leading-relaxed">
+                Once you finalize, this scorecard is locked from further edits and
+                your certification is written to the Proof of Score audit trail.
+              </p>
+              <label
+                className="mt-4 flex items-start gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100"
+                data-testid="finalize-cert-label"
+              >
+                <input
+                  type="checkbox"
+                  data-testid="finalize-cert-checkbox"
+                  checked={certifyChecked}
+                  onChange={(e) => setCertifyChecked(e.target.checked)}
+                  className="mt-1 w-4 h-4 rounded border-gray-400 text-[#F5C542] focus:ring-[#F5C542]"
+                />
+                <span className="text-xs text-gray-800 leading-snug">
+                  I certify that these scores are accurate. I understand that
+                  submitting updates the automated digital Bag Tag matrix and logs
+                  my user ID in the Proof of Score audit trail.
+                </span>
+              </label>
+              <div className="mt-5 flex items-center justify-end gap-2">
+                <button
+                  data-testid="finalize-cancel-btn"
+                  onClick={() => setCertifyForScorecardId(null)}
+                  disabled={certifying}
+                  className="text-xs px-4 py-2 rounded-lg text-zinc-600 hover:text-gray-900 disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+                <button
+                  data-testid="finalize-confirm-btn"
+                  onClick={finalizeScorecard}
+                  disabled={!certifyChecked || certifying}
+                  className="text-sm px-4 py-2 rounded-lg bg-[#F5C542] text-black font-bold hover:bg-[#f5cf5a] disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {certifying ? "Finalizing…" : "Finalize Round"}
+                </button>
               </div>
             </div>
           </div>

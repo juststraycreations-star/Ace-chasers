@@ -40,7 +40,7 @@ export default function VictoryCard({ winnerName, division, finalScore, roundNam
     ctx.save();
     ctx.translate(W * 0.5, H * 0.5);
     ctx.rotate(-Math.PI / 12);
-    ctx.fillStyle = "rgba(255,92,0,0.15)";
+    ctx.fillStyle = "rgba(245,197,66,0.15)";
     ctx.fillRect(-W, -60, W * 3, 120);
     ctx.restore();
 
@@ -53,12 +53,12 @@ export default function VictoryCard({ winnerName, division, finalScore, roundNam
     }
 
     // Border stroke
-    ctx.strokeStyle = "rgba(255,92,0,0.6)";
+    ctx.strokeStyle = "rgba(245,197,66,0.6)";
     ctx.lineWidth = 6;
     ctx.strokeRect(30, 30, W - 60, H - 60);
 
     // Brand mark
-    ctx.fillStyle = "#FF5C00";
+    ctx.fillStyle = "#F5C542";
     ctx.beginPath();
     ctx.roundRect(80, 80, 92, 92, 18);
     ctx.fill();
@@ -89,8 +89,8 @@ export default function VictoryCard({ winnerName, division, finalScore, roundNam
     ctx.fillText(leagueName || "", W / 2, 340);
 
     // "WINNER" pill
-    ctx.fillStyle = "rgba(255,92,0,0.15)";
-    ctx.strokeStyle = "rgba(255,92,0,0.6)";
+    ctx.fillStyle = "rgba(245,197,66,0.15)";
+    ctx.strokeStyle = "rgba(245,197,66,0.6)";
     ctx.lineWidth = 2;
     const pillW = 260;
     ctx.beginPath();
@@ -115,7 +115,7 @@ export default function VictoryCard({ winnerName, division, finalScore, roundNam
 
     // Score block
     ctx.font = "800 260px 'Anton', sans-serif";
-    ctx.fillStyle = "#FF5C00";
+    ctx.fillStyle = "#F5C542";
     ctx.textBaseline = "middle";
     ctx.fillText(String(finalScore ?? ""), W / 2, 900);
 
