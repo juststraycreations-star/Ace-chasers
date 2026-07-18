@@ -382,3 +382,20 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **P2** — ProofLog `event_type` schema.
 - **P3** — Real-time notifications for non-round events.
 
+
+### Session 38 — Perceived-perf fixes (Feb 2026)
+- **User complaint**: "when you click on the page it takes ages to load" (production).
+- **Investigation**: prod bundles now ship ~209 KB gzip on initial load and APIs return in 100-300ms. Not a code/network bottleneck — the felt-slowness is **blank screen during (a) lazy-chunk download + (b) data fetch**.
+- **Fix 1 — Nav hover/focus/touch prefetch (`Navigation.jsx`)**: added `ROUTE_PREFETCHERS` map (feed/bagcheck/courses/leagues/discovery/daily-plastic/messages/profile) + module-level `prefetched` Set for dedup. Every `<Link>` (both desktop and mobile) now warms the target chunk on `onMouseEnter` / `onFocus` / `onTouchStart` so by the time the user clicks, the JS is already cached. Feels instant.
+- **Fix 2 — Skeleton loaders (`Skeletons.jsx`)**: new `FeedSkeleton`, `PlayerGridSkeleton`, `LeagueGridSkeleton` using Tailwind `animate-pulse`. Shapes mirror real content → CLS=0. Wired into `Feed.jsx` (3 placeholders), `Discovery.jsx` (8 placeholders), `LeagueDashboard.jsx` (4 placeholders) replacing the old plain "Loading feed…" / "LOADING…" text.
+- **Verified**: `/app/test_reports/iteration_29.json` — 100% pass. Hover triggers new module requests in Vite dev, prod build still emits per-route chunks (verified via `yarn build`), all 3 skeletons render during in-flight fetch with correct testids, 11/11 lazy routes render authenticated content, report-bug-btn regression green.
+
+## Prioritized backlog (post-Session-38)
+- **P1** — Refactor Phase 2: extract Ledger + Rounds from `leagues_router.py`.
+- **P1** — Invite-friend flow (referral link + badge) — highest-leverage growth lever.
+- **P1** — DM Fair Play gate for reply flows.
+- **P2** — Compliance Dashboard for directors.
+- **P2** — Sentry integration (needs user DSN).
+- **P2** — ProofLog `event_type` schema cleanup.
+- **P3** — Real-time notifications for non-round events.
+
