@@ -399,3 +399,32 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **P2** — ProofLog `event_type` schema cleanup.
 - **P3** — Real-time notifications for non-round events.
 
+
+### Session 39 — Create Round + Self-serve Join Round + Full League Audit (Feb 2026)
+- **User report (production)**: "In leagues why can I not create a card — nothing happens when I click". Two root causes uncovered:
+  - **P0 #1**: `LeagueDetail.jsx` Rounds tab had **no "New Round" button at all** — a director had no way to schedule rounds through the UI even though `POST /api/leagues/{id}/rounds` had existed on the backend since the original merge.
+  - **P0 #2**: The backend `POST /api/rounds/{id}/cards` endpoint is director-only, so a regular player could not create a card for themselves to join an existing round.
+- **Fixes shipped**:
+  - **Create Round modal**: `LeagueDetail.jsx` now fetches `/api/leagues/{id}/seasons`, exposes a director-only `new-round-btn` (top-right on Rounds tab) plus a `rounds-empty-create-btn` inside the empty state. The `new-round-modal` collects name / date / holes (9/18/24/27) / optional course_rating, POSTs to `/api/leagues/{id}/rounds` using `seasons[0].id`, then navigates the director straight to `/rounds/{new_id}`.
+  - **NEW self-serve endpoint** `POST /api/rounds/{round_id}/join` in `leagues_router.py`. Creates (or reuses, idempotently) a solo Card labeled `{FirstName}'s Card` + a Scorecard with 18 zeros + the member's computed handicap. `_require_member` gate → non-members get 403. WS broadcasts `player_joined` on non-idempotent create.
+  - **Frontend `join-round-btn`**: `RoundScorecard.jsx` empty-state now shows "Join this round · create my card" for league members with no scorecard yet. Directs the player straight into scoring.
+- **Full League Audit (per user request)** — testing agent iter 30 confirmed every league surface operational:
+  - Create League wizard → seeds Season + director LeagueMember ✅
+  - Join League → creates player LeagueMember ✅
+  - Browse public leagues, Standings, Ledger (POST/GET/CSV export) ✅
+  - Clubhouse (announcements, lost-found, stories, feed) — all endpoints post-refactor ✅
+  - Score editing + individual finalize (rejects `certified=false`) + Sweep-finalize ✅
+  - CTP, Payouts, Auto-pair, Bag Tag matrix ✅
+  - DM Fair Play gate, Report Bug button, all 11 lazy routes ✅
+- **Verified**: `/app/test_reports/iteration_30.json` — 16/16 backend pytest + 14/14 frontend UI assertions, zero bugs. Naming nit only (`new-round-*-input` testids are prefixed vs the review spec's bare names — acceptable). Design note: onboarding profile-photo prompt + Clubhouse Fair Play modal stack on first league visit — each has its own dismiss CTA, acceptable UX.
+
+## Prioritized backlog (post-Session-39)
+- **P1** — Refactor Phase 2: extract Ledger + Rounds from `leagues_router.py`.
+- **P1** — Invite-friend referral flow (still the highest-leverage growth lever).
+- **P1** — DM Fair Play gate for reply flows.
+- **P2** — Compliance Dashboard for directors.
+- **P2** — Sentry integration (needs user DSN) — would have caught the "vendor-react useState" P0 before users did.
+- **P2** — ProofLog `event_type` schema.
+- **P3** — Real-time notifications for non-round events.
+- **P3** — Test-user cleanup sweep job (many `TEST_*@example.com` docs left behind by iter runs).
+
