@@ -10,6 +10,17 @@
     <meta name="apple-mobile-web-app-title" content="Ace Chasers" />
     <meta name="application-name" content="Ace Chasers" />
 
+    <!-- Preconnect to third-party origins we hit on nearly every page.
+         Saves ~100-200ms on the first Cloudinary image / Firebase token
+         refresh by warming the TCP+TLS handshake in parallel with HTML
+         parsing. `crossorigin` is required for Cloudinary because we
+         fetch images with credential-less CORS. -->
+    <link rel="preconnect" href="https://res.cloudinary.com" crossorigin />
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin />
+    <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+    <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com" />
+
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
