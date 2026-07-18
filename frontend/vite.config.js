@@ -12,23 +12,31 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      // Warn only above 900KB (React + Firebase + Radix vendors alone are
-      // dense). Real split targets are enforced by manualChunks below.
+      // Route-level code splitting via React.lazy() is the main perf win.
+      // The vendor splits below are ONLY for truly leaf packages (no
+      // other vendor imports them) — anything that transitively depends
+      // on React MUST NOT be extracted into its own chunk or we hit
+      // "Cannot read properties of undefined (reading 'useState')" at
+      // runtime due to circular-init between vendor chunks.
       chunkSizeWarningLimit: 900,
       rollupOptions: {
         output: {
-          // Vendor chunks let the browser cache the (rarely-changing) 3rd-
-          // party JS separately from our app code so shipping a new build
-          // only invalidates ~50KB, not 1.3MB.
           manualChunks: (id) => {
             if (!id.includes('node_modules')) return undefined;
-            if (id.includes('firebase')) return 'vendor-firebase';
-            if (id.includes('@radix-ui')) return 'vendor-radix';
-            if (id.includes('recharts') || id.includes('d3-')) return 'vendor-charts';
-            if (id.includes('@phosphor-icons') || id.includes('lucide-react')) return 'vendor-icons';
-            if (id.includes('react-router') || id.includes('react-dom') || id.includes('/react/')) return 'vendor-react';
-            if (id.includes('@tanstack')) return 'vendor-query';
-            if (id.includes('date-fns') || id.includes('sonner') || id.includes('cmdk') || id.includes('zod')) return 'vendor-ui';
+            // Firebase is a self-contained SDK — safe to split.
+            if (id.includes('/firebase/') || id.includes('@firebase/')) {
+              return 'vendor-firebase';
+            }
+            // Recharts + D3 pull ~80KB gz and are ONLY used on chart
+            // pages. Safe to split because they are React consumers but
+            // are lazy-imported through React.lazy pages, so their
+            // vendor chunk only loads when their consumer route loads.
+            if (id.includes('/recharts/') || id.includes('/d3-')) {
+              return 'vendor-charts';
+            }
+            // Everything else (React, react-dom, react-router, radix,
+            // phosphor, lucide, zustand, sonner, zod, axios, etc.) stays
+            // in ONE vendor chunk so the React init order is preserved.
             return 'vendor';
           },
         },
