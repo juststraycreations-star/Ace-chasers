@@ -19,19 +19,31 @@ export default function LeagueDetail() {
   const [league, setLeague] = useState(null);
   const [rounds, setRounds] = useState([]);
   const [members, setMembers] = useState([]);
+  const [seasons, setSeasons] = useState([]);
   const [tab, setTab] = useState("rounds");
   const [showQR, setShowQR] = useState(false);
+  // "New Round" modal state — director-only
+  const [showNewRound, setShowNewRound] = useState(false);
+  const [newRound, setNewRound] = useState({
+    name: "",
+    date: new Date().toISOString().slice(0, 10),
+    holes: 18,
+    course_rating: "",
+  });
+  const [creatingRound, setCreatingRound] = useState(false);
 
   const load = async () => {
     try {
-      const [lg, rd, mm] = await Promise.all([
+      const [lg, rd, mm, ss] = await Promise.all([
         api.get(`/leagues/${leagueId}`),
         api.get(`/leagues/${leagueId}/rounds`).catch(() => ({ data: [] })),
         api.get(`/leagues/${leagueId}/members`).catch(() => ({ data: [] })),
+        api.get(`/leagues/${leagueId}/seasons`).catch(() => ({ data: [] })),
       ]);
       setLeague(lg.data);
       setRounds(rd.data);
       setMembers(mm.data);
+      setSeasons(ss.data);
     } catch (e) {
       toast.error("Failed to load league");
     }
@@ -50,6 +62,35 @@ export default function LeagueDetail() {
   const completeRound = async (roundId) => {
     try { await api.patch(`/rounds/${roundId}/status`, { status: "completed" }); await load(); toast.success("Round finalized"); }
     catch { toast.error("Failed"); }
+  };
+
+  const createRound = async () => {
+    // Director-only. Requires an active season — league creation seeds
+    // one automatically so we can just take the first one.
+    if (!newRound.name.trim()) { toast.error("Give the round a name"); return; }
+    if (!newRound.date) { toast.error("Pick a date"); return; }
+    const seasonId = seasons[0]?.id;
+    if (!seasonId) { toast.error("This league has no active season yet"); return; }
+    setCreatingRound(true);
+    try {
+      const payload = {
+        season_id: seasonId,
+        name: newRound.name.trim(),
+        date: newRound.date,
+        holes: Number(newRound.holes) || 18,
+      };
+      if (newRound.course_rating) payload.course_rating = Number(newRound.course_rating);
+      const { data } = await api.post(`/leagues/${leagueId}/rounds`, payload);
+      toast.success("Round created");
+      setShowNewRound(false);
+      setNewRound({ name: "", date: new Date().toISOString().slice(0, 10), holes: 18, course_rating: "" });
+      // Take the director straight to the scorecard so they can build cards
+      navigate(`/rounds/${data.id}`);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to create round");
+    } finally {
+      setCreatingRound(false);
+    }
   };
 
   if (!league) return (
@@ -128,6 +169,17 @@ export default function LeagueDetail() {
 
         {tab === "rounds" && (
           <div className="space-y-4" data-testid="rounds-tab">
+            {league.is_director && (
+              <div className="flex justify-end">
+                <button
+                  data-testid="new-round-btn"
+                  onClick={() => setShowNewRound(true)}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  <Plus size={16} weight="bold" /> New Round
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {rounds.map((r) => (
                 <div key={r.id} className="card-surface p-5" data-testid={`round-card-${r.id}`}>
@@ -158,7 +210,22 @@ export default function LeagueDetail() {
                 </div>
               ))}
             </div>
-            {rounds.length === 0 && <div className="text-zinc-500 text-sm text-center py-8">No rounds scheduled yet</div>}
+            {rounds.length === 0 && (
+              <div className="text-zinc-500 text-sm text-center py-8" data-testid="rounds-empty-state">
+                No rounds scheduled yet
+                {league.is_director && (
+                  <div className="mt-3">
+                    <button
+                      data-testid="rounds-empty-create-btn"
+                      onClick={() => setShowNewRound(true)}
+                      className="btn-primary text-xs"
+                    >
+                      Create your first round
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -174,6 +241,98 @@ export default function LeagueDetail() {
             leagueId={leagueId}
             onAgree={() => setLeague((prev) => prev ? { ...prev, my_clubhouse_agreed: true } : prev)}
           />
+        )}
+
+        {/* New Round modal (director-only) */}
+        {showNewRound && (
+          <div
+            className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => !creatingRound && setShowNewRound(false)}
+            data-testid="new-round-modal"
+          >
+            <div
+              className="bg-white rounded-2xl border border-gray-200 max-w-md w-full p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4">
+                <div className="font-mono-data text-[10px] text-zinc-500 tracking-wider">SCHEDULE · DIRECTOR</div>
+                <div className="font-display text-2xl tracking-tight mt-1">New Round</div>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-zinc-500 font-mono-data uppercase tracking-wider mb-1">Round name</label>
+                  <input
+                    data-testid="new-round-name-input"
+                    value={newRound.name}
+                    onChange={(e) => setNewRound({ ...newRound, name: e.target.value })}
+                    placeholder="Week 3 · Winthrop Park"
+                    className="w-full h-11 bg-white border border-gray-200 rounded-md px-3 text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-zinc-500 font-mono-data uppercase tracking-wider mb-1">Date</label>
+                    <input
+                      type="date"
+                      data-testid="new-round-date-input"
+                      value={newRound.date}
+                      onChange={(e) => setNewRound({ ...newRound, date: e.target.value })}
+                      className="w-full h-11 bg-white border border-gray-200 rounded-md px-3 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-zinc-500 font-mono-data uppercase tracking-wider mb-1">Holes</label>
+                    <select
+                      data-testid="new-round-holes-input"
+                      value={newRound.holes}
+                      onChange={(e) => setNewRound({ ...newRound, holes: Number(e.target.value) })}
+                      className="w-full h-11 bg-white border border-gray-200 rounded-md px-3 text-sm"
+                    >
+                      <option value={9}>9</option>
+                      <option value={18}>18</option>
+                      <option value={24}>24</option>
+                      <option value={27}>27</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-500 font-mono-data uppercase tracking-wider mb-1">Course rating (optional)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    data-testid="new-round-rating-input"
+                    value={newRound.course_rating}
+                    onChange={(e) => setNewRound({ ...newRound, course_rating: e.target.value })}
+                    placeholder="e.g. 54.5"
+                    className="w-full h-11 bg-white border border-gray-200 rounded-md px-3 text-sm"
+                  />
+                </div>
+                {seasons.length === 0 && (
+                  <div className="rounded-md border border-yellow-300 bg-yellow-50 text-[11px] text-yellow-900 p-2">
+                    No active season detected — the round will still be created but standings may not compute.
+                  </div>
+                )}
+              </div>
+              <div className="mt-5 flex items-center justify-end gap-2">
+                <button
+                  data-testid="new-round-cancel-btn"
+                  onClick={() => setShowNewRound(false)}
+                  disabled={creatingRound}
+                  className="text-xs px-4 py-2 rounded-lg text-zinc-600 hover:text-gray-900 disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+                <button
+                  data-testid="new-round-confirm-btn"
+                  onClick={createRound}
+                  disabled={creatingRound || !newRound.name.trim() || !newRound.date}
+                  className="btn-primary text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {creatingRound ? "Creating…" : "Create Round"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </main>
     </div>

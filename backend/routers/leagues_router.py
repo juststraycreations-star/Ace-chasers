@@ -680,6 +680,69 @@ async def create_card(round_id: str, payload: CardCreate, request: Request,
     return card.model_dump()
 
 
+# ============= SELF-SERVE ROUND JOIN =============
+@api_router.post("/rounds/{round_id}/join")
+async def join_round(round_id: str, request: Request,
+                      session_token: Optional[str] = Cookie(None),
+                      authorization: Optional[str] = Header(None)):
+    """Self-serve endpoint that lets any league member sign themselves up
+    for an existing round. Creates (or reuses) a solo card labeled with
+    the member's name plus their scorecard. This is the counterpart to
+    the director-only bulk create_card endpoint above.
+
+    Idempotent — if the user already has a scorecard on the round, the
+    existing card + scorecard are returned unchanged.
+    """
+    user = await get_current_user(request, session_token, authorization)
+    rd = await db.rounds.find_one({"id": round_id}, {"_id": 0})
+    if not rd:
+        raise HTTPException(status_code=404, detail="Round not found")
+    m = await _require_member(rd["league_id"], user.user_id)
+
+    # Idempotent short-circuit: already scored on this round.
+    existing_sc = await db.scorecards.find_one(
+        {"round_id": round_id, "member_id": m["id"]}, {"_id": 0}
+    )
+    if existing_sc and existing_sc.get("card_id"):
+        existing_card = await db.cards.find_one({"id": existing_sc["card_id"]}, {"_id": 0})
+        return {
+            "already_joined": True,
+            "card": existing_card,
+            "scorecard": existing_sc,
+        }
+
+    # Create a solo card for this player.
+    label = f"{m['name'].split(' ')[0]}'s Card"
+    card = Card(round_id=round_id, label=label, player_ids=[m["id"]])
+    await db.cards.insert_one(card.model_dump())
+
+    # Create their scorecard (or link the existing one to the new card).
+    if existing_sc:
+        await db.scorecards.update_one(
+            {"id": existing_sc["id"]},
+            {"$set": {"card_id": card.id}},
+        )
+        sc = {**existing_sc, "card_id": card.id}
+    else:
+        handicap = await _compute_handicap(rd["league_id"], m["id"], rd["par_per_hole"])
+        sc = Scorecard(
+            round_id=round_id, league_id=rd["league_id"], member_id=m["id"],
+            card_id=card.id, scores=[0]*rd["holes"], handicap_at_round=handicap,
+        )
+        await db.scorecards.insert_one(sc.model_dump())
+        sc = sc.model_dump()
+
+    await ws_manager.broadcast(
+        f"round:{round_id}",
+        {"type": "player_joined", "member_id": m["id"], "card_id": card.id},
+    )
+    return {
+        "already_joined": False,
+        "card": card.model_dump(),
+        "scorecard": sc,
+    }
+
+
 # ============= SCORECARDS =============
 class ScoreUpdate(BaseModel):
     hole: int  # 1-indexed

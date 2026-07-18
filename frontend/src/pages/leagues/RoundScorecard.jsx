@@ -48,6 +48,7 @@ export default function RoundScorecard() {
   const [sweepChecked, setSweepChecked] = useState(false);
   const [sweepComplete, setSweepComplete] = useState(true);
   const [sweeping, setSweeping] = useState(false);
+  const [joining, setJoining] = useState(false);
   const chatEnd = useRef(null);
 
   const load = async () => {
@@ -198,6 +199,20 @@ export default function RoundScorecard() {
     } catch (e) { toast.error(e?.response?.data?.detail || "Auto-pair failed"); }
   };
 
+  const joinRound = async () => {
+    setJoining(true);
+    try {
+      const { data } = await api.post(`/rounds/${roundId}/join`);
+      toast.success(data.already_joined ? "You're already on this round" : "Added to the round · start scoring");
+      setSelectedCardId(data.card?.id ?? null);
+      await load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to join round");
+    } finally {
+      setJoining(false);
+    }
+  };
+
   if (!round) return <div className="min-h-screen bg-white flex items-center justify-center text-zinc-500 font-mono-data text-xs">LOADING…</div>;
 
   const par = round.par_per_hole[currentHole - 1];
@@ -309,9 +324,42 @@ export default function RoundScorecard() {
           </div>
         )}
 
-        {!activeCard && (
-          <div className="card-surface p-8 text-center text-zinc-500 text-sm">No cards yet. Create one to start scoring.</div>
-        )}
+        {!activeCard && (() => {
+          const myMember = members.find((m) => m.user_id === user?.user_id);
+          const myScorecard = myMember && scorecards.find((sc) => sc.member_id === myMember.id);
+          const alreadyOnRound = !!myScorecard;
+          return (
+            <div
+              className="card-surface p-8 text-center"
+              data-testid="round-empty-state"
+            >
+              <div className="text-zinc-500 text-sm mb-4">
+                {cards.length === 0
+                  ? "No cards yet. Create one to start scoring."
+                  : "Pick a card above to view its scorecards."}
+              </div>
+              {myMember && cards.length === 0 && (
+                <button
+                  data-testid="join-round-btn"
+                  onClick={joinRound}
+                  disabled={joining || alreadyOnRound}
+                  className="btn-primary text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {joining
+                    ? "Joining…"
+                    : alreadyOnRound
+                    ? "You're already on this round"
+                    : "Join this round · create my card"}
+                </button>
+              )}
+              {!myMember && (
+                <div className="text-[11px] text-yellow-600 font-mono-data mt-2">
+                  Only league members can join rounds. Join the league first.
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {activeCard && (
           <div className="space-y-3" data-testid="active-card-scoring">
