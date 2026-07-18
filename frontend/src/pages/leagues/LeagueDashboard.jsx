@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import AppHeader from "@/components/AppHeader";
 import ReportBugButton from "@/components/ReportBugButton";
+import { LeagueGridSkeleton } from "@/components/Skeletons";
 import { Plus, MapPin, Users, TrendUp } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -68,7 +69,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {loading && <div className="text-zinc-500 font-mono-data text-xs">LOADING…</div>}
+        {loading && <LeagueGridSkeleton count={4} />}
 
         {!loading && myLeagues.length === 0 && (
           <div className="card-surface p-10 text-center">

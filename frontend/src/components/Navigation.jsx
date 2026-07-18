@@ -11,6 +11,30 @@ import SessionRequestsModal from './SessionRequestsModal';
 
 const INBOX_POLL_MS = 30_000;
 
+// Route → lazy loader mapping. When a user hovers or focuses a nav link,
+// we call the loader to warm-download the chunk so the click feels instant.
+// Vite dedupes concurrent dynamic imports so calling this repeatedly is
+// safe.
+const ROUTE_PREFETCHERS = {
+  '/feed': () => import('../pages/Feed'),
+  '/bagcheck': () => import('../pages/BagCheck'),
+  '/courses': () => import('../pages/Courses'),
+  '/leagues': () => import('../pages/leagues/LeagueDashboard'),
+  '/discovery': () => import('../pages/Discovery'),
+  '/daily-plastic': () => import('../pages/DailyPlastic'),
+  '/messages': () => import('../pages/Messages'),
+  '/profile': () => import('../pages/Profile'),
+};
+const prefetched = new Set();
+const prefetchRoute = (to) => {
+  if (prefetched.has(to)) return;
+  const loader = ROUTE_PREFETCHERS[to];
+  if (!loader) return;
+  prefetched.add(to);
+  // Fire-and-forget — errors are non-fatal.
+  loader().catch(() => prefetched.delete(to));
+};
+
 const NAV_ITEMS = [
   { to: '/feed', label: 'Feed', testid: 'nav-feed' },
   { to: '/bagcheck', label: 'Bag Check', testid: 'nav-bagcheck' },
@@ -87,6 +111,9 @@ export default function Navigation() {
               to={item.to}
               className={linkClasses(item.to)}
               data-testid={item.testid}
+              onMouseEnter={() => prefetchRoute(item.to)}
+              onFocus={() => prefetchRoute(item.to)}
+              onTouchStart={() => prefetchRoute(item.to)}
             >
               {item.label}
             </Link>
@@ -153,6 +180,7 @@ export default function Navigation() {
                 className={mobileLinkClasses(item.to)}
                 data-testid={`${item.testid}-mobile`}
                 onClick={() => setMobileOpen(false)}
+                onTouchStart={() => prefetchRoute(item.to)}
               >
                 {item.label}
               </Link>

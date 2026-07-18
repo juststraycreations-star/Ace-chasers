@@ -8,6 +8,7 @@ import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
 import NewsSidebar from '../components/NewsSidebar';
 import PostInteractions from '../components/PostInteractions';
 import GetTheAppBanner from '../components/GetTheAppBanner';
+import { FeedSkeleton } from '../components/Skeletons';
 import { extractVideoPoster } from '../lib/videoPoster';
 
 const MAX_RAW_IMAGE_BYTES = 30 * 1024 * 1024;
@@ -473,7 +474,7 @@ export default function Feed() {
 
       {/* Feed list */}
       {loading ? (
-        <p className="text-center text-gray-500" data-testid="feed-loading">Loading feed…</p>
+        <FeedSkeleton count={3} />
       ) : posts.length === 0 ? (
         <div
           className="bg-white rounded-xl shadow p-12 text-center text-gray-500"

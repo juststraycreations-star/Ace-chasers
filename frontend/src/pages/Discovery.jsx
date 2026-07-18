@@ -6,6 +6,7 @@ import { DISCOVERY_INTEREST_OPTIONS } from '../lib/interestTags';
 import DismissibleBanner from '../components/DismissibleBanner';
 import PublicProfilePreview from '../components/PublicProfilePreview';
 import MessageComposeModal from '../components/MessageComposeModal';
+import { PlayerGridSkeleton } from '../components/Skeletons';
 
 const RADIUS_OPTIONS = [
   { label: 'Anywhere', value: null },
@@ -144,7 +145,9 @@ export default function Discovery() {
       <div className="max-w-6xl mx-auto px-4 py-12" data-testid="discovery-loading">
         {radiusBar}
         {interestBar}
-        <p className="text-center text-gray-500">Loading players…</p>
+        <div className="mt-6">
+          <PlayerGridSkeleton count={8} />
+        </div>
       </div>
     );
   }
