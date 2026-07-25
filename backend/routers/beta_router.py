@@ -73,7 +73,7 @@ def _send_tester_email(name: str, email: str) -> tuple[bool, str]:
         f"{PLAY_OPT_IN_URL}\n\n"
         "Then tap 'Become a tester' and 'Download it on Google Play'. "
         "Once installed, sign in with your account and you're in.\n\n"
-        "Bug reports and feedback go to juststraycreations@gmail.com — "
+        "Bug reports and feedback go to christina.ann.washburn@gmail.com — "
         "we read every one.\n\n"
         "See you on the course,\nAce Chasers"
     )
@@ -93,7 +93,7 @@ def _send_tester_email(name: str, email: str) -> tuple[bool, str]:
 </p>
 <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
 <p style="font-size:12px;color:#999;">
-  Bug reports welcome at juststraycreations@gmail.com — we read every one.
+  Bug reports welcome at christina.ann.washburn@gmail.com — we read every one.
 </p>
 </div></body></html>"""
     msg.set_content(plain)
