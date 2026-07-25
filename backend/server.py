@@ -38,6 +38,7 @@ from posts import (  # noqa: E402
 from routers import (  # noqa: E402
     admin_router,
     auth_router,
+    beta_router,
     courses_router,
     discovery_router,
     leagues_router,
@@ -103,4 +104,5 @@ app.include_router(posts_router.router)
 app.include_router(messages_router.router)
 app.include_router(courses_router.router)
 app.include_router(news_router.router)
+app.include_router(beta_router.router)
 app.include_router(leagues_router.api_router, prefix="/api")

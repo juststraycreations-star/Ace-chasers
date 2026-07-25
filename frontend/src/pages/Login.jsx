@@ -151,6 +151,23 @@ export default function Login() {
           <p className="text-gray-600">Connect with local players</p>
         </div>
 
+        {/* Closed-beta banner — drives new tester signups */}
+        <Link
+          to="/beta"
+          data-testid="login-beta-banner"
+          className="mb-5 flex items-center justify-between gap-3 rounded-lg border border-[#F5C542]/60 bg-[#F5C542]/10 px-4 py-3 hover:bg-[#F5C542]/20 transition-colors"
+        >
+          <div>
+            <div className="font-mono-data text-[10px] uppercase tracking-wider text-[#8a6d10]">
+              Now in closed beta · Android
+            </div>
+            <div className="text-sm font-bold text-gray-900 mt-0.5">
+              Join the beta →
+            </div>
+          </div>
+          <div className="text-xs text-[#8a6d10] font-mono-data uppercase tracking-wider whitespace-nowrap">Sign up</div>
+        </Link>
+
         <form onSubmit={handleEmailLogin} className="space-y-4" data-testid="login-form">
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" data-testid="login-error">

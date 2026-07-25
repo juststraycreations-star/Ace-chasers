@@ -29,6 +29,8 @@ const LeagueDetail = lazy(() => import('./pages/leagues/LeagueDetail'));
 const RoundScorecard = lazy(() => import('./pages/leagues/RoundScorecard'));
 const LeaguePlayerProfile = lazy(() => import('./pages/leagues/LeaguePlayerProfile'));
 const Privacy = lazy(() => import('./pages/legal/Privacy'));
+const Beta = lazy(() => import('./pages/Beta'));
+const BetaTestersAdmin = lazy(() => import('./pages/BetaTestersAdmin'));
 
 const RouteFallback = () => (
   <div
@@ -64,11 +66,14 @@ function AppRoutes() {
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<SignUp />} />
               <Route path="/legal/privacy" element={<Privacy />} />
+              <Route path="/beta" element={<Beta />} />
               <Route path="*" element={<Navigate to="/login" replace />} />
             </>
           ) : (
             <>
               <Route path="/legal/privacy" element={<Privacy />} />
+              <Route path="/beta" element={<Beta />} />
+              <Route path="/admin/beta-testers" element={<BetaTestersAdmin />} />
               <Route path="/feed" element={<Feed />} />
               <Route path="/bagcheck" element={<BagCheck />} />
               <Route path="/courses" element={<Courses />} />
