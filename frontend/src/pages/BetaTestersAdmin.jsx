@@ -60,11 +60,14 @@ export default function BetaTestersAdmin() {
     } catch { toast.error("User export failed"); }
   };
 
-  const inviteAllUsers = async () => {
-    if (!window.confirm("Email every registered user the beta install link? Users already invited will be skipped.")) return;
+  const inviteAllUsers = async (force = false) => {
+    const msg = force
+      ? "RESEND the beta email to EVERY registered user, including those who were already emailed? Use this when the install instructions have changed."
+      : "Email every registered user the beta install link? Users already emailed will be skipped.";
+    if (!window.confirm(msg)) return;
     setInviting(true);
     try {
-      const { data } = await api.post(`/admin/users/beta-invite-all`);
+      const { data } = await api.post(`/admin/users/beta-invite-all${force ? "?force=true" : ""}`);
       toast.success(`Sent ${data.sent} · Failed ${data.failed} · Skipped ${data.skipped_already_invited}`);
       await load();
     } catch (e) {
@@ -112,13 +115,22 @@ export default function BetaTestersAdmin() {
               <DownloadSimple size={14} weight="bold" /> Users CSV
             </button>
             <button
-              onClick={inviteAllUsers}
+              onClick={() => inviteAllUsers(false)}
               disabled={inviting}
               data-testid="beta-admin-invite-all-btn"
               className="text-xs px-3 py-2 rounded-lg bg-[#1f4d2e] text-white hover:bg-[#1a3f26] disabled:opacity-50 flex items-center gap-1 font-mono-data uppercase tracking-wider"
-              title="Email every registered Ace Chasers user the Play beta install link"
+              title="Email every registered Ace Chasers user the Play beta install link (skip already-emailed)"
             >
-              <Envelope size={14} weight="bold" /> {inviting ? "Sending…" : "Invite all users"}
+              <Envelope size={14} weight="bold" /> {inviting ? "Sending…" : "Invite new users"}
+            </button>
+            <button
+              onClick={() => inviteAllUsers(true)}
+              disabled={inviting}
+              data-testid="beta-admin-resend-all-btn"
+              className="text-xs px-3 py-2 rounded-lg border border-[#1f4d2e] text-[#1f4d2e] hover:bg-[#1f4d2e]/10 disabled:opacity-50 flex items-center gap-1 font-mono-data uppercase tracking-wider"
+              title="Force-resend the beta email to every user, including those already emailed"
+            >
+              <Envelope size={14} weight="bold" /> {inviting ? "Sending…" : "Resend to ALL"}
             </button>
             <button
               onClick={downloadCsv}

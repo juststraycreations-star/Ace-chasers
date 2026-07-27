@@ -33,6 +33,7 @@ router = APIRouter()
 GMAIL_USER = os.environ.get("GMAIL_SMTP_USER") or ""
 GMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD") or ""
 PLAY_OPT_IN_URL = os.environ.get("PLAY_TESTER_OPT_IN_URL") or ""
+GOOGLE_GROUP_URL = os.environ.get("GOOGLE_GROUP_URL") or ""
 ADMIN_EMAILS = {
     e.strip().lower()
     for e in (os.environ.get("BETA_ADMIN_EMAILS") or "").split(",")
@@ -66,17 +67,28 @@ def _send_tester_email(name: str, email: str) -> tuple[bool, str]:
     msg["Subject"] = "Ace Chasers · You're on the beta list"
     msg["From"] = f"Ace Chasers <{GMAIL_USER}>"
     msg["To"] = email
+    group_line_plain = (
+        f"1) Join our open Google Group (no approval needed — just click 'Join group'):\n\n{GOOGLE_GROUP_URL}\n\n"
+        if GOOGLE_GROUP_URL
+        else ""
+    )
     plain = (
         f"Hey {name.split(' ')[0]},\n\n"
         "Thanks for signing up to beta-test Ace Chasers on Android!\n\n"
         "TWO STEPS to install:\n\n"
-        "1) Watch for a separate Google Groups invite email — you have to accept it before Google lets you download the beta.\n\n"
-        "2) After you accept the Groups invite, tap this link on your Android device (or click on desktop):\n\n"
+        f"{group_line_plain}"
+        "2) After you join the group, tap this link on your Android device (or click on desktop):\n\n"
         f"{PLAY_OPT_IN_URL}\n\n"
-        "Then tap 'Become a tester' and 'Download it on Google Play'. Sign in and you're in.\n\n"
-        "Heads-up: if you click the install link BEFORE accepting the Groups invite, Google may say the app isn't available in your country — just accept the invite first, then come back.\n\n"
+        "Then tap 'Become a tester' and 'Download it on Google Play'. Sign in with the same Google account you used to join the group, and you're in.\n\n"
+        "Heads-up: if you click the install link BEFORE joining the group, Google may say the app isn't available in your country — just join the group first, then come back.\n\n"
         "Bug reports go to christina.ann.washburn@gmail.com — we read every one.\n\n"
         "See you on the course,\nAce Chasers"
+    )
+    group_block_html = (
+        f'<p style="margin:0 0 8px;"><b>Step 1:</b> Join our <b>open Google Group</b> — no approval needed, just click <b>Join group</b>:</p>'
+        f'<p style="margin:0 0 12px;"><a href="{GOOGLE_GROUP_URL}" style="color:#1f4d2e;font-weight:bold;">{GOOGLE_GROUP_URL}</a></p>'
+        if GOOGLE_GROUP_URL
+        else ""
     )
     html = f"""<!doctype html>
 <html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#f5f5f5;padding:24px;">
@@ -86,8 +98,8 @@ def _send_tester_email(name: str, email: str) -> tuple[bool, str]:
 <p>Thanks for signing up to beta-test <b>Ace Chasers</b> on Android!</p>
 <div style="background:#fff8e1;border:1px solid #F5C542;border-radius:12px;padding:16px;margin:20px 0;">
   <div style="font-size:11px;font-weight:bold;color:#8a6d10;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Two-Step Install</div>
-  <p style="margin:0 0 8px;"><b>Step 1:</b> Watch for a separate <b>Google Groups invite</b> email from us and accept it. (Google requires this before allowing the download.)</p>
-  <p style="margin:0;"><b>Step 2:</b> Once you accept the Groups invite, click the button below.</p>
+  {group_block_html}
+  <p style="margin:0;"><b>Step 2:</b> Once you've joined the group, click the button below (use the same Google account).</p>
 </div>
 <p style="margin:24px 0;">
   <a href="{PLAY_OPT_IN_URL}" style="display:inline-block;background:#F5C542;color:#000;font-weight:bold;padding:14px 24px;border-radius:10px;text-decoration:none;">
@@ -98,7 +110,7 @@ def _send_tester_email(name: str, email: str) -> tuple[bool, str]:
   Works on Android <b>and desktop</b>. On desktop the link enrolls you as a tester; on Android it opens Play Store directly.
 </p>
 <p style="font-size:12px;color:#a94442;background:#fdecea;padding:10px;border-radius:8px;">
-  If you click the install link BEFORE accepting the Groups invite, Google may show "app not available in your country" — accept the invite first, then come back.
+  If you click the install link BEFORE joining the group, Google may show "app not available in your country" — join the group first, then come back.
 </p>
 <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
 <p style="font-size:12px;color:#999;">
@@ -171,9 +183,12 @@ async def get_current_user_wrapper(request, session_token, authorization):
     # `deps.get_current_user` returns a Firebase token dict — we just need email
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Auth required")
-    from firebase_auth import verify_firebase_token
+    from firebase_auth import verify_token
     token = authorization.split(" ", 1)[1]
-    payload = verify_firebase_token(token)
+    try:
+        payload = verify_token(token)
+    except Exception:  # noqa: BLE001
+        payload = None
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid token")
     return payload
@@ -264,12 +279,16 @@ async def export_users_csv(request: Request,
 
 @router.post("/api/admin/users/beta-invite-all")
 async def invite_all_users_to_beta(request: Request,
+                                     force: bool = False,
                                      session_token: Optional[str] = Cookie(None),
                                      authorization: Optional[str] = Header(None)):
     """Admin-only — send the Play Console opt-in email to EVERY registered
-    user with a valid email. Idempotent: users who already have an entry
-    in beta_testers are skipped. Rate-limited implicitly by Gmail SMTP
-    (Gmail free tier allows ~500 recipients/day)."""
+    user with a valid email. When force=false (default), users who already
+    received a 'sent' email are skipped. When force=true (called via
+    query string ?force=true), everyone is emailed again — useful when
+    the install instructions have changed (e.g. new Google Group URL).
+    Gmail SMTP allows ~500 recipients/day on the free tier.
+    """
     await _require_beta_admin(request, session_token, authorization)
     db = get_db()
     rows = await db.users.find(
@@ -285,20 +304,20 @@ async def invite_all_users_to_beta(request: Request,
         if not EMAIL_RE.match(email):
             skipped += 1
             continue
-        # Skip if already emailed via beta_testers signup
-        existing = await db.beta_testers.find_one({"email": email})
-        if existing and existing.get("notification_status") == "sent":
-            skipped += 1
-            continue
+        # Skip only when NOT forcing a resend
+        if not force:
+            existing = await db.beta_testers.find_one({"email": email})
+            if existing and existing.get("notification_status") == "sent":
+                skipped += 1
+                continue
         name = r.get("name") or r.get("displayName") or "player"
         ok, note = _send_tester_email(name, email)
-        # Upsert into beta_testers so we don't spam on the next blast
         await db.beta_testers.update_one(
             {"email": email},
             {"$set": {
                 "email": email,
                 "name": name,
-                "referral_source": "admin_bulk_invite",
+                "referral_source": "admin_bulk_invite" + (" (resend)" if force else ""),
                 "notification_status": "sent" if ok else note,
                 "notified_at": now if ok else None,
                 "updated_at": now,
@@ -312,4 +331,4 @@ async def invite_all_users_to_beta(request: Request,
             sent += 1
         else:
             failed += 1
-    return {"ok": True, "total_users": len(rows), "sent": sent, "failed": failed, "skipped_already_invited": skipped}
+    return {"ok": True, "total_users": len(rows), "sent": sent, "failed": failed, "skipped_already_invited": skipped, "force_resend": force}

@@ -428,3 +428,43 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **P3** — Real-time notifications for non-round events.
 - **P3** — Test-user cleanup sweep job (many `TEST_*@example.com` docs left behind by iter runs).
 
+
+
+### Session 40 — Open Google Group beta invite + resend-to-all + security cleanup (Feb 2026)
+- **User asked**: "I made the Google Group open — update the invitations to point people to join the group themselves, then resend to all existing users."
+- **Root state on arrival (from handoff)**: prior agent had partially edited backend + admin UI but left both `beta_router.py` and `Beta.jsx` with syntax-breaking leftover fragments from failed search-replaces. Backend was in a soft-broken state; frontend Beta page had duplicated tail code.
+- **Fixes shipped**:
+  - `backend/routers/beta_router.py`
+    - Removed leftover stale block after `invite_all_users_to_beta` (was breaking SyntaxError on reload).
+    - Rewrote plain + HTML email template around the **open Google Group** (`GOOGLE_GROUP_URL` env). Step 1 tells users to click "Join group" (no approval needed); Step 2 tells them to click Play install with the same Google account.
+    - `POST /api/admin/users/beta-invite-all?force=true` re-emails **every** user; without `force` it still skips already-notified addresses. Return payload now includes `force_resend` flag.
+    - Fixed `get_current_user_wrapper` — import was pointing at non-existent `verify_firebase_token`; corrected to `verify_token` and wrapped in try/except so bad tokens now return **401** (previously 500).
+  - `frontend/src/pages/Beta.jsx`
+    - Removed the duplicated fragment tail (was causing JSX syntax error).
+    - Success screen now renders **Step 1 — Join the Google Group** (dark-green primary CTA, `data-testid=beta-google-group-link`) and **Step 2 — Install from Google Play** (yellow CTA, existing `beta-play-opt-in-link`). Copy is fully self-service — no "wait for invitation" wording remains.
+    - Landing hero copy updated to describe the two-step install.
+  - `frontend/src/pages/BetaTestersAdmin.jsx` (already had, kept intact)
+    - `Invite new users` button → `POST /admin/users/beta-invite-all` (skips already-invited)
+    - `Resend to ALL` button → `POST /admin/users/beta-invite-all?force=true` (with confirm dialog)
+    - `Users CSV` + `Testers CSV` exports.
+  - **Security cleanup**: removed publicly-served `/app/frontend/public/downloads/android.keystore`, `KEYSTORE_PASSWORD.txt`, and `play-console-keys.txt` (user confirmed they have local copies). Only the release `.aab` bundles remain.
+- **Verification**:
+  - Backend curl: unauth invite-all → 401; bad-token invite-all → 401; signup returns `email_sent: true` for a controlled recipient (christina.ann.washburn@gmail.com); second signup with same email is idempotent (`already_signed_up: true`, no duplicate send).
+  - Frontend Playwright: `/beta` submission surfaces success screen with both correct hrefs — `https://groups.google.com/g/ace-chasers-beta-testers` and `https://play.google.com/apps/testing/acechasers.net`.
+  - Python lint: clean. JS lint: only pre-existing `react/no-unescaped-entities` warnings (not introduced by this session).
+  - **Not** triggered during debug: the bulk `Resend to ALL` action — that's reserved for the user to press from the admin UI in production.
+- **User security follow-ups (not yet done, user action required)**:
+  1. Rotate the Gmail app password because it was disclosed in previous chat history.
+  2. Confirm private Android signing key/password are stored locally (public copies now deleted).
+
+## Prioritized backlog (post-Session-40)
+- **P0** — User to press "Resend to ALL" in production after preview review + deploy.
+- **P1** — Rotate Gmail app password + update `GMAIL_APP_PASSWORD` in backend `.env`.
+- **P1** — Refactor Phase 2: extract Ledger + Rounds from `leagues_router.py`.
+- **P1** — Invite-friend referral flow (still the highest-leverage growth lever).
+- **P1** — DM Fair Play gate for reply flows.
+- **P2** — Compliance Dashboard for directors.
+- **P2** — Sentry integration (needs user DSN).
+- **P2** — ProofLog `event_type` schema.
+- **P3** — Real-time notifications for non-round events.
+- **P3** — Bulk-email audit log (actor, count, timestamp, failures).

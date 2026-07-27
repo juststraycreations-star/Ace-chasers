@@ -8,6 +8,9 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const OPT_IN_URL =
   process.env.REACT_APP_PLAY_TESTER_URL ||
   "https://play.google.com/apps/testing/acechasers.net";
+const GOOGLE_GROUP_URL =
+  process.env.REACT_APP_GOOGLE_GROUP_URL ||
+  "https://groups.google.com/g/ace-chasers-beta-testers";
 
 export default function Beta() {
   const navigate = useNavigate();
@@ -46,9 +49,31 @@ export default function Beta() {
           </h1>
           <p className="text-gray-700 mb-5">
             {success.emailSent
-              ? `We just emailed the install link to ${success.email}. Open that email on your Android phone to install the app.`
-              : "Save the link below on your Android phone — that's the one-click install into Play Store."}
+              ? `We just emailed the install instructions to ${success.email}. You can also follow the two steps below right now.`
+              : "Follow the two steps below to install the beta on your Android phone."}
           </p>
+
+          <div className="mb-4 p-4 rounded-xl bg-amber-50 border border-amber-200">
+            <div className="text-[10px] font-mono-data uppercase tracking-wider text-amber-800 mb-2">
+              Step 1 · Join the Google Group
+            </div>
+            <p className="text-sm text-gray-800 mb-3">
+              It's open — no approval needed. Just tap <b>Join group</b> using the same Google account signed into your Android phone.
+            </p>
+            <a
+              href={GOOGLE_GROUP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="beta-google-group-link"
+              className="inline-flex items-center justify-center gap-2 bg-[#1f4d2e] hover:bg-[#1a3f26] text-white font-bold text-sm px-4 py-2 rounded-lg transition-colors"
+            >
+              <Users size={16} weight="fill" /> Join the Google Group
+            </a>
+          </div>
+
+          <div className="mb-2 text-[10px] font-mono-data uppercase tracking-wider text-zinc-500">
+            Step 2 · Install from Google Play
+          </div>
           <a
             href={OPT_IN_URL}
             target="_blank"
@@ -58,11 +83,15 @@ export default function Beta() {
           >
             <DeviceMobile size={18} weight="fill" /> Open on my Android phone
           </a>
-          <ol className="mt-5 text-sm text-gray-700 space-y-1 list-decimal list-inside">
-            <li>Tap the button above on your Android device.</li>
-            <li>Tap <b>Become a tester</b>.</li>
-            <li>Tap <b>Download it on Google Play</b>. That's it.</li>
+          <ol className="mt-4 text-sm text-gray-700 space-y-1 list-decimal list-inside">
+            <li>Join the group above (step 1) using your Android Google account.</li>
+            <li>Tap the yellow button (step 2) on your Android device.</li>
+            <li>Tap <b>Become a tester</b>, then <b>Download it on Google Play</b>.</li>
           </ol>
+          <p className="mt-3 text-[11px] text-red-700 bg-red-50 rounded-md p-2">
+            If Google says "app not available in your country," you likely opened the install link before joining the group. Join the group first, then reopen the yellow button.
+          </p>
+
           <div className="mt-6 flex items-center justify-between">
             <button
               type="button"
@@ -103,7 +132,7 @@ export default function Beta() {
             Try Ace Chasers on your phone.
           </h1>
           <p className="text-base text-gray-700 mt-4 max-w-xl">
-            You're minutes away from the disc golf social + league app already used by dozens of players. Drop your name and email — we'll add you to the Google Play beta and send the install link.
+            You're minutes away from the disc golf social + league app already used by dozens of players. Drop your name and email — we'll send you the two-step install (join our open Google Group, then install from Google Play).
           </p>
         </div>
 
@@ -170,26 +199,6 @@ export default function Beta() {
           >
             {busy ? "Adding you to the beta…" : "Get the beta install link"}
           </button>
-          <p className="text-[11px] text-zinc-500 leading-relaxed">
-            By joining, you agree to receive the install email + occasional beta-only updates. We never sell email addresses. See our{" "}
-            <Link to="/legal/privacy" className="underline">Privacy & Terms</Link>.
-          </p>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function FeatureBadge({ icon, title, body }) {
-  return (
-    <div className="rounded-xl border border-gray-200 p-3 bg-white">
-      <div className="text-[#1f4d2e] mb-1">{icon}</div>
-      <div className="font-bold text-sm">{title}</div>
-      <div className="text-xs text-gray-600">{body}</div>
-    </div>
-  );
-}
-</button>
           <p className="text-[11px] text-zinc-500 leading-relaxed">
             By joining, you agree to receive the install email + occasional beta-only updates. We never sell email addresses. See our{" "}
             <Link to="/legal/privacy" className="underline">Privacy & Terms</Link>.
