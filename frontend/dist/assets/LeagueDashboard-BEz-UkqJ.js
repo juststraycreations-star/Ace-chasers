@@ -1,4 +1,4 @@
-import{x as e,J as f,z as j,r as n,K as v,M as h,O as y,Q as w,S as c}from"./vendor-Bx3NE3dI.js";import{b as l}from"./index-Bo9HYWg-.js";import{A as N}from"./AppHeader-Dq0CFjwY.js";import{L as z}from"./Skeletons-BsEZjfR-.js";import"./vendor-firebase-FVEVyg6T.js";function C(){const s=()=>{const a=encodeURIComponent("Ace Chasers · Bug report"),o=typeof window<"u"?window.location.href:"",i=typeof navigator<"u"?navigator.userAgent:"",r=encodeURIComponent(`Describe the bug:
+import{x as e,J as f,z as j,r as n,K as v,M as h,O as y,Q as w,S as c}from"./vendor-Bx3NE3dI.js";import{b as l}from"./index-BgTwzf3h.js";import{A as N}from"./AppHeader-D1i-WGZG.js";import{L as z}from"./Skeletons-BsEZjfR-.js";import"./vendor-firebase-FVEVyg6T.js";function C(){const s=()=>{const a=encodeURIComponent("Ace Chasers · Bug report"),o=typeof window<"u"?window.location.href:"",i=typeof navigator<"u"?navigator.userAgent:"",r=encodeURIComponent(`Describe the bug:
 
 
 Steps to reproduce:
