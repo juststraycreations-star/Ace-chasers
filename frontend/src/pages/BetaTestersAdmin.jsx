@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuthStore } from "../store/authStore";
 import { toast } from "sonner";
-import { DownloadSimple, Trash } from "@phosphor-icons/react";
+import { DownloadSimple, Trash, Envelope } from "@phosphor-icons/react";
 
 /**
  * Admin-only view of closed-beta signups. Backend gates on
@@ -14,6 +14,7 @@ export default function BetaTestersAdmin() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
+  const [inviting, setInviting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -49,6 +50,30 @@ export default function BetaTestersAdmin() {
     } catch { toast.error("Export failed"); }
   };
 
+  const downloadUsersCsv = async () => {
+    try {
+      const res = await api.get(`/admin/users/export.csv`, { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([res.data], { type: "text/csv" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = "ace-chasers-users.csv"; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+    } catch { toast.error("User export failed"); }
+  };
+
+  const inviteAllUsers = async () => {
+    if (!window.confirm("Email every registered user the beta install link? Users already invited will be skipped.")) return;
+    setInviting(true);
+    try {
+      const { data } = await api.post(`/admin/users/beta-invite-all`);
+      toast.success(`Sent ${data.sent} · Failed ${data.failed} · Skipped ${data.skipped_already_invited}`);
+      await load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Bulk invite failed");
+    } finally {
+      setInviting(false);
+    }
+  };
+
   if (forbidden) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-6" data-testid="beta-admin-forbidden">
@@ -77,13 +102,32 @@ export default function BetaTestersAdmin() {
               Export CSV → paste emails into <b>Play Console → Testing → Closed testing → Testers</b>.
             </p>
           </div>
-          <button
-            onClick={downloadCsv}
-            data-testid="beta-admin-export-btn"
-            className="btn-primary flex items-center gap-2"
-          >
-            <DownloadSimple size={16} weight="bold" /> Export CSV
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={downloadUsersCsv}
+              data-testid="beta-admin-users-export-btn"
+              className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-zinc-700 hover:border-gray-300 flex items-center gap-1 font-mono-data uppercase tracking-wider"
+              title="Export all registered user emails (paste into Google Groups)"
+            >
+              <DownloadSimple size={14} weight="bold" /> Users CSV
+            </button>
+            <button
+              onClick={inviteAllUsers}
+              disabled={inviting}
+              data-testid="beta-admin-invite-all-btn"
+              className="text-xs px-3 py-2 rounded-lg bg-[#1f4d2e] text-white hover:bg-[#1a3f26] disabled:opacity-50 flex items-center gap-1 font-mono-data uppercase tracking-wider"
+              title="Email every registered Ace Chasers user the Play beta install link"
+            >
+              <Envelope size={14} weight="bold" /> {inviting ? "Sending…" : "Invite all users"}
+            </button>
+            <button
+              onClick={downloadCsv}
+              data-testid="beta-admin-export-btn"
+              className="btn-primary flex items-center gap-2"
+            >
+              <DownloadSimple size={16} weight="bold" /> Testers CSV
+            </button>
+          </div>
         </div>
 
         {loading && <div className="text-zinc-500 font-mono-data text-xs">LOADING…</div>}

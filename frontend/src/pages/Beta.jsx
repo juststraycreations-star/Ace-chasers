@@ -7,7 +7,7 @@ import { CheckCircle, DeviceMobile, Trophy, Users, Envelope } from "@phosphor-ic
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const OPT_IN_URL =
   process.env.REACT_APP_PLAY_TESTER_URL ||
-  "https://play.google.com/apps/internaltest/4701016536558106569";
+  "https://play.google.com/apps/testing/acechasers.net";
 
 export default function Beta() {
   const navigate = useNavigate();
@@ -170,6 +170,26 @@ export default function Beta() {
           >
             {busy ? "Adding you to the beta…" : "Get the beta install link"}
           </button>
+          <p className="text-[11px] text-zinc-500 leading-relaxed">
+            By joining, you agree to receive the install email + occasional beta-only updates. We never sell email addresses. See our{" "}
+            <Link to="/legal/privacy" className="underline">Privacy & Terms</Link>.
+          </p>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function FeatureBadge({ icon, title, body }) {
+  return (
+    <div className="rounded-xl border border-gray-200 p-3 bg-white">
+      <div className="text-[#1f4d2e] mb-1">{icon}</div>
+      <div className="font-bold text-sm">{title}</div>
+      <div className="text-xs text-gray-600">{body}</div>
+    </div>
+  );
+}
+</button>
           <p className="text-[11px] text-zinc-500 leading-relaxed">
             By joining, you agree to receive the install email + occasional beta-only updates. We never sell email addresses. See our{" "}
             <Link to="/legal/privacy" className="underline">Privacy & Terms</Link>.
