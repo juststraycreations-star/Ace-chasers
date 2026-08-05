@@ -9,6 +9,7 @@ import GhostOverlay from "@/components/GhostOverlay";
 import CTPLeaderboard from "@/components/CTPLeaderboard";
 import DirectorNotesBanner from "@/components/DirectorNotesBanner";
 import PayoutDistribution from "@/components/PayoutDistribution";
+import ScorecardGrid from "@/components/ScorecardGrid";
 
 function scoreClass(strokes, par) {
   if (!strokes) return "";
@@ -44,6 +45,8 @@ export default function RoundScorecard() {
   const [certifyChecked, setCertifyChecked] = useState(false);
   const [certifying, setCertifying] = useState(false);
   const [selfCertifying, setSelfCertifying] = useState(null); // holds scorecardId while POST is in flight
+  // "score" = per-hole scoring UI (default) · "grid" = UDisc-style summary table
+  const [viewMode, setViewMode] = useState("score");
   // Director-only sweep finalize
   const [showSweep, setShowSweep] = useState(false);
   const [sweepChecked, setSweepChecked] = useState(false);
@@ -280,6 +283,52 @@ export default function RoundScorecard() {
 
       <div className="max-w-4xl mx-auto px-4 py-6">
         <DirectorNotesBanner round={round} isDirector={isDirector} onUpdated={load} />
+
+        {/* View mode toggle — SCORE (per-hole entry) vs GRID (UDisc-style table) */}
+        <div
+          className="flex items-center gap-1.5 mb-5 bg-emerald-50/70 border border-emerald-100 rounded-full p-1 w-fit"
+          data-testid="scorecard-view-toggle"
+        >
+          <button
+            type="button"
+            data-testid="scorecard-view-score"
+            onClick={() => setViewMode("score")}
+            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+              viewMode === "score"
+                ? "bg-emerald-800 text-white shadow-sm"
+                : "text-emerald-800 hover:bg-emerald-100"
+            }`}
+          >
+            Score
+          </button>
+          <button
+            type="button"
+            data-testid="scorecard-view-grid"
+            onClick={() => setViewMode("grid")}
+            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+              viewMode === "grid"
+                ? "bg-emerald-800 text-white shadow-sm"
+                : "text-emerald-800 hover:bg-emerald-100"
+            }`}
+          >
+            Scorecard
+          </button>
+        </div>
+
+        {viewMode === "grid" && (
+          <div className="mb-6">
+            <ScorecardGrid
+              league={league}
+              round={round}
+              scorecards={scorecards}
+              memberMap={memberMap}
+              distances={round.distances_per_hole}
+            />
+          </div>
+        )}
+
+        {viewMode === "score" && (
+        <>
 
         {/* Card picker */}
         <div className="flex items-center gap-2 mb-6 overflow-x-auto">
@@ -763,6 +812,8 @@ export default function RoundScorecard() {
             isDirector={isDirector}
             onClose={() => setShowPayout(false)}
           />
+        )}
+        </>
         )}
       </div>
 

@@ -695,3 +695,61 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **P2** — Atomic founding-member counter for high-concurrency signups.
 - **P3** — Real-time notifications for non-round events.
 
+
+### Session 45 — UDisc-style green-themed ScorecardGrid + production sign-in triage (Feb 2026)
+
+**User asks:**
+- Redesign the scorecard component as a UDisc-style tabular grid with the Ace Chasers green brand palette.
+- Sign-in issues reported by multiple users on production (Cloudflare "couldn't parse origin response") — both email/password AND Google sign-in.
+
+**ScorecardGrid (new)**
+- New `frontend/src/components/ScorecardGrid.jsx` — pure display component (no scoring inputs).
+- Header block:
+  - Disc-icon avatar in an emerald-900 pill + `Ace Chasers` monogram in emerald-700 letter-spacing.
+  - Course/round name in `text-emerald-950` (`font-display`, xl→2xl).
+  - Location under it in `text-slate-500`.
+  - Soft `bg-emerald-100 text-emerald-800` chip for the league name; `text-slate-600` game-type ("Singles" / "Doubles" derived from `league.format`); optional date.
+  - Player-names strip under the header.
+- 4-row responsive table (`<table>` w/ colgroup + sticky first + last column):
+  - Row 1: hole numbers — `bg-green-50/50 text-emerald-900 border-emerald-100`.
+  - Row 2: par per hole — mono tabular-nums cells.
+  - Row 3: optional distances if `round.distances_per_hole` is provided.
+  - Rows 4+: one per scorecard with color-coded score cells (see below).
+  - Sticky "TOTAL" column on the right in solid `bg-emerald-800 text-white` per spec.
+- Score cell coloring (disc-golf convention):
+  - Eagle-or-better → `bg-blue-800 text-white`.
+  - Birdie → `bg-green-500 text-white`.
+  - Par → `bg-emerald-50/60 text-slate-800`.
+  - Bogey → `bg-orange-100 text-orange-900`.
+  - Double+ Bogey → `bg-red-700 text-white`.
+- Legend footer explains the palette.
+- Horizontal scroll on narrow viewports keeps the mobile experience readable without breaking the sticky columns.
+- Includes rich data-testids: `scorecard-grid`, `scorecard-grid-course`, `scorecard-grid-location`, `scorecard-grid-league-tag`, `scorecard-grid-game-type`, `scorecard-grid-players`, `grid-hole-N`, `grid-par-N`, `grid-dist-N`, `grid-scorecard-row-{scId}`, `grid-score-{scId}-{holeN}`, `grid-total-{scId}`.
+- Wired into `pages/leagues/RoundScorecard.jsx` via a new **Score / Scorecard toggle** (`scorecard-view-score` + `scorecard-view-grid` testids). Score = current hole-by-hole scoring UI (unchanged). Scorecard = the new UDisc grid. Existing scoring/finalize/self-certify flow untouched.
+
+**Production sign-in triage**
+- Symptom: multiple users report Cloudflare "couldn't parse origin response" during email/password AND Google sign-in on acechasers.net.
+- Preview `/api/auth/sync` verified healthy: correct 401 JSON with `Missing Bearer token` on unauth and `Firebase token verification failed:...` on bad token. No empty responses, no 500s, correct Content-Type.
+- Root-cause list to check on the deployed environment:
+  1. `FIREBASE_SERVICE_ACCOUNT_JSON` env var must be set on production. If missing, Firebase Admin fails to init and `verify_token` can raise unexpectedly.
+  2. Mongo latency/timeout on production — the sync endpoint does a `count_documents` + `update_one` + `find_one`. If Atlas is throttling or the connection string is stale, the request hangs past Cloudflare's origin timeout (100s default).
+  3. Response headers: FastAPI + StreamingResponse chains normally close cleanly, but if there is any middleware writing partial bytes and then raising, Cloudflare sees a malformed HTTP response.
+  4. Prod is currently on the Session 39-era code (user hasn't deployed 40–45 yet). The auth_sync in that build did NOT have the `_is_test_email` short-circuit — behavior fine, but if there was a Firebase init or env issue it would be latent.
+- Recommended fix path: **redeploy the current preview**. Session 44's auth changes have defensive try/except around token verify + user email is optional + return-shape is always ProfileOut, so any of the above latent issues surface as clean 401/500 JSON instead of an empty response Cloudflare can't parse. If after redeploy the issue persists, escalate to Emergent Support with the specific request-id from Cloudflare's error page since only they can see the origin logs on the deployed environment.
+
+## Prioritized backlog (post-Session-45)
+- **P0** — Deploy Sessions 40–45 to prod (unblocks the sign-in issue AND ships all the new features).
+- **P0** — After deploy, verify sign-in on acechasers.net. If still broken, contact Emergent Support with a request-id from Cloudflare's 520/522 error page.
+- **P0** — User to submit `upload_certificate.pem` + upload `acechasers-net-v1.0.3.aab` to Play Console.
+- **P1** — After Play reset lands, admin presses "Resend to ALL".
+- **P1** — Rounds extraction phase 4 (score/finalize/sweep/payout/WebSocket).
+- **P1** — Invite-friend referral flow.
+- **P1** — DM Fair Play gate for reply flows.
+- **P2** — Signed short-lived tokens for CSV downloads.
+- **P2** — Introduce `routers/_shared.py`.
+- **P2** — Sentry (needs user DSN).
+- **P2** — Bulk-email audit log.
+- **P2** — Atomic founding-member counter.
+- **P2** — Print / PDF export of the ScorecardGrid so directors can post a physical copy at the course.
+- **P3** — Real-time notifications for non-round events.
+
