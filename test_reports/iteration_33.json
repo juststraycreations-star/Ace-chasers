@@ -1,0 +1,26 @@
+{
+  "summary": "Iteration 33 — Retest of the two iter32 blockers on auth_sync first_run gating. ALL 13/13 tests PASSED. (a) Fresh @example.com signup returns firstRun=false ✅. (b) Mongo count_documents({first_run: True}) stayed at 3 across a test-email signup (real_count unchanged) — NO drift ✅. Positive path: a fresh non test-email signup (friend_manual_xxx@somedomain.com) correctly received first_run=true, and Mongo counts advanced in lockstep (real 3→4, first_run 3→4, test-email-first_run still 0) ✅. Regression on dashboard bundle (401/200/parity/perf), card creation (director 200 / member 403), and dismiss endpoints (401 & 200) all PASSED. Backfill log confirmed 'First Run backfill complete: 3 founding members (of 3 real users, limit=40)' pre-run.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration33.py",
+    "/app/test_reports/pytest/iteration_33.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "auth_router.py _TEST_EMAIL_RE + _is_test_email() helper is now module-level and reused inside auth_sync — the founding-member gate correctly short-circuits (is_first_run stays False) whenever the current signup's own email matches. Contract now matches server._backfill_first_run_flag exactly. Fix verified.",
+    "Minor DRY nit: the inline regex string on line 73 (`test_email_re = r\"...\"`) is now redundant with the module-level _TEST_EMAIL_RE — could be dropped by using _TEST_EMAIL_RE.pattern in the Mongo $regex filter to keep one source of truth. Non-blocking.",
+    "Race condition on concurrent signups still exists (two racers reading existing_count=39 could both flip first_run=true). Not observed in this run; worth an atomic $inc counter or unique-index guard before real production traffic scales."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration33.py (new)"],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "n/a (backend-only)"},
+  "test_credentials": "Firebase signUp: TEST_i33_*@example.com / demo1234 for test-email cases; friend_manual_*@somedomain.com for the positive path.",
+  "seed_data_creation": "3 test-email users (director/member/outsider), 1 positive-path non-test-email user (real_count 3→4), 1 test league + season + round + card. Not cleaned up.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Both iter32 blockers are fully fixed. First-run gating is symmetric with the backfill contract. Note: because the positive-path test intentionally creates one NON-test-email user (friend_manual_xxx@somedomain.com), preview DB real_count is now 4 and first_run=true count is 4 (still under the 40 cap). Future iterations that reference the historic 'exactly 3 founding members' state should be aware of this bump. If it needs to be reset, delete rows where email LIKE 'friend_manual_%@somedomain.com' and restart backend so backfill re-normalizes.",
+  "rca of the issue": "Prior iter32 bug: auth_sync computed `is_first_run = existing_count < FOUNDING_LIMIT` without excluding the CURRENT signup's own email, so @example.com test signups mis-claimed a badge slot until the next startup backfill. Fix (iter33): auth_router.py now defines `_TEST_EMAIL_RE` and `_is_test_email()` at module scope and the gate short-circuits with `if not _is_test_email(current_email): ...` before even counting. Verified: fresh test-email signup returns firstRun=false and does NOT change first_run count in Mongo; fresh non test-email signup does get firstRun=true and Mongo counts advance in lockstep."
+}

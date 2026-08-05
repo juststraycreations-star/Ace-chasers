@@ -1,6 +1,7 @@
 """Auth + profile routes: /api/auth/sync, /api/users/me, /api/users/{uid}."""
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException
@@ -19,6 +20,20 @@ from models import AuthSyncIn, ProfileIn, ProfileOut
 
 
 router = APIRouter()
+
+# Shared with server._backfill_first_run_flag(). Emails matching this
+# pattern belong to the testing agent / QA and must NEVER count toward
+# — or be awarded — the founding-member badge.
+_TEST_EMAIL_RE = re.compile(
+    r"(^(test|qa_|demo_|bgtest|btnclk|testi|testjoiner))|(@example\.com$)",
+    re.IGNORECASE,
+)
+
+
+def _is_test_email(email: str | None) -> bool:
+    if not email:
+        return False
+    return bool(_TEST_EMAIL_RE.search(email))
 
 
 @router.post("/api/auth/sync", response_model=ProfileOut)
@@ -48,24 +63,26 @@ async def auth_sync(
     # frozen for the account life.
     is_first_run = False
     if is_new_user:
-        # Match the backfill contract EXACTLY: only real, non-test users
-        # count toward the founding-member limit. Test-agent emails
-        # (@example.com, prefix `test`/`qa_`/`demo_`/etc.) are excluded so
-        # QA runs never eat into the badge tier.
-        test_email_re = r"(^(test|qa_|demo_|bgtest|btnclk|testi|testjoiner))|(@example\.com$)"
-        existing_count = await db.users.count_documents({
-            "$and": [
-                {"$or": [{"is_seed": {"$exists": False}}, {"is_seed": False}]},
-                {"$or": [
-                    {"email": None},
-                    {"email": ""},
-                    {"email": {"$exists": False}},
-                    {"email": {"$not": {"$regex": test_email_re, "$options": "i"}}},
-                ]},
-            ]
-        })
+        # Match the backfill contract EXACTLY. A brand-new user only
+        # qualifies if:
+        #   1) their OWN email is not a test-agent pattern, AND
+        #   2) the existing real-user count is below the founding cap.
         FOUNDING_LIMIT = 40
-        is_first_run = existing_count < FOUNDING_LIMIT
+        current_email = current.get("email")
+        if not _is_test_email(current_email):
+            test_email_re = r"(^(test|qa_|demo_|bgtest|btnclk|testi|testjoiner))|(@example\.com$)"
+            existing_count = await db.users.count_documents({
+                "$and": [
+                    {"$or": [{"is_seed": {"$exists": False}}, {"is_seed": False}]},
+                    {"$or": [
+                        {"email": None},
+                        {"email": ""},
+                        {"email": {"$exists": False}},
+                        {"email": {"$not": {"$regex": test_email_re, "$options": "i"}}},
+                    ]},
+                ]
+            })
+            is_first_run = existing_count < FOUNDING_LIMIT
 
     set_on_insert = {
         "uid": current["uid"],
