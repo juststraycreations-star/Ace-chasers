@@ -4,7 +4,7 @@ import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useWebSocket } from "@/lib/ws";
 import { toast } from "sonner";
-import { CaretLeft, Minus, Plus, ChatCircleText, Terminal, ArrowsClockwise, UsersThree, Shuffle, Ghost, Target, MoneyWavy } from "@phosphor-icons/react";
+import { CaretLeft, Minus, Plus, ChatCircleText, Terminal, ArrowsClockwise, UsersThree, Shuffle, Ghost, Target, MoneyWavy, Printer } from "@phosphor-icons/react";
 import GhostOverlay from "@/components/GhostOverlay";
 import CTPLeaderboard from "@/components/CTPLeaderboard";
 import DirectorNotesBanner from "@/components/DirectorNotesBanner";
@@ -244,6 +244,25 @@ export default function RoundScorecard() {
     }
   };
 
+  // One-tap PDF export of the ScorecardGrid via the browser's Print dialog.
+  // Uses a data attribute on <body> + `@media print` rules in index.css so
+  // we ship zero extra JS deps. Any browser's Print → "Save as PDF" works.
+  const handlePrintScorecard = () => {
+    if (viewMode !== "grid") setViewMode("grid");
+    // Give React one paint cycle to swap views before invoking print.
+    requestAnimationFrame(() => {
+      document.body.setAttribute("data-print-target", "scorecard-grid");
+      const cleanup = () => {
+        document.body.removeAttribute("data-print-target");
+        window.removeEventListener("afterprint", cleanup);
+      };
+      window.addEventListener("afterprint", cleanup);
+      // Fallback if the browser never fires afterprint (some Safari versions).
+      setTimeout(cleanup, 5000);
+      window.print();
+    });
+  };
+
   if (!round) return <div className="min-h-screen bg-white flex items-center justify-center text-zinc-500 font-mono-data text-xs">LOADING…</div>;
 
   const par = round.par_per_hole[currentHole - 1];
@@ -285,34 +304,49 @@ export default function RoundScorecard() {
         <DirectorNotesBanner round={round} isDirector={isDirector} onUpdated={load} />
 
         {/* View mode toggle — SCORE (per-hole entry) vs GRID (UDisc-style table) */}
-        <div
-          className="flex items-center gap-1.5 mb-5 bg-emerald-50/70 border border-emerald-100 rounded-full p-1 w-fit"
-          data-testid="scorecard-view-toggle"
-        >
-          <button
-            type="button"
-            data-testid="scorecard-view-score"
-            onClick={() => setViewMode("score")}
-            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
-              viewMode === "score"
-                ? "bg-emerald-800 text-white shadow-sm"
-                : "text-emerald-800 hover:bg-emerald-100"
-            }`}
+        <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+          <div
+            className="flex items-center gap-1.5 bg-emerald-50/70 border border-emerald-100 rounded-full p-1 w-fit"
+            data-testid="scorecard-view-toggle"
           >
-            Score
-          </button>
-          <button
-            type="button"
-            data-testid="scorecard-view-grid"
-            onClick={() => setViewMode("grid")}
-            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
-              viewMode === "grid"
-                ? "bg-emerald-800 text-white shadow-sm"
-                : "text-emerald-800 hover:bg-emerald-100"
-            }`}
-          >
-            Scorecard
-          </button>
+            <button
+              type="button"
+              data-testid="scorecard-view-score"
+              onClick={() => setViewMode("score")}
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                viewMode === "score"
+                  ? "bg-emerald-800 text-white shadow-sm"
+                  : "text-emerald-800 hover:bg-emerald-100"
+              }`}
+            >
+              Score
+            </button>
+            <button
+              type="button"
+              data-testid="scorecard-view-grid"
+              onClick={() => setViewMode("grid")}
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                viewMode === "grid"
+                  ? "bg-emerald-800 text-white shadow-sm"
+                  : "text-emerald-800 hover:bg-emerald-100"
+              }`}
+            >
+              Scorecard
+            </button>
+          </div>
+
+          {viewMode === "grid" && (
+            <button
+              type="button"
+              onClick={handlePrintScorecard}
+              data-testid="scorecard-print-btn"
+              title="Save or print the scorecard as PDF"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold text-emerald-800 border border-emerald-200 bg-white hover:bg-emerald-50 hover:border-emerald-400 transition-all shadow-sm"
+            >
+              <Printer size={14} weight="duotone" />
+              Print / PDF
+            </button>
+          )}
         </div>
 
         {viewMode === "grid" && (

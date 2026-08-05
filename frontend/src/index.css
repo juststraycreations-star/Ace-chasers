@@ -15,3 +15,47 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* ============= Print — one-tap PDF export of the Scorecard ============
+ * When window.print() is invoked with data-print-target="scorecard-grid"
+ * on <body>, hide everything on the page except the ScorecardGrid card
+ * itself. Every browser's Print dialog exposes "Save as PDF" so users
+ * can pin a physical copy at the course without any extra JS deps.
+ */
+@media print {
+  body[data-print-target="scorecard-grid"] * {
+    visibility: hidden !important;
+  }
+  body[data-print-target="scorecard-grid"] [data-testid="scorecard-grid"],
+  body[data-print-target="scorecard-grid"] [data-testid="scorecard-grid"] * {
+    visibility: visible !important;
+  }
+  body[data-print-target="scorecard-grid"] [data-testid="scorecard-grid"] {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100% !important;
+    max-width: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    page-break-inside: avoid;
+  }
+  /* Force print colors — browsers strip backgrounds by default. */
+  body[data-print-target="scorecard-grid"] [data-testid="scorecard-grid"] * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  /* Hide the toggle + Print button themselves — they don't belong on paper. */
+  body[data-print-target="scorecard-grid"] [data-testid="scorecard-view-toggle"],
+  body[data-print-target="scorecard-grid"] [data-testid="scorecard-print-btn"] {
+    display: none !important;
+  }
+}
+
+@page {
+  size: landscape;
+  margin: 0.4in;
+}
+

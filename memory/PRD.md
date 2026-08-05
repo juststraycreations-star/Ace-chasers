@@ -753,3 +753,35 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **P2** — Print / PDF export of the ScorecardGrid so directors can post a physical copy at the course.
 - **P3** — Real-time notifications for non-round events.
 
+
+### Session 46 — Print / PDF export of Scorecard + Deploy trigger (Feb 2026)
+
+**User asks:**
+- One-tap PDF export of the ScorecardGrid so directors can pin a physical copy at the course.
+- Deploy Sessions 40-45 to production (they suspect it will fix the sign-in Cloudflare error).
+
+**Print / PDF export (new)**
+- Zero-dependency approach — uses the browser's native Print dialog which every OS exposes a "Save as PDF" option in.
+- `frontend/src/index.css` — new `@media print` block scoped to `body[data-print-target="scorecard-grid"]`:
+  - Hides everything on the page.
+  - Un-hides only the ScorecardGrid card (`[data-testid="scorecard-grid"]`).
+  - Forces exact color reproduction (`-webkit-print-color-adjust: exact`) so the emerald palette + score-cell colors survive on paper.
+  - Hides the view toggle + Print button itself (they'd be visual noise on the printed sheet).
+- `@page { size: landscape; margin: 0.4in }` — most scorecards fit on a landscape letter/A4.
+- `pages/leagues/RoundScorecard.jsx`:
+  - New "Print / PDF" button appears next to the Score/Scorecard toggle when in Scorecard view.
+  - `handlePrintScorecard()` sets the `data-print-target` attribute, calls `window.print()` in the next paint cycle, and cleans up on `afterprint` (5s timeout fallback for Safari).
+  - Button data-testid: `scorecard-print-btn`.
+
+**Deploy trigger (Sessions 40-45)**
+- Dispatched to `emergent__send_to_deployer` with intent="deploy". Job `db4a0c76-ad6d-4f1b-bea5-0c419a46e0eb`.
+- Bundle shipped: Google Group beta emails + Resend-to-All + First Run founding tier + League Dashboard refactor + card-create UX fix + Founding recount to 40 excluding QA emails + `/leagues/{id}/dashboard` bundle + Ledger/Compliance/Rounds side sub-router extractions + `POST /scorecards/{id}/certify` + Compliance DM nudges + UDisc ScorecardGrid + Print/PDF export.
+- **39/39 pytest** across iters 31→35.
+
+**Post-deploy verification checklist (user's action after Emergent finishes):**
+1. Open acechasers.net and sign in — the Cloudflare "couldn't parse response" issue should be gone (Session 44 hardened Firebase token verify).
+2. If it's NOT gone, take a **request-id from the Cloudflare error page** and paste it here; only Emergent Support can read origin logs on the deployed environment.
+3. Open `/beta-admin` and press "Resend to ALL" so the new Google Group copy hits your entire user base.
+4. Verify a league page loads the new dashboard bundle (Network tab: single `/dashboard` call instead of 4).
+5. Try the Print / PDF button on a scorecard.
+
