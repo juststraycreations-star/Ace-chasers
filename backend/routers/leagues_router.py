@@ -978,7 +978,7 @@ async def player_self_certify(scorecard_id: str, request: Request,
         old_value=0,
         new_value=int(sc.get("total") or 0),
         edited_by_user_id=user.user_id,
-        edited_by_name=f"{user.name} · PLAYER-CERTIFIED",
+        edited_by_name=f"{user.name or user.email or user.user_id} · PLAYER-CERTIFIED",
     )
     await db.proof_logs.insert_one(audit.model_dump())
     await ws_manager.broadcast(

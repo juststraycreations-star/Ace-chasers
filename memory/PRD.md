@@ -644,3 +644,54 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **P2** — Introduce `routers/_shared.py` to hold `api_router`, `db`, common deps — future-proof the tail-import chain.
 - **P3** — Real-time notifications for non-round events.
 
+
+### Session 44 — Player self-certify + Rounds side-router extract + Compliance DM nudges (Feb 2026)
+
+**User asks (all three shipped):**
+- Player self-certification endpoint so the sweep-finalize loop closes on its own.
+- Phase 3 rounds extraction out of the 1,795-line `leagues_router.py`.
+- One-tap "DM this player" button on every pending compliance chip.
+
+**Player self-certify (new)**
+- `POST /api/scorecards/{scorecard_id}/certify` — flips `player_certified: true` on the caller's OWN scorecard.
+- Rules: auth required · caller must be a league member · caller must own the scorecard (403 if not) · idempotent on re-hit (no duplicate ProofLog) · rejects unknown scorecard with 404.
+- Writes a ProofLog audit row with `edited_by_name = "<display-name-or-email> · PLAYER-CERTIFIED"` and a WebSocket broadcast (`type: score_update, player_certified: true`) so the round page updates live.
+- Frontend `pages/leagues/RoundScorecard.jsx`:
+  - New "Certify My Card" button on the owner's row only, hidden once already certified or finalized. Disabled during POST in-flight.
+  - New "You OK'd" badge appears post-certification (until director finalizes).
+  - Tooltip: "Approve my own scorecard so the director can finalize the round."
+
+**Rounds side-router extract (scoped phase 3)**
+- New `backend/routers/leagues_rounds_router.py` — moves 6 self-contained "side data" endpoints:
+  - `POST/GET /rounds/{id}/chat`
+  - `PATCH /rounds/{id}/director-notes`
+  - `POST/GET /rounds/{id}/ctp`
+  - `DELETE /ctp/{entry_id}`
+- Same tail-import pattern used by clubhouse/ledger/compliance — endpoints attach to the shared `api_router`, imports helpers/models from `leagues_router`.
+- **leagues_router.py: 1,795 → 1,647 lines** (148-line reduction). Score/finalize/WebSocket/payout/sweep intentionally stay in `leagues_router.py` — those are phase 4 (higher risk, own session).
+- Route-registry regression test confirms zero double-mounts.
+
+**Compliance DM nudges**
+- `leagues_compliance_router.py` — `outstanding_members[]` and `pending_certification[]` rows now include `user_id` (nullable for manually-added members without a linked account).
+- `components/ComplianceTab.jsx` — every clubhouse-outstanding chip and every scorecard-pending chip is now a button. Click → `navigate("/messages", { state: { withUid, withName } })` which the existing Messages deep-link consumes. When `user_id` is null the button renders disabled with a toast fallback ("This player doesn't have a linked account yet — can't DM.").
+- Adds a subtle `ChatCircleDots` icon on each button so the affordance is visible without cluttering the layout.
+
+**Verification (iter35)**
+- **39/39 pytest PASS** (22 new + 17 iter34 regression).
+- Self-certify covers auth/ownership/idempotency; compliance dashboard reflects certifications instantly; rounds-router extraction bit-identical to pre-move behaviour.
+- Applied one minor code-review polish: `edited_by_name` now falls back to `email` then `user_id` if Firebase display name is empty, so audit logs never render " · PLAYER-CERTIFIED" with a blank leading name.
+
+## Prioritized backlog (post-Session-44)
+- **P0** — Deploy Sessions 40/41/42/43/44 to prod once user OKs the beta email preview.
+- **P0** — User to submit `upload_certificate.pem` + upload `acechasers-net-v1.0.3.aab` to Play Console.
+- **P1** — After Play reset lands, admin presses "Resend to ALL".
+- **P1** — Rounds extraction phase 4 (score/finalize/sweep/payout/WebSocket) — leagues_router.py can drop under 800 lines when this lands. Higher risk; own session.
+- **P1** — Invite-friend referral flow.
+- **P1** — DM Fair Play gate for reply flows.
+- **P2** — Signed short-lived tokens for CSV downloads.
+- **P2** — Introduce `routers/_shared.py` to house `api_router`, `db`, common deps.
+- **P2** — Sentry (needs user DSN).
+- **P2** — Bulk-email audit log.
+- **P2** — Atomic founding-member counter for high-concurrency signups.
+- **P3** — Real-time notifications for non-round events.
+
