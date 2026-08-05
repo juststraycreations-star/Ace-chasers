@@ -8,6 +8,8 @@ import { clearDevSession } from '../lib/devAuth';
 import DiscIcon from './DiscIcon';
 import NotificationsBell from './NotificationsBell';
 import SessionRequestsModal from './SessionRequestsModal';
+import LeaguesFeatureAnnouncement from './LeaguesFeatureAnnouncement';
+import api from '../lib/api';
 
 const INBOX_POLL_MS = 30_000;
 
@@ -51,6 +53,8 @@ export default function Navigation() {
   const navigate = useNavigate();
   const reset = useAuthStore((s) => s.reset);
   const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
+  const patchProfile = useAuthStore((s) => s.patchProfile);
   const fetchInbox = useMatchStore((s) => s.fetchInbox);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -65,6 +69,14 @@ export default function Navigation() {
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
+
+  // First-ever click on the Leagues nav link (from anywhere) dismisses the
+  // announcement pulse so the amber dot never comes back for this user.
+  const dismissLeaguesPulseIfNew = () => {
+    if (!profile || profile.hasViewedLeaguesFeature) return;
+    patchProfile({ hasViewedLeaguesFeature: true });
+    api.post('/users/me/dismiss-leagues-feature').catch(() => {});
+  };
 
   const isActive = (path) => location.pathname === path;
   const linkClasses = (path) =>
@@ -105,19 +117,31 @@ export default function Navigation() {
 
         {/* Desktop nav (lg and up) */}
         <div className="hidden lg:flex gap-6 items-center">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={linkClasses(item.to)}
-              data-testid={item.testid}
-              onMouseEnter={() => prefetchRoute(item.to)}
-              onFocus={() => prefetchRoute(item.to)}
-              onTouchStart={() => prefetchRoute(item.to)}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const linkEl = (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={linkClasses(item.to)}
+                data-testid={item.testid}
+                onMouseEnter={() => prefetchRoute(item.to)}
+                onFocus={() => prefetchRoute(item.to)}
+                onTouchStart={() => prefetchRoute(item.to)}
+                onClick={item.to === '/leagues' ? dismissLeaguesPulseIfNew : undefined}
+              >
+                {item.label}
+              </Link>
+            );
+            if (item.to === '/leagues') {
+              return (
+                <span key={item.to} className="inline-flex items-center gap-1.5">
+                  {linkEl}
+                  <LeaguesFeatureAnnouncement />
+                </span>
+              );
+            }
+            return linkEl;
+          })}
           <NotificationsBell />
           <button
             onClick={handleLogout}
@@ -130,19 +154,20 @@ export default function Navigation() {
 
         {/* Mobile right cluster (below lg) */}
         <div className="flex lg:hidden items-center gap-2">
+          <LeaguesFeatureAnnouncement mobile />
           <NotificationsBell />
           <button
             type="button"
             onClick={() => setMobileOpen((v) => !v)}
-            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+            aria-label={mobileOpen ? 'Close Chasers Hub' : 'Open Chasers Hub'}
             aria-expanded={mobileOpen}
-            className="p-2 rounded-lg hover:bg-white/10 transition focus:outline-none focus:ring-2 focus:ring-disc-gold"
+            className="group inline-flex items-center gap-2 px-3 py-2 rounded-full bg-slate-800/80 backdrop-blur border border-slate-700 hover:border-amber-500 hover:bg-slate-800 transition-all duration-200 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-amber-500/60"
             data-testid="nav-mobile-toggle"
           >
             {mobileOpen ? (
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
+                className="h-5 w-5"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -153,7 +178,7 @@ export default function Navigation() {
             ) : (
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
+                className="h-5 w-5"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -162,6 +187,9 @@ export default function Navigation() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             )}
+            <span className="text-xs uppercase tracking-wider font-semibold text-slate-100 group-hover:text-amber-300 transition-colors">
+              Chasers Hub
+            </span>
           </button>
         </div>
       </div>
@@ -179,7 +207,10 @@ export default function Navigation() {
                 to={item.to}
                 className={mobileLinkClasses(item.to)}
                 data-testid={`${item.testid}-mobile`}
-                onClick={() => setMobileOpen(false)}
+                onClick={() => {
+                  setMobileOpen(false);
+                  if (item.to === '/leagues') dismissLeaguesPulseIfNew();
+                }}
                 onTouchStart={() => prefetchRoute(item.to)}
               >
                 {item.label}

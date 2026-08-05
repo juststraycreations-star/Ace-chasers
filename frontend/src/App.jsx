@@ -5,6 +5,7 @@ import AuthProvider from './components/AuthProvider';
 import Navigation from './components/Navigation';
 import EmailVerificationBanner from './components/EmailVerificationBanner';
 import OnboardingGate from './components/OnboardingGate';
+import FirstRunWelcomeModal from './components/FirstRunWelcomeModal';
 // Login + SignUp stay eager — they are the first paint for logged-out
 // visitors so shipping them in the initial bundle saves a round-trip.
 // Every other page is code-split via React.lazy.
@@ -58,6 +59,7 @@ function AppRoutes() {
       {isAuthenticated && <Navigation />}
       {isAuthenticated && <EmailVerificationBanner />}
       {isAuthenticated && <OnboardingGate />}
+      {isAuthenticated && <FirstRunWelcomeModal />}
 
       <Suspense fallback={<RouteFallback />}>
         <Routes>

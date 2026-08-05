@@ -42,31 +42,75 @@ async def auth_sync(
 
     now = datetime.now(timezone.utc).isoformat()
     email_verified = claims_email_verified(current.get("claims") or {})
+
+    # Founding-member logic: the first 100 rows ever created carry
+    # first_run=true. We only compute this at insert time so the flag is
+    # frozen for the account life.
+    is_first_run = False
+    if is_new_user:
+        existing_count = await db.users.count_documents({})
+        is_first_run = existing_count < 100
+
+    set_on_insert = {
+        "uid": current["uid"],
+        "created_at": now,
+        "is_seed": False,
+        "interests": ["casual play"],
+        "skillLevel": "Beginner",
+        "bio": "New to Ace Chasers!",
+        "first_run": is_first_run,
+        "has_dismissed_first_run_modal": False,
+        "has_viewed_leagues_feature": False,
+    }
+    if current.get("name"):
+        set_on_insert["name"] = current["name"]
+    if current.get("picture"):
+        set_on_insert["profilePictureUrl"] = current["picture"]
+
     update = {
-        "$setOnInsert": {
-            "uid": current["uid"],
-            "created_at": now,
-            "is_seed": False,
-            "interests": ["casual play"],
-            "skillLevel": "Beginner",
-            "bio": "New to Ace Chasers!",
-        },
+        "$setOnInsert": set_on_insert,
         "$set": {
             "email": current.get("email"),
             "email_verified": email_verified,
             "updated_at": now,
         },
     }
-    if current.get("name"):
-        update["$setOnInsert"]["name"] = current["name"]
-    if current.get("picture"):
-        update["$setOnInsert"]["profilePictureUrl"] = current["picture"]
-
     await db.users.update_one({"uid": current["uid"]}, update, upsert=True)
-    # Seed users + auto-likes are disabled in production — real users only.
 
     doc = await db.users.find_one({"uid": current["uid"]})
     return user_to_profile(doc, email_verified=email_verified)
+
+
+@router.post("/api/users/me/dismiss-first-run", response_model=ProfileOut)
+async def dismiss_first_run_modal(current=Depends(get_current_user)):
+    """Idempotently mark the founding-member congrats modal as dismissed so
+    it never renders for this user again."""
+    db = get_db()
+    await db.users.update_one(
+        {"uid": current["uid"]},
+        {"$set": {"has_dismissed_first_run_modal": True,
+                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    doc = await db.users.find_one({"uid": current["uid"]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user_to_profile(doc, email_verified=claims_email_verified(current.get("claims") or {}))
+
+
+@router.post("/api/users/me/dismiss-leagues-feature", response_model=ProfileOut)
+async def dismiss_leagues_feature_pulse(current=Depends(get_current_user)):
+    """Mark the "Leagues are live" nav announcement as seen so the amber
+    pulse dot disappears for this user."""
+    db = get_db()
+    await db.users.update_one(
+        {"uid": current["uid"]},
+        {"$set": {"has_viewed_leagues_feature": True,
+                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    doc = await db.users.find_one({"uid": current["uid"]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user_to_profile(doc, email_verified=claims_email_verified(current.get("claims") or {}))
 
 
 @router.get("/api/users/me", response_model=ProfileOut)

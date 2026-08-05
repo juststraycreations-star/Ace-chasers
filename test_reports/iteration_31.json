@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 31 — Full backend + frontend regression for Founding-Member First-Run badge/modal, Leagues Feature Announcement pulse, Chasers Hub pill nav, LeagueDashboard layout refactor, League core APIs (P0: POST /api/rounds/{id}/cards director-only card creation), and performance profiling of all league surfaces. 17/17 pytest passed. All UI assertions passed. Card creation is NOT broken — POST /api/rounds/{id}/cards returned 200 with correct shape (round_id, label, player_ids) and created matching Scorecards. Perf: every league endpoint p50 between 115–140ms server-side; ZERO endpoints exceed the 1s threshold. Backfill log confirmed 'First Run backfill complete: 100 founding members' and direct Mongo query shows exactly 100 non-seed users with first_run=true (out of 313 total non-seed).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration31.py",
+    "/app/test_reports/pytest/iteration_31.xml",
+    "/app/test_reports/pytest/iter31_perf.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Card creation P0 alarm is a FALSE POSITIVE at the backend layer. POST /api/rounds/{round_id}/cards works — 200 with correct payload, scorecards materialised, director-only 403 gate enforced. If user still perceives it as broken, look at the React modal/UI wiring, not the API. Suggest bisecting from LeagueDetail.jsx create-card flow (not covered in this iteration since scope was Dashboard-focused).",
+    "Performance is fine server-side (avg 115–140ms across ALL league endpoints, measured from within the container). If users report 'super slow', root cause is almost certainly: (a) cold Firebase token verification on first request, (b) frontend waterfall issuing 4-6 sequential GETs (leagues → seasons → rounds → standings → ledger), or (c) network hop from client → edge/ingress. Recommend adding a single /api/leagues/{id}/dashboard bundle endpoint that returns league+seasons+rounds+standings in one round-trip, or use React Query with parallel prefetch.",
+    "server.py _backfill_first_run_flag() runs on every startup — safe because the mongo filter is idempotent ($or first_run doesn't exist or false), but consider guarding with a `seed_state` flag to avoid the scan on every process reload during dev (WatchFiles reloads triggered it ~3x during this test session).",
+    "auth_router.py new_user first_run computation uses count_documents({}) which INCLUDES the current-user-being-inserted possibly (race), and also counts is_seed=true accounts. Since seed accounts are 3, the effective threshold is ~97 real users. Not a bug for current 313-user prod, but semantics diverge from the 'first 100 non-seed' backfill logic. Recommend using {'is_seed': {'$ne': True}} filter to match backfill contract.",
+    "LeagueDashboard.jsx layout matches spec exactly — single dashboard-primary-action card, exactly one dashboard-create-league-btn, footer contains only muted ReportBugButton, each league in bounded white card with border-gray-100. Verified via query_selector_all count.",
+    "Navigation.jsx pill button correctly labels 'Chasers Hub' (verified via text_content) and keeps data-testid='nav-mobile-toggle'.",
+    "FirstRunWelcomeModal correctly renders only when firstRun && !hasDismissedFirstRunModal, and the Let's Play CTA calls dismiss endpoint (post-click the modal disappears + backend flag flipped).",
+    "LeaguesFeatureAnnouncement toggle renders when hasViewedLeaguesFeature=false — confirmed visually and via selector."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration31.py (new)"
+  ],
+  "success_rate": {"backend": "100% (17/17 pytest)", "frontend": "100% (10/10 UI assertions)"},
+  "test_credentials": "Firebase signUp with TEST_i31_*/TEST_i31ui_*@example.com / demo1234. UI test user: TEST_i31ui_58c07138@example.com (uid DH831ESVNvRhHyU9r0YC3vYHE4P2) had first_run flipped to true directly in Mongo to trigger the FirstRunBadge + FirstRunWelcomeModal (since new signups now correctly get firstRun=false with >=100 existing users).",
+  "seed_data_creation": "5 test users (TEST_i31_*), 1 test league, 1 test round, ~2 cards, ~2 scorecards + 1 UI test user (TEST_i31ui_*). Not cleaned up — matches prior iteration pattern.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter31 confirmed: (1) POST /api/rounds/{id}/cards is NOT broken at API layer — if user sees a bug in card creation UI, investigate LeagueDetail.jsx or wherever the card-create modal lives on the frontend; (2) league backend perf is fast (p95<200ms); slowness perception must be a frontend waterfall or client-network issue; (3) All new founding-member components render correctly. Test user with first_run=true available at TEST_i31ui_58c07138@example.com / demo1234 for re-verification. Perf JSON at /app/test_reports/pytest/iter31_perf.json shows endpoint latencies.",
+  "rca of the issue": "User-reported 'card creation broken' cannot be reproduced at the backend layer — the endpoint returns 200 with correct card + scorecard shapes and enforces director-only role. If the bug is real, root cause is in the frontend card-create modal wiring (not scoped in this iteration). User-reported 'league features super slow' does not manifest at the backend layer (all endpoints < 200ms). Likely candidates: (a) 4-6 sequential frontend GETs on LeagueDetail mount that could be parallelised, (b) Firebase token cold-verification on first call after container restart, (c) React re-renders on WebSocket messages. Recommend frontend perf trace (Chrome DevTools waterfall) for definitive RCA."
+}

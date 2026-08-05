@@ -63,6 +63,17 @@ class ProfileOut(BaseModel):
     # Null = user has never sent/accepted a DM and must be prompted on
     # their first outbound message. Set by POST /api/users/me/dm-terms/agree.
     dmTermsAgreedAt: Optional[str] = None
+    # ---- Founding-member / First-Run flags (Session 41, Feb 2026) ----
+    # True for the first 100 registered players — awarded automatically at
+    # auth_sync time and back-filled at startup for legacy accounts. Powers
+    # the disc-golf micro-badge next to the display name.
+    firstRun: bool = False
+    # Flip true the first time the founding-member welcome modal is
+    # dismissed so it only appears once.
+    hasDismissedFirstRunModal: bool = False
+    # Per-user "Leagues are live" nav announcement badge. Defaults false;
+    # flipped true when the user clicks/opens Leagues for the first time.
+    hasViewedLeaguesFeature: bool = False
 
 
 # --- Discovery / Swipes / Likes / Matches ----------------------------------

@@ -12,6 +12,7 @@ import {
   toggleInterestTag,
 } from '../lib/interestTags';
 import PublicProfilePreview from '../components/PublicProfilePreview';
+import FirstRunBadge from '../components/FirstRunBadge';
 
 const DEFAULT_INTERESTS = ['tournaments', 'hiking', 'casual play'];
 const MAX_RAW_BYTES = 30 * 1024 * 1024;
@@ -284,9 +285,12 @@ export default function Profile() {
             </div>
           )}
 
-          <h2 className="mt-3 text-2xl font-bold text-gray-800">
-            {profile.name || 'Your name'}
-            {profile.age ? `, ${profile.age}` : ''}
+          <h2 className="mt-3 text-2xl font-bold text-gray-800 flex items-center justify-center gap-2 flex-wrap">
+            <span>
+              {profile.name || 'Your name'}
+              {profile.age ? `, ${profile.age}` : ''}
+            </span>
+            {profile.firstRun && <FirstRunBadge size={20} />}
           </h2>
           <p className="text-disc-gold font-semibold">{profile.skillLevel || 'Beginner'}</p>
         </div>

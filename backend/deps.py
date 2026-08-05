@@ -35,6 +35,9 @@ def user_to_profile(doc: dict, *, email_verified: Optional[bool] = None) -> Prof
         bannerUrl=doc.get("bannerUrl"),
         privacy=doc.get("privacy") or {},
         dmTermsAgreedAt=doc.get("dm_terms_agreed_at"),
+        firstRun=bool(doc.get("first_run", False)),
+        hasDismissedFirstRunModal=bool(doc.get("has_dismissed_first_run_modal", False)),
+        hasViewedLeaguesFeature=bool(doc.get("has_viewed_leagues_feature", False)),
     )
 
 

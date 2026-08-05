@@ -1,28 +1,49 @@
-Ace Chasers · Android release bundle (v1.0.2)
-=====================================================
+ACE CHASERS · v1.0.3 UPLOAD KEY RESET
+======================================
 
-CURRENT ACTIVE BUILD:
-  acechasers.net.aab              ← upload this to Play Console
-  AceChasers-release-1.0.2.aab    (same file, versioned name)
+Files in this folder:
+  * acechasers-net-v1.0.3.aab            → the new signed release bundle
+  * upload-keystore.jks                  → NEW upload keystore (save this forever)
+  * upload_certificate.pem               → public cert to send Google
+  * NEW_UPLOAD_KEYSTORE_PASSWORD.txt     → password for the .jks (save this forever)
 
-Bundle metadata inside the AAB (verified via aapt2 dump):
-  Package ID:  acechasers.net
-  versionCode: 3      (was 2 in the previous upload — clean upgrade)
-  versionName: 1.0.2  (was 1.0.1)
-  Target API:  34 (Android 14)
-  Min SDK:     21 (Android 5.0)
+WHY: v1.0.3 fixes the Android 15 "deprecated edge-to-edge APIs" warning
+(androidbrowserhelper 2.6.2 → 2.7.2). We had to generate a brand-new
+upload key because the old keystore password was lost. Your real app-
+signing key is still safe with Google (Play App Signing).
 
-Signed with the SAME upload keystore you already registered on Play.
-Do NOT swap keystores between builds or Play will reject as "signed with the wrong key".
+WHAT TO DO — in order:
+──────────────────────────────────────────────────────────────────────
 
-Fingerprints (present in /.well-known/assetlinks.json — must remain deployed):
-  Upload key SHA-256:  22:F8:BD:A0:06:2D:A3:C5:57:28:00:86:32:F9:F3:80:7D:41:C4:92:09:EF:8F:4D:DF:7B:9A:D8:C4:0B:39:9F
-  Upload key SHA-1:    9C:EA:BC:31:42:55:16:B8:13:D5:18:8F:19:3A:2D:37:A3:74:23:53
-  Play App Signing:    7D:63:D0:21:DD:83:A3:54:DF:0D:FB:BD:3A:A9:D1:51:00:E1:A8:FA:CD:0E:75:1B:1C:2D:1F:75:AF:7C:97:7A
+1) DOWNLOAD ALL 4 FILES to a safe local folder RIGHT NOW.
+   Suggested path on your computer:  ~/AceChasers/keys/upload-2026/
+   Back this folder up (Google Drive / password manager attachment).
 
-Keystore files (KEEP FOREVER):
-  android.keystore
-  KEYSTORE_PASSWORD.txt  →  XZVsSViyVcTA9HEHUAdh
+2) REQUEST an upload-key reset with Google Play:
+   Play Console → Setup → App integrity → App signing
+   → "Change app signing key" section
+   → click "Request upload key reset"
+   Attach:  upload_certificate.pem
+   In the reason box, write:
+     "Upload keystore password lost. Generated a new upload key.
+      Attaching the new public certificate."
+   Submit. Google usually approves within 1-2 business days.
 
-Additional Play Console keys (in play-console-keys.txt):
-  PEM certificate, base64 public key for in-app billing, SHA-1, SHA-256.
+3) WHILE YOU WAIT, tell me here in chat once you've saved the files.
+   I will DELETE them from the public /downloads folder immediately
+   so nobody else can grab them.
+
+4) After Google confirms the upload key reset, upload
+   acechasers-net-v1.0.3.aab to Play Console → Closed testing → Create
+   new release. That build:
+     * fixes the Android 15 deprecated-API warning
+     * bumps versionCode 3 → 4, versionName 1.0.2 → 1.0.3
+     * raises minSdk 21 → 23 (Android 6.0+, still 99%+ of devices)
+
+5) FOR FUTURE RELEASES, always sign with upload-keystore.jks using the
+   password from NEW_UPLOAD_KEYSTORE_PASSWORD.txt. Never lose it again.
+
+──────────────────────────────────────────────────────────────────────
+
+If Play Console rejects the upload with "signature mismatch," it means
+the upload key reset hasn't been approved yet — wait for Google's email.

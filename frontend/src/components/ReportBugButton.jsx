@@ -5,8 +5,11 @@ import { Bug } from "@phosphor-icons/react";
  * pre-filled bug report addressed to juststraycreations@gmail.com.
  * Includes the current page URL + user-agent so we can reproduce
  * without a back-and-forth.
+ *
+ * variant="default"  — pill button with border (top-nav placements).
+ * variant="muted"    — quiet text link (footer/utility placements).
  */
-export default function ReportBugButton() {
+export default function ReportBugButton({ variant = "default" }) {
   const openReport = () => {
     const subject = encodeURIComponent("Ace Chasers · Bug report");
     const pageUrl = typeof window !== "undefined" ? window.location.href : "";
@@ -23,6 +26,21 @@ export default function ReportBugButton() {
     );
     window.location.href = `mailto:juststraycreations@gmail.com?subject=${subject}&body=${body}`;
   };
+
+  if (variant === "muted") {
+    return (
+      <button
+        type="button"
+        onClick={openReport}
+        data-testid="report-bug-btn"
+        className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 transition-colors"
+        title="Report a bug — opens your email"
+      >
+        <Bug size={12} weight="duotone" />
+        Report a bug
+      </button>
+    );
+  }
 
   return (
     <button
