@@ -587,3 +587,60 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **P2** — Atomic founding-member counter for high-concurrency signups.
 - **P3** — Real-time notifications for non-round events.
 
+
+### Session 43 — Ledger router extract + Compliance dashboard (Feb 2026)
+
+**User asks:**
+- Refactor Ledger (and eventually Rounds) out of the 1,795-line `leagues_router.py` monolith.
+- Build a director-only Compliance Board so sweep-finalize never stalls silently.
+
+**Ledger refactor (phase 2 of router split)**
+- New file `backend/routers/leagues_ledger_router.py` hosts the 4 endpoints previously buried in `leagues_router.py`:
+  - `POST /leagues/{id}/ledger`
+  - `GET /leagues/{id}/ledger`
+  - `GET /leagues/{id}/ledger.csv` (supports `?auth=` query param for browser downloads)
+  - `POST /leagues/{id}/entry-fees/collect` (70/20/10 auto-split)
+- Attaches handlers to the SAME `api_router` instance via `from .leagues_router import api_router, db, get_current_user, _require_member, LedgerEntry, _csv_response`. URL surface, prefix, auth semantics unchanged.
+- `leagues_router.py` tail-import block now registers three sub-routers in order: clubhouse, ledger, compliance.
+- `LedgerCreate` and `EntryFeePayload` Pydantic models moved with their endpoints.
+
+**Compliance Board (new)**
+- New file `backend/routers/leagues_compliance_router.py` with one director-only endpoint:
+  - `GET /leagues/{id}/compliance`
+- Returns a single JSON blob with two sections:
+  1. **`clubhouse_terms`** — `agreed_count`, `outstanding_count`, `outstanding_members[]`. Members who haven't tapped "Agree" on the Clubhouse Fair Play modal.
+  2. **`rounds[]`** — per-round scorecard certification. For each round: `scorecard_total`, `certified_count`, `finalized_count`, `pending_certification[]` (with member_id, member_name, bag_tag, scorecard_id, finalized flag, certified_by_director flag, player_certified flag), and `can_sweep_finalize: bool` (`true` iff every scorecard is certified via director OR player-certified OR already-finalized).
+- Frontend `components/ComplianceTab.jsx` — new director-only tab on League Detail. Renders:
+  - Big amber % ring + progress bar for Clubhouse agreement rollup.
+  - Chip list of members who haven't agreed yet.
+  - Card per round with certification progress, colored green when ready to sweep-finalize.
+  - Blocking chips per pending player with badge status (`NO CERT` / `PLAYER OK` / `FINAL`) and hover-title explanation. "Open Round" button jumps straight to the round scorecard page.
+- Only mounted for `league.is_director === true` — non-directors don't see the tab, and hitting the endpoint returns 403.
+
+**Verification (iter34)**
+- 17/17 pytest PASS. Ledger extract behavior IS bit-identical to pre-refactor (same shapes, same status codes, same 7-row insert pattern on entry-fee collect, same ace-pool increment).
+- Compliance logic verified: 3 scorecards / 0 → 1 → 3 `player_certified` flips → `can_sweep_finalize` false / false / true, `pending_certification` length 3 → 2 → 0.
+- iter33 regression still 13/13 PASS.
+- Frontend verified: director sees "Compliance" tab, non-director does not, all data-testids present (compliance-tab, compliance-clubhouse-card, compliance-outstanding-{id}, compliance-round-{id}, compliance-pending-{scId}, compliance-agreed-pct).
+
+**Known follow-ups (called out by testing agent code review)**
+- `player_certified` isn't yet writable via any public endpoint — only `finalized` and (future) `certified_by_director` are. Until a "player certifies own card" endpoint exists, the compliance board treats scorecards as pending unless the director/finalize path has flipped them. **Backlog: add `POST /scorecards/{id}/certify` for player self-certification.**
+- Ledger CSV token via `?auth=` works but consider signed short-lived tokens before public launch.
+- Compliance rounds not paginated (limit 200) — fine at current scale.
+- Rounds refactor still deferred to Session 44 (20+ endpoints + WebSocket manager — high risk, needs its own iteration).
+
+## Prioritized backlog (post-Session-43)
+- **P0** — Deploy Sessions 40/41/42/43 to prod once user OKs the beta email preview.
+- **P0** — User to submit `upload_certificate.pem` + upload `acechasers-net-v1.0.3.aab` to Play Console.
+- **P1** — After Play reset lands, admin presses "Resend to ALL".
+- **P1** — Player self-certification endpoint (`POST /scorecards/{id}/certify`) — closes the compliance loop.
+- **P1** — Extract Rounds + Scorecards from `leagues_router.py` (phase 3 refactor, ~20 endpoints + WebSocket).
+- **P1** — Invite-friend referral flow.
+- **P1** — DM Fair Play gate for reply flows.
+- **P2** — Signed short-lived tokens for CSV downloads.
+- **P2** — Sentry (needs user DSN).
+- **P2** — Bulk-email audit log.
+- **P2** — Atomic founding-member counter for high-concurrency signups.
+- **P2** — Introduce `routers/_shared.py` to hold `api_router`, `db`, common deps — future-proof the tail-import chain.
+- **P3** — Real-time notifications for non-round events.
+
