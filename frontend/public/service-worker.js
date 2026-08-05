@@ -12,8 +12,14 @@
 //     hit the server (feed, messages, auth, etc.).
 //   - Cache Cloudinary images/videos with a cache-first policy so posts load
 //     instantly on repeat visits.
+//
+// SW version bump (2026-02): v2. Fixes a hard bug where a broken origin
+// response (e.g. Cloudflare 520 during sign-in) caused staleWhileRevalidate
+// to resolve to `undefined`, which throws an unhandled TypeError inside the
+// fetch handler and locks the user out until a hard-refresh. All handlers
+// now guarantee a valid Response is returned in every code path.
 
-const CACHE_VERSION = 'ace-chasers-v1';
+const CACHE_VERSION = 'ace-chasers-v2';
 const APP_SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE   = `${CACHE_VERSION}-runtime`;
 const MEDIA_CACHE     = `${CACHE_VERSION}-media`;
@@ -28,7 +34,11 @@ const APP_SHELL = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(APP_SHELL_CACHE).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())
+    caches
+      .open(APP_SHELL_CACHE)
+      .then((cache) => cache.addAll(APP_SHELL))
+      .catch(() => {}) // don't block install if a precache asset is missing
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -47,11 +57,44 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Allow the app to force-reset the SW after a failed auth handshake — the
+// page just posts {type:'CLEAR_CACHES'} and we drop every runtime cache.
+self.addEventListener('message', (event) => {
+  if (event?.data?.type === 'CLEAR_CACHES') {
+    event.waitUntil(
+      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+    );
+  }
+});
+
+// Empty fallback used whenever a network or cache path yields nothing —
+// returning `undefined` from a fetch handler is what triggers the
+// TypeError that was locking users out on sign-in failures.
+function offlineFallback() {
+  return new Response('', {
+    status: 504,
+    statusText: 'Gateway Timeout',
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  });
+}
+
+// A response is safely cacheable only if it's a fully-buffered `basic`
+// (same-origin) 200. Opaque / redirect / partial / 5xx responses can
+// throw when cloned or replayed. This is the main hardening.
+function isCacheable(res) {
+  return !!(res && res.ok && res.status === 200 && res.type === 'basic');
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
-  const url = new URL(req.url);
+  let url;
+  try {
+    url = new URL(req.url);
+  } catch {
+    return; // malformed URL — let the browser handle it
+  }
 
   // Never cache API traffic — always go to the network.
   if (url.pathname.startsWith('/api/')) return;
@@ -69,26 +112,56 @@ self.addEventListener('fetch', (event) => {
 });
 
 async function cacheFirst(req, cacheName) {
-  const cache = await caches.open(cacheName);
-  const hit = await cache.match(req);
-  if (hit) return hit;
   try {
-    const res = await fetch(req);
-    if (res && res.ok) cache.put(req, res.clone());
-    return res;
-  } catch (err) {
-    return hit || Response.error();
+    const cache = await caches.open(cacheName);
+    const hit = await cache.match(req);
+    if (hit) return hit;
+    try {
+      const res = await fetch(req);
+      if (isCacheable(res)) {
+        try { await cache.put(req, res.clone()); } catch { /* body might have been read */ }
+      }
+      return res || offlineFallback();
+    } catch {
+      return hit || offlineFallback();
+    }
+  } catch {
+    return offlineFallback();
   }
 }
 
 async function staleWhileRevalidate(req, cacheName) {
-  const cache = await caches.open(cacheName);
-  const hit = await cache.match(req);
+  let cache;
+  try {
+    cache = await caches.open(cacheName);
+  } catch {
+    // Cache API blew up — fall back to the network with a safe wrapper.
+    try {
+      const res = await fetch(req);
+      return res || offlineFallback();
+    } catch {
+      return offlineFallback();
+    }
+  }
+
+  let hit;
+  try {
+    hit = await cache.match(req);
+  } catch {
+    hit = null;
+  }
+
+  // Kick off a network revalidation but never let it reject uncaught.
   const fetchPromise = fetch(req)
     .then((res) => {
-      if (res && res.ok) cache.put(req, res.clone());
+      if (isCacheable(res)) {
+        cache.put(req, res.clone()).catch(() => {}); // fire-and-forget
+      }
       return res;
     })
-    .catch(() => hit);
-  return hit || fetchPromise;
+    .catch(() => null);
+
+  if (hit) return hit;
+  const fresh = await fetchPromise;
+  return fresh || offlineFallback();
 }

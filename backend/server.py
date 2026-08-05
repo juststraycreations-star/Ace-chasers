@@ -18,8 +18,9 @@ from __future__ import annotations
 import logging
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
@@ -63,6 +64,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Global 500 handler — guarantees EVERY unhandled exception is returned as
+# a well-formed JSON body. Previously an uncaught exception mid-response
+# could leave Cloudflare with an empty payload → 520 "couldn't parse
+# origin response" → the browser's service worker crashed with an
+# unhandled TypeError and locked users out until a hard-refresh. This
+# closes that loop from the origin side.
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled %s at %s %s", type(exc).__name__, request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Internal server error: {type(exc).__name__}",
+            "path": request.url.path,
+        },
+    )
 
 # Serve legacy on-disk uploads. New uploads go to Cloudinary when configured.
 app.mount("/api/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")

@@ -785,3 +785,53 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 4. Verify a league page loads the new dashboard bundle (Network tab: single `/dashboard` call instead of 4).
 5. Try the Print / PDF button on a scorecard.
 
+
+### Session 47 — Sign-in 520 hotfix: auth-sync guard + SW hardening + self-heal (Feb 2026)
+
+**Bug:** After Sessions 40-45 shipped to production, multiple users still couldn't sign in. Cloudflare returned 520 "couldn't parse origin response" on `POST /api/auth/sync`, AND the browser service worker's fetch handler crashed with an unhandled TypeError, wedging affected users' browsers until a hard-refresh.
+
+**Root cause chain (diagnosed with the user's report):**
+1. `auth_sync()` had no top-level exception guard. Firebase Admin cold-start, Mongo `count_documents` on the new founding-member regex filter, or any other transient exception could raise mid-response, leaving Cloudflare with an empty payload.
+2. Empty payload → Cloudflare 520 to the browser.
+3. In the SW's `staleWhileRevalidate`, `hit || fetchPromise` resolved to `undefined` when the cache miss coincided with a fetch that rejected. Returning `undefined` from a `respondWith()` throws a TypeError inside the fetch handler event, poisoning the SW state.
+4. Wedged SW served stale/broken cached shell to every subsequent request until the user hard-refreshed.
+
+**Fixes shipped**
+1. `backend/routers/auth_router.py`:
+   - `auth_sync()` body wrapped in try/except. `HTTPException` propagates unchanged; anything else becomes a clean `{"detail":"auth_sync failed: <ExceptionType>"}` JSON 500. Never leaks an empty body.
+   - Inner defensive try around the founding-count `count_documents` — if the query hiccups, the user is still admitted, they just miss the badge on this signup (backfill picks it up on next boot).
+   - Synthetic `ProfileOut` fallback if the post-upsert `find_one` returns None (shouldn't happen but no more silent 500).
+2. `backend/server.py`:
+   - New global `@app.exception_handler(Exception)` returns a well-formed `JSONResponse` with `{detail, path}` for ANY unhandled exception on ANY route. Belt-and-suspenders — even if a new endpoint forgets its try/except, Cloudflare gets valid JSON.
+3. `frontend/public/service-worker.js` — rewrite:
+   - **CACHE_VERSION bumped v1 → v2** so old wedged workers get replaced on next activation.
+   - Every code path in `cacheFirst` + `staleWhileRevalidate` guaranteed to return a valid `Response` — added an `offlineFallback()` helper that returns a 504-labelled empty body if all else fails, so `respondWith()` never receives `undefined`.
+   - `isCacheable(res)` gate ensures we only cache same-origin 200s with `type: 'basic'`. Prevents opaque / redirect / 5xx responses from ever going into the cache.
+   - Wrapped `cache.put()` calls in try/catch — response body may have already been consumed by the time we clone it, no reason for that to crash the SW.
+   - New `message` handler: page can post `{type:'CLEAR_CACHES'}` and the SW blows away every runtime cache.
+4. `frontend/src/lib/registerSW.js`:
+   - On boot, post `CLEAR_CACHES` to the active SW + call `reg.update()` — forces the update check on every visit.
+   - `controllerchange` listener triggers a one-time auto-reload. **This means any user currently in the wedged state self-heals the instant they visit the site after this deploys** — zero manual action needed from them.
+
+**Preview verification** (curl against `$REACT_APP_BACKEND_URL/api/auth/sync`):
+- Unauth: `401` with `{"detail":"Missing Bearer token"}` (33-byte JSON, Content-Type application/json). ✅
+- Bad token: `401` with `{"detail":"Firebase token verification failed: ..."}` (91-byte JSON). ✅
+- No empty responses on any failure path.
+
+**Deploy dispatched** to Emergent (same job id, hotfix redeploy).
+
+## Prioritized backlog (post-Session-47)
+- **P0** — Verify sign-in works on acechasers.net after this deploy lands.
+- **P0** — If still failing, ask user for the exact 500 JSON body from DevTools (now that we guarantee JSON, we can see the real exception name). That tells us whether it's `RuntimeError` from Firebase init or something else and points at the missing env var.
+- **P0** — User to submit `upload_certificate.pem` + upload `acechasers-net-v1.0.3.aab` to Play Console.
+- **P1** — After Play reset lands, admin presses "Resend to ALL".
+- **P1** — Rounds extraction phase 4 (score/finalize/sweep/payout/WebSocket).
+- **P1** — Invite-friend / Founder Sponsor referral flow.
+- **P1** — DM Fair Play gate for reply flows.
+- **P2** — Signed short-lived tokens for CSV downloads.
+- **P2** — `routers/_shared.py`.
+- **P2** — Sentry (needs user DSN).
+- **P2** — Bulk-email audit log.
+- **P2** — Atomic founding-member counter.
+- **P3** — Real-time notifications for non-round events.
+
