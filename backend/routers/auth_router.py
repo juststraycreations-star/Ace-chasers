@@ -48,7 +48,8 @@ async def auth_sync(
     # frozen for the account life.
     is_first_run = False
     if is_new_user:
-        existing_count = await db.users.count_documents({})
+        # Match the backfill contract: count only real (non-seed) users.
+        existing_count = await db.users.count_documents({"is_seed": {"$ne": True}})
         is_first_run = existing_count < 100
 
     set_on_insert = {

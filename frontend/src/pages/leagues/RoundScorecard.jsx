@@ -176,14 +176,27 @@ export default function RoundScorecard() {
     } catch { toast.error("Failed to send"); }
   };
 
+  const [creatingCard, setCreatingCard] = useState(false);
   const createCard = async () => {
+    if (!isDirector) {
+      toast.error("Only the league director can build multi-player cards. Tap 'Join this round' to score for yourself.");
+      return;
+    }
+    if (!newCard.label.trim()) { toast.error("Give the card a label (e.g. Card A)"); return; }
     if (newCard.player_ids.length === 0) { toast.error("Pick at least 1 player"); return; }
+    if (creatingCard) return;
+    setCreatingCard(true);
     try {
-      await api.post(`/rounds/${roundId}/cards`, { label: newCard.label, player_ids: newCard.player_ids });
+      await api.post(`/rounds/${roundId}/cards`, { label: newCard.label.trim(), player_ids: newCard.player_ids });
+      toast.success("Card created");
       setShowBuilder(false);
       setNewCard({ label: "Card A", player_ids: [] });
       await load();
-    } catch (e) { toast.error(e?.response?.data?.detail || "Failed"); }
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to create card");
+    } finally {
+      setCreatingCard(false);
+    }
   };
 
   const autoPair = async () => {
@@ -265,7 +278,7 @@ export default function RoundScorecard() {
               {c.label} <span className="text-[10px] font-mono-data ml-1 opacity-70">·{c.player_ids.length}</span>
             </button>
           ))}
-          <button data-testid="new-card-btn" onClick={() => setShowBuilder(!showBuilder)} className="px-4 py-2 rounded-full text-sm border border-dashed border-white/15 text-zinc-400 hover:border-white/40 flex items-center gap-1 flex-shrink-0">
+          <button data-testid="new-card-btn" onClick={() => setShowBuilder(!showBuilder)} disabled={!isDirector} title={isDirector ? "Build a multi-player card" : "Only the director can build cards. Use 'Join this round' below."} className="px-4 py-2 rounded-full text-sm border border-dashed border-white/15 text-zinc-400 hover:border-white/40 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-white/15 flex items-center gap-1 flex-shrink-0">
             <Plus size={14} weight="bold" /> New Card
           </button>
           {isDirector && (leagueFormat === "Random-Draw Doubles" || leagueFormat === "BYOP" || leagueFormat === "Team") && (
@@ -319,7 +332,7 @@ export default function RoundScorecard() {
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowBuilder(false)} className="text-xs px-3 py-2 text-zinc-400">Cancel</button>
-              <button data-testid="save-card-btn" onClick={createCard} className="btn-primary text-xs">Create Card</button>
+              <button data-testid="save-card-btn" onClick={createCard} disabled={creatingCard} className="btn-primary text-xs disabled:opacity-50 disabled:cursor-not-allowed">{creatingCard ? "Creating…" : "Create Card"}</button>
             </div>
           </div>
         )}

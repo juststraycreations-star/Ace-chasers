@@ -468,3 +468,77 @@ Ace Chasers is a disc-golf-themed swipe-to-match web app. Users sign in, swipe t
 - **P2** — ProofLog `event_type` schema.
 - **P3** — Real-time notifications for non-round events.
 - **P3** — Bulk-email audit log (actor, count, timestamp, failures).
+
+### Session 41 — First Run founding member badge + Leagues nav pulse + Chasers Hub button + Dashboard layout refactor + card-creation UX fix + v1.0.3 AAB (Feb 2026)
+
+**Big-picture:** Landed 6 tightly-linked upgrades in one iteration. All were tested by the iteration_31 testing agent — 17/17 backend pytest + 10/10 UI assertions passed.
+
+**Backend**
+- `models.py` — `ProfileOut` extended with `firstRun`, `hasDismissedFirstRunModal`, `hasViewedLeaguesFeature` booleans.
+- `deps.py` — `user_to_profile` maps the three new mongo fields onto the response model.
+- `routers/auth_router.py`:
+  - `/api/auth/sync` now awards `first_run: true` at insert time when `count_documents({is_seed: {$ne: True}}) < 100`. Semantics match the backfill contract exactly.
+  - New `POST /api/users/me/dismiss-first-run` and `POST /api/users/me/dismiss-leagues-feature` — auth-gated, flip the relevant boolean and return the fresh profile. Bad/absent tokens → 401.
+- `server.py` — new `_backfill_first_run_flag()` runs at startup. Idempotent: sets `has_dismissed_first_run_modal` / `has_viewed_leagues_feature` defaults on every user missing them; awards `first_run: true` to the earliest 100 non-seed users by `created_at`. Boot log confirmed "First Run backfill complete: 100 founding members" on 313-user DB.
+
+**Frontend components (new)**
+- `components/FirstRunBadge.jsx` — 16–20px inline SVG chip: slate-900 bg, amber-500/30 border, three concentric flight rings + centre dot. Tooltip on hover reads "First Run: One of the first 100 players to card up."
+- `components/FirstRunWelcomeModal.jsx` — one-shot congrats overlay. Renders only when `profile.firstRun && !profile.hasDismissedFirstRunModal`. Big 72px badge, "Welcome to the First Run" header, benediction copy, "Let's Play" CTA. Close = POST /dismiss-first-run + optimistic patch. Mounted globally in `App.jsx` when `isAuthenticated`.
+- `components/LeaguesFeatureAnnouncement.jsx` — pulsing amber basket icon (custom disc-golf basket SVG). Only renders when `profile.hasViewedLeaguesFeature === false`. Click opens compact dropdown with heading "Disc Golf Leagues Are Live! 🏆" + body copy + "Check Out Leagues →" CTA. CTA (and clicking the Leagues nav link directly) both call POST /dismiss-leagues-feature and clear the pulse permanently.
+
+**Frontend components (updated)**
+- `components/Navigation.jsx`:
+  - Mobile hamburger is now a proper pill button with `bg-slate-800/80`, backdrop-blur, `border-slate-700` → `hover:border-amber-500`, hover scale + active compression, and a small `text-xs uppercase tracking-wider font-semibold` **"Chasers Hub"** label right of the icon lines.
+  - `LeaguesFeatureAnnouncement` renders inline next to the Leagues desktop link, and standalone in the mobile right-cluster.
+  - Clicking the Leagues nav link (any device) auto-dismisses the pulse via `dismissLeaguesPulseIfNew`.
+- `components/ReportBugButton.jsx` — added `variant="muted"` for footer placements (tiny slate-500 text-only style, no border, no uppercase pill).
+- `pages/Profile.jsx` — `FirstRunBadge` (20px) renders next to display name only when `profile.firstRun`.
+- `pages/leagues/LeagueDashboard.jsx` — full restructure:
+  - Zone 1: Header (title + subline) on gray-50 canvas.
+  - Zone 2: **Single primary-action white card** hosting ONLY the "New League" button. No duplicate creation entries anywhere on the page.
+  - Zone 3: League list, each row a **bounded white card** (`border-gray-100`, subtle shadow, hover amber tint). Left column = league name + location + player count (vertical descriptive stack). Right column = format chip + Ace Pool amount (justified-right metric stack).
+  - Zone 4: Browse public leagues (separated by hr divider).
+  - **Footer**: `border-t` + centred quiet `ReportBugButton variant="muted"`. Bug link is nowhere near the primary workflow.
+
+**Card creation UX fix** (this was the real user-reported "card creation is broken" bug — API was fine, UI was misleading)
+- `pages/leagues/RoundScorecard.jsx`:
+  - `new-card-btn` is now `disabled` for non-directors with an explanatory `title`. Previously non-directors could tap it and got a raw 403 toast — that's what looked like a broken bug to them.
+  - `createCard()` guards on: not-director → helpful toast pointing them to "Join this round"; empty label → toast; empty players → toast; in-flight click → no-op. Adds `creatingCard` spinner state so the "Create Card" button shows "Creating…" and is disabled while the POST is pending. Success surfaces a "Card created" toast.
+
+**Performance profile of league APIs** (per iteration_31 testing agent)
+- All league endpoints p95 < 200ms server-side. Slowness perception is NOT backend. Root causes:
+  1. First-request Firebase token cold-verification (~300–500ms).
+  2. Frontend sometimes issues 5+ sequential GETs on mount despite `Promise.all` where present. LeagueDetail already parallelises; other pages could benefit.
+- **Backlog** — bundle endpoint `GET /api/leagues/{id}/dashboard` returning league+seasons+rounds+standings+ledger in a single trip.
+
+**Android v1.0.3 release build (paused pending user)**
+- `build/twa/app/build.gradle`: `androidbrowserhelper 2.6.2 → 2.7.2` (removes deprecated `Window.setStatusBarColor` / `setNavigationBarColor` calls Play Console flagged for Android 15). `minSdkVersion 21 → 23` (required by 2.7.2). `versionCode 3 → 4`, `versionName 1.0.2 → 1.0.3`.
+- `build/twa/twa-manifest.json` — same version bumps.
+- Rebuilt AAB via `./gradlew bundleRelease` (JDK 17 + `qemu-user-static` + `libc6-amd64-cross` reinstalled since ephemeral container was clean).
+- **Old keystore password lost** → generated a fresh upload keystore, exported `.pem` cert, signed the AAB with the new key. Files staged in `frontend/public/downloads/` for the user to grab and then delete:
+  - `acechasers-net-v1.0.3.aab` (signed with new upload key)
+  - `upload-keystore.jks` + `NEW_UPLOAD_KEYSTORE_PASSWORD.txt` (save forever)
+  - `upload_certificate.pem` (submit via Play Console → App integrity → "Request upload key reset")
+  - `README.txt` (step-by-step)
+- User is currently working on their side to download + request the upload-key reset. Google reset approval typically 1–2 business days.
+
+**Beta invite flow with open Google Group** (from Session 40, retained)
+- Corrected `GOOGLE_GROUP_URL` to `https://groups.google.com/g/ace-chasers-beta-testers/about`.
+- Rotated Gmail app password (old one was exposed in earlier chat).
+- Email template + `/beta` success screen + admin `Resend to ALL` all reflect open Google Group self-service.
+- Not yet deployed — still holding for user review before production push.
+
+## Prioritized backlog (post-Session-41)
+- **P0** — Deploy Session 40 + 41 changes to prod once user confirms beta email preview.
+- **P0** — User to submit `upload_certificate.pem` for Play upload-key reset, then upload `acechasers-net-v1.0.3.aab` to Closed Testing.
+- **P1** — After Play reset lands, press "Resend to ALL" from admin dashboard.
+- **P1** — League dashboard bundle endpoint (`/api/leagues/{id}/dashboard`) to shrink the frontend waterfall.
+- **P1** — Extract Ledger + Rounds from `leagues_router.py` (phase 2 refactor).
+- **P1** — Invite-friend referral flow — highest-leverage growth lever.
+- **P1** — DM Fair Play gate for reply flows.
+- **P2** — Sentry (needs user DSN).
+- **P2** — Compliance dashboard for directors.
+- **P2** — Bulk-email audit log.
+- **P2** — ProofLog `event_type` schema.
+- **P3** — Real-time notifications for non-round events.
+
