@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import io
+import asyncio
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
@@ -614,6 +615,56 @@ async def list_rounds(league_id: str, request: Request,
     return await db.rounds.find({"league_id": league_id}, {"_id": 0}).sort("date", 1).to_list(500)
 
 
+@api_router.get("/leagues/{league_id}/dashboard")
+async def league_dashboard_bundle(league_id: str, request: Request,
+                                   session_token: Optional[str] = Cookie(None),
+                                   authorization: Optional[str] = Header(None)):
+    """Single round-trip bundle for the league detail page. Returns the
+    same shapes as the individual endpoints so the frontend can just
+    destructure without re-mapping fields. Non-members still get the
+    public league shape and empty lists — they need it to render the
+    "Join League" CTA.
+    """
+    user = await get_current_user(request, session_token, authorization)
+    lg = await db.leagues.find_one({"id": league_id}, {"_id": 0})
+    if not lg:
+        raise HTTPException(status_code=404, detail="League not found")
+    membership = await db.league_members.find_one(
+        {"league_id": league_id, "user_id": user.user_id}, {"_id": 0}
+    )
+    is_member = bool(membership)
+    is_director = bool(membership and membership.get("role") == "director")
+
+    # Enrich league with the same is_member/is_director shape as GET
+    # /leagues/{id} so the frontend can drop the field-mapping cost.
+    lg["is_member"] = is_member
+    lg["is_director"] = is_director
+    lg["my_bag_tag"] = membership.get("bag_tag") if membership else None
+    lg["my_clubhouse_agreed"] = bool(membership and membership.get("clubhouse_agreed"))
+
+    # Members-only data (rounds, seasons, member list). Non-members get
+    # empty lists so the client renders the join CTA cleanly.
+    if is_member:
+        seasons, rounds_list, members, member_count = await asyncio.gather(
+            db.seasons.find({"league_id": league_id}, {"_id": 0}).to_list(100),
+            db.rounds.find({"league_id": league_id}, {"_id": 0}).sort("date", 1).to_list(500),
+            db.league_members.find({"league_id": league_id}, {"_id": 0}).sort("bag_tag", 1).to_list(500),
+            db.league_members.count_documents({"league_id": league_id}),
+        )
+    else:
+        seasons, rounds_list, members = [], [], []
+        member_count = await db.league_members.count_documents({"league_id": league_id})
+
+    lg["member_count"] = member_count
+    return {
+        "league": lg,
+        "seasons": seasons,
+        "rounds": rounds_list,
+        "members": members,
+    }
+
+
+
 @api_router.get("/rounds/{round_id}")
 async def get_round(round_id: str, request: Request,
                      session_token: Optional[str] = Cookie(None),
@@ -1206,7 +1257,6 @@ async def list_ledger(league_id: str, request: Request,
 from fastapi import WebSocket, WebSocketDisconnect
 from collections import defaultdict
 import json as _json
-import asyncio
 import random as _random
 import csv as _csv
 from io import StringIO

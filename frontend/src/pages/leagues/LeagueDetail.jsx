@@ -34,16 +34,13 @@ export default function LeagueDetail() {
 
   const load = async () => {
     try {
-      const [lg, rd, mm, ss] = await Promise.all([
-        api.get(`/leagues/${leagueId}`),
-        api.get(`/leagues/${leagueId}/rounds`).catch(() => ({ data: [] })),
-        api.get(`/leagues/${leagueId}/members`).catch(() => ({ data: [] })),
-        api.get(`/leagues/${leagueId}/seasons`).catch(() => ({ data: [] })),
-      ]);
-      setLeague(lg.data);
-      setRounds(rd.data);
-      setMembers(mm.data);
-      setSeasons(ss.data);
+      // Single bundled call replaces the previous 4 parallel GETs. Same
+      // shapes on the client — league / rounds / members / seasons.
+      const { data } = await api.get(`/leagues/${leagueId}/dashboard`);
+      setLeague(data.league);
+      setRounds(data.rounds);
+      setMembers(data.members);
+      setSeasons(data.seasons);
     } catch (e) {
       toast.error("Failed to load league");
     }

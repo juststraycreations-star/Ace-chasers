@@ -48,9 +48,24 @@ async def auth_sync(
     # frozen for the account life.
     is_first_run = False
     if is_new_user:
-        # Match the backfill contract: count only real (non-seed) users.
-        existing_count = await db.users.count_documents({"is_seed": {"$ne": True}})
-        is_first_run = existing_count < 100
+        # Match the backfill contract EXACTLY: only real, non-test users
+        # count toward the founding-member limit. Test-agent emails
+        # (@example.com, prefix `test`/`qa_`/`demo_`/etc.) are excluded so
+        # QA runs never eat into the badge tier.
+        test_email_re = r"(^(test|qa_|demo_|bgtest|btnclk|testi|testjoiner))|(@example\.com$)"
+        existing_count = await db.users.count_documents({
+            "$and": [
+                {"$or": [{"is_seed": {"$exists": False}}, {"is_seed": False}]},
+                {"$or": [
+                    {"email": None},
+                    {"email": ""},
+                    {"email": {"$exists": False}},
+                    {"email": {"$not": {"$regex": test_email_re, "$options": "i"}}},
+                ]},
+            ]
+        })
+        FOUNDING_LIMIT = 40
+        is_first_run = existing_count < FOUNDING_LIMIT
 
     set_on_insert = {
         "uid": current["uid"],

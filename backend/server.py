@@ -89,11 +89,38 @@ async def on_startup() -> None:
 
 
 async def _backfill_first_run_flag() -> None:
-    """One-shot, idempotent: award first_run=true to the first 100 non-seed
-    users by created_at, and default the two dismissal flags on every user
-    that's missing them."""
+    """Idempotent, runs on every startup. Awards first_run=true to the
+    earliest FOUNDING_LIMIT real (non-seed, non-test-email) users by
+    created_at. Resets any legacy first_run=true rows that fail the real-
+    user filter so the badge count in production stays accurate as we
+    grow past the founding tier.
+
+    A real user is:
+      - not `is_seed: true`, AND
+      - email is null OR does not match a testing-agent pattern
+        (@example.com, prefix `test`, `qa_`, `demo_`, `bgtest`, `btnclk`,
+        `testi`, `testjoiner`).
+    """
     from db import get_db  # local import to avoid startup cycle
     db = get_db()
+
+    FOUNDING_LIMIT = 40  # per user request Feb 2026
+
+    # Regex for known test-agent email patterns (case-insensitive).
+    test_email_re = r"(^(test|qa_|demo_|bgtest|btnclk|testi|testjoiner))|(@example\.com$)"
+
+    real_user_filter = {
+        "$and": [
+            {"$or": [{"is_seed": {"$exists": False}}, {"is_seed": False}]},
+            {"$or": [
+                {"email": None},
+                {"email": ""},
+                {"email": {"$exists": False}},
+                {"email": {"$not": {"$regex": test_email_re, "$options": "i"}}},
+            ]},
+        ]
+    }
+
     # Ensure the dismissal booleans default to false for any user missing them.
     await db.users.update_many(
         {"has_dismissed_first_run_modal": {"$exists": False}},
@@ -103,27 +130,33 @@ async def _backfill_first_run_flag() -> None:
         {"has_viewed_leagues_feature": {"$exists": False}},
         {"$set": {"has_viewed_leagues_feature": False}},
     )
-    # Award first_run to the earliest 100 non-seed users. `is_seed` is set
-    # true on demo bots and false for real users.
+
+    # Pick the earliest FOUNDING_LIMIT real users by created_at. Their uids
+    # are the winners.
     cursor = db.users.find(
-        {"$or": [{"is_seed": {"$exists": False}}, {"is_seed": False}]},
-        {"_id": 0, "uid": 1, "created_at": 1, "first_run": 1},
-    ).sort("created_at", 1).limit(100)
+        real_user_filter,
+        {"_id": 0, "uid": 1, "created_at": 1},
+    ).sort("created_at", 1).limit(FOUNDING_LIMIT)
     winners = [d async for d in cursor]
     winner_uids = [d["uid"] for d in winners]
+
+    # Award true to winners, reset false on everyone else (so misfires from
+    # earlier boots or test data don't linger).
     if winner_uids:
         await db.users.update_many(
-            {"uid": {"$in": winner_uids},
-             "$or": [{"first_run": {"$exists": False}}, {"first_run": False}]},
+            {"uid": {"$in": winner_uids}},
             {"$set": {"first_run": True}},
         )
-    # Everyone NOT in that top-100 explicitly defaults to false so the
-    # ProfileOut serializer never emits null for the flag.
     await db.users.update_many(
-        {"first_run": {"$exists": False}},
+        {"uid": {"$nin": winner_uids}},
         {"$set": {"first_run": False}},
     )
-    logger.info("First Run backfill complete: %d founding members", len(winner_uids))
+
+    total_real = await db.users.count_documents(real_user_filter)
+    logger.info(
+        "First Run backfill complete: %d founding members (of %d real users, limit=%d)",
+        len(winner_uids), total_real, FOUNDING_LIMIT,
+    )
 
 
 @app.get("/api/health")

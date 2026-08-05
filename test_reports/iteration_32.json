@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration 32 — Backend testing of the new GET /api/leagues/{id}/dashboard bundle endpoint, founding-member re-award (FOUNDING_LIMIT=40 + test-email exclusion), auth_sync gating, and regression on card creation + dismiss endpoints. 13/15 pytest passed. Dashboard bundle endpoint is FULLY working (401/404/200 for non-member/member/director, exact data-shape parity with individual endpoints, and 4.91x measured speedup vs sum of 4 sequential GETs — bundle p50=118.9ms, individual sum p50=584.1ms — well above the 2x target). Card-creation regression PASSED (director 200, non-director 403). Dismiss endpoints PASSED (401 no-auth, 200 flip). Startup log confirms 'First Run backfill complete: 3 founding members (of 3 real users, limit=40)'. TWO BUGS FOUND in the founding-member gating in auth_sync — see backend_issues.critical.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/auth/sync (auth_router.py, lines 49-68)",
+        "issue": "New signups whose OWN email matches the test-email regex (@example.com, prefix test/qa_/demo_/bgtest/btnclk/testi/testjoiner) are STILL awarded first_run=true whenever the real-user count is below FOUNDING_LIMIT (40). The gating logic only counts EXISTING real users and compares to the cap; it never checks whether the CURRENT signup itself is a test email. Reproduction: fresh signup with TEST_i32_xxx@example.com returned {\"firstRun\": true} against a preview DB with 3 real users and 40 cap. Expected per this iteration's requirement: test-email signups must NEVER flip first_run=true. This is why the founding-count drifted to 6 (>3 real users) during test runs — every test-email signup incorrectly claimed a badge slot until the next backend restart runs the backfill reset.",
+        "priority": "HIGH"
+      },
+      {
+        "endpoint": "Mongo state (users collection)",
+        "issue": "count_documents({first_run: True}) == 6 but real (non-seed, non-test-email) users == 3 — 3 test-email accounts are currently holding first_run=true because auth_sync mis-flipped them (see previous bug). Startup backfill will reset them on next backend restart, but between restarts the badge count in the app drifts. Root cause is the auth_sync bug above; no separate fix needed once auth_sync is corrected.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "GET /api/leagues/{id}/dashboard",
+        "issue": "Bundle endpoint returns the EXACT same data-shape as the 4 individual endpoints (verified by set-equality on ids for seasons/rounds/members and by set-equality on keys for league). No deviation."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration32.py",
+    "/app/test_reports/pytest/iteration_32.xml",
+    "/app/test_reports/pytest/iter32_perf.json"
+  ],
+  "action_items": [
+    "FIX auth_router.py auth_sync(): when computing is_first_run for a new user, also exclude the CURRENT signup if its own email matches test_email_re. Suggested patch: `is_first_run = existing_count < FOUNDING_LIMIT and not re.search(test_email_re, current.get('email') or '', re.I)`. This aligns auth_sync's contract with the backfill logic and prevents the badge-count drift observed in this iteration.",
+    "OPTIONAL: after fixing auth_sync, restart the backend once so the startup backfill resets the 3 stray test-email first_run=true rows (or add a one-time cleanup)."
+  ],
+  "critical_code_review_comments": [
+    "auth_router.py line 55-68: real_user_filter correctly EXCLUDES test-email users when counting existing users, but does NOT check the CURRENT signup's email. A test-email signup while real_count<40 always mis-claims a badge. Fix: `is_first_run = existing_count < FOUNDING_LIMIT and (not current.get('email') or not test_email_re.search(current['email']))`.",
+    "leagues_router.py dashboard endpoint uses asyncio.gather across 4 mongo reads — clean implementation; measured 4.91x speedup vs sequential and no data-shape drift. Non-member branch correctly returns empty seasons/rounds/members but retains member_count so frontend can render join CTA.",
+    "leagues_router.py get_league() (line 529) and dashboard() (line 618) duplicate the is_member/is_director/my_bag_tag/my_clubhouse_agreed enrichment. Consider extracting an internal helper `_enrich_league_for_user(lg, membership)` to keep the two endpoints in lock-step so future field additions don't drift.",
+    "The backfill's `update_many({uid: {$nin: winner_uids}}, {first_run: False})` will touch every non-winner row on every startup — cheap now with ~300 users but consider adding {first_run: {$ne: False}} to the filter so it's a no-op for docs already at false.",
+    "auth_sync computes existing_count on every new-user signup — small performance cost but potentially a race under concurrent signups: two racers each read count=39 and both get first_run=true. Not urgent at current traffic but worth an atomic $inc-based counter or a unique-index guard eventually."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration32.py (new)"],
+  "success_rate": {"backend": "86.7% (13/15 pytest, 2 failures both surface the same auth_sync bug)", "frontend": "n/a (backend-only iteration per request)"},
+  "test_credentials": "Firebase signUp with TEST_i32_*@example.com / demo1234. All test accounts are @example.com so they should NOT get first_run=true — but 3 of them incorrectly did (bug above).",
+  "seed_data_creation": "3 test users (director/member/outsider), 1 test league, 1 round, 1 card, self-serve join card+scorecard. Not cleaned up — matches prior iteration pattern.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Dashboard bundle endpoint is production-ready — 4.91x speedup measured, exact data-shape parity with the 4 individual endpoints it replaces. The two failing tests (test_backfill_founding_members_count and test_test_email_signup_never_flips_first_run) both trace to ONE bug in auth_router.py auth_sync(): the founding-member gate doesn't exclude the current signup by its own email. After main agent fixes auth_sync to also check the current user's email against test_email_re, restart the backend once (so the startup backfill sweeps the stray first_run=true rows) and both tests should pass. Perf JSON at /app/test_reports/pytest/iter32_perf.json.",
+  "rca of the issue": "auth_router.py auth_sync (lines 49-68): `is_first_run = existing_count < FOUNDING_LIMIT` counts EXISTING real users only. When a test-email account signs up while real_count<40, the count is still below the cap so first_run flips to true — even though the current user itself matches the test-email regex and should be excluded. This creates a drift where first_run=true rows > real-user count until the next startup backfill runs. Fix: add `and not test_email_re_match(current.get('email'))` to the gating expression, matching the backfill's contract exactly."
+}
