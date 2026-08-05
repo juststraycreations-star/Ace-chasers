@@ -8,6 +8,7 @@ import {
   Handshake,
   Users,
   CaretRight,
+  ChatCircleDots,
 } from "@phosphor-icons/react";
 
 /**
@@ -37,6 +38,17 @@ export default function ComplianceTab({ leagueId, isDirector }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Deep-link into Messages with the target user pre-selected.
+  // Falls back to a toast when the member has no linked user account
+  // (e.g. a director-added "manual" player).
+  const dmMember = ({ user_id, name }) => {
+    if (!user_id) {
+      toast.error("This player doesn't have a linked account yet — can't DM.");
+      return;
+    }
+    navigate("/messages", { state: { withUid: user_id, withName: name } });
   };
 
   useEffect(() => { load(); }, [leagueId]);
@@ -113,14 +125,25 @@ export default function ComplianceTab({ leagueId, isDirector }) {
             </div>
             <div className="flex flex-wrap gap-2">
               {terms.outstanding_members.map((mm) => (
-                <div
+                <button
                   key={mm.id}
+                  type="button"
+                  onClick={() => dmMember(mm)}
+                  disabled={!mm.user_id}
                   data-testid={`compliance-outstanding-${mm.id}`}
-                  className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/8 px-3 py-1.5 text-xs"
+                  title={mm.user_id ? `DM ${mm.name} to nudge them` : "No linked account"}
+                  className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/8 px-3 py-1.5 text-xs hover:bg-amber-500/15 hover:border-amber-500/60 disabled:opacity-50 disabled:cursor-not-allowed transition-colors group"
                 >
                   <span className="font-mono-data text-amber-300/80">#{mm.bag_tag}</span>
                   <span>{mm.name}</span>
-                </div>
+                  {mm.user_id && (
+                    <ChatCircleDots
+                      size={12}
+                      weight="duotone"
+                      className="text-amber-400 opacity-70 group-hover:opacity-100"
+                    />
+                  )}
+                </button>
               ))}
             </div>
           </div>
@@ -215,15 +238,19 @@ export default function ComplianceTab({ leagueId, isDirector }) {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {r.pending_certification.map((p) => (
-                        <div
+                        <button
                           key={p.scorecard_id}
+                          type="button"
+                          onClick={() => dmMember({ user_id: p.user_id, name: p.member_name })}
+                          disabled={!p.user_id}
                           data-testid={`compliance-pending-${p.scorecard_id}`}
-                          className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/8 px-3 py-1.5 text-xs"
                           title={
                             p.finalized ? "Scorecard finalized but not marked certified"
                             : p.player_certified ? "Player certified · director sign-off pending"
-                            : "Awaiting player self-certification"
+                            : p.user_id ? `DM ${p.member_name} to nudge them to certify`
+                            : "Awaiting player self-certification · no linked account to DM"
                           }
+                          className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/8 px-3 py-1.5 text-xs hover:bg-amber-500/15 hover:border-amber-500/60 disabled:opacity-50 disabled:cursor-not-allowed transition-colors group"
                         >
                           <span className="font-mono-data text-amber-300/80">#{p.bag_tag ?? "?"}</span>
                           <span>{p.member_name}</span>
@@ -232,7 +259,14 @@ export default function ComplianceTab({ leagueId, isDirector }) {
                               : p.player_certified ? "PLAYER OK"
                               : "NO CERT"}
                           </span>
-                        </div>
+                          {p.user_id && (
+                            <ChatCircleDots
+                              size={12}
+                              weight="duotone"
+                              className="text-amber-400 opacity-70 group-hover:opacity-100"
+                            />
+                          )}
+                        </button>
                       ))}
                     </div>
                   </div>

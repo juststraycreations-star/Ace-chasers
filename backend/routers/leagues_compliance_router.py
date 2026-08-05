@@ -67,7 +67,8 @@ async def league_compliance_dashboard(league_id: str, request: Request,
 
     # ----- Clubhouse Fair Play agreement rollup -----
     outstanding_members = [
-        {"id": mm["id"], "name": mm.get("name"), "bag_tag": mm.get("bag_tag")}
+        {"id": mm["id"], "name": mm.get("name"), "bag_tag": mm.get("bag_tag"),
+         "user_id": mm.get("user_id")}
         for mm in members
         if not mm.get("clubhouse_agreed")
     ]
@@ -107,6 +108,7 @@ async def league_compliance_dashboard(league_id: str, request: Request,
                     "member_id": sc.get("member_id"),
                     "member_name": mem.get("name") or "Unknown",
                     "bag_tag": mem.get("bag_tag"),
+                    "user_id": mem.get("user_id"),
                     "scorecard_id": sc.get("id"),
                     "total": sc.get("total") or 0,
                     "finalized": is_finalized,

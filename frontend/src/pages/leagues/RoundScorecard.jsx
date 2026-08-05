@@ -43,6 +43,7 @@ export default function RoundScorecard() {
   const [certifyForScorecardId, setCertifyForScorecardId] = useState(null);
   const [certifyChecked, setCertifyChecked] = useState(false);
   const [certifying, setCertifying] = useState(false);
+  const [selfCertifying, setSelfCertifying] = useState(null); // holds scorecardId while POST is in flight
   // Director-only sweep finalize
   const [showSweep, setShowSweep] = useState(false);
   const [sweepChecked, setSweepChecked] = useState(false);
@@ -223,6 +224,20 @@ export default function RoundScorecard() {
       toast.error(e?.response?.data?.detail || "Failed to join round");
     } finally {
       setJoining(false);
+    }
+  };
+
+  const selfCertifyScorecard = async (scorecardId) => {
+    if (selfCertifying) return;
+    setSelfCertifying(scorecardId);
+    try {
+      const { data } = await api.post(`/scorecards/${scorecardId}/certify`);
+      toast.success(data.already_certified ? "Already certified" : "Card certified · the director can now finalize");
+      await load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to certify");
+    } finally {
+      setSelfCertifying(null);
     }
   };
 
@@ -485,6 +500,34 @@ export default function RoundScorecard() {
                         >
                           Finalize
                         </button>
+                      )}
+                      {/* Player self-certify — shows only on the caller's own
+                          scorecard, when it isn't already certified/finalized.
+                          Clears the round from the director's Compliance Board. */}
+                      {(() => {
+                        const isMine = m?.user_id === user?.user_id;
+                        const alreadyCertified = sc.player_certified || sc.finalized;
+                        if (!isMine || alreadyCertified) return null;
+                        return (
+                          <button
+                            data-testid={`self-certify-btn-${sc.id}`}
+                            onClick={() => selfCertifyScorecard(sc.id)}
+                            disabled={selfCertifying === sc.id}
+                            className="ml-1 text-xs px-3 py-2 rounded-lg bg-emerald-500/12 border border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/20 disabled:opacity-40 flex items-center gap-1 font-mono-data uppercase tracking-wider"
+                            title="Approve my own scorecard so the director can finalize the round"
+                          >
+                            {selfCertifying === sc.id ? "Certifying…" : "Certify My Card"}
+                          </button>
+                        );
+                      })()}
+                      {sc.player_certified && !sc.finalized && (
+                        <span
+                          data-testid={`player-certified-badge-${sc.id}`}
+                          className="ml-1 text-[10px] px-2 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-500 font-mono-data uppercase"
+                          title={sc.player_certified_at ? `You certified ${new Date(sc.player_certified_at).toLocaleString()}` : "Player-certified"}
+                        >
+                          You OK&apos;d
+                        </span>
                       )}
                       {sc.finalized && (
                         <span
