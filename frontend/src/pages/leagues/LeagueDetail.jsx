@@ -5,10 +5,11 @@ import AppHeader from "@/components/AppHeader";
 import StandingsTab from "@/components/StandingsTab";
 import LedgerTab from "@/components/LedgerTab";
 import ClubhouseTab from "@/components/ClubhouseTab";
+import ComplianceTab from "@/components/ComplianceTab";
 import ClubhouseAgreementModal from "@/components/ClubhouseAgreementModal";
 import { useAuth } from "@/context/AuthContext";
 import LeagueLiveNotifier from "@/components/LeagueLiveNotifier";
-import { MapPin, Users, Trophy, Coins, ChatCircle, Calendar, Plus, PlayCircle, CheckCircle, QrCode } from "@phosphor-icons/react";
+import { MapPin, Users, Trophy, Coins, ChatCircle, Calendar, Plus, PlayCircle, CheckCircle, QrCode, ShieldCheck } from "@phosphor-icons/react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 
@@ -101,6 +102,9 @@ export default function LeagueDetail() {
     { key: "standings", label: "Standings", icon: <Trophy size={15} /> },
     { key: "ledger", label: "Ledger", icon: <Coins size={15} /> },
     { key: "clubhouse", label: "Clubhouse", icon: <ChatCircle size={15} /> },
+    ...(league.is_director
+      ? [{ key: "compliance", label: "Compliance", icon: <ShieldCheck size={15} /> }]
+      : []),
   ];
 
   return (
@@ -229,6 +233,7 @@ export default function LeagueDetail() {
         {tab === "standings" && <StandingsTab leagueId={leagueId} />}
         {tab === "ledger" && <LedgerTab leagueId={leagueId} isDirector={league.is_director} />}
         {tab === "clubhouse" && <ClubhouseTab leagueId={leagueId} isDirector={league.is_director} currentUser={user} />}
+        {tab === "compliance" && <ComplianceTab leagueId={leagueId} isDirector={league.is_director} />}
 
         {/* Fair Play Agreement modal — covers Announcements-only viewers and
             every other private league surface. Renders once per league until

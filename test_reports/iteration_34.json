@@ -1,0 +1,26 @@
+{
+  "summary": "Iteration 34 — Ledger refactor parity + new Compliance dashboard. Backend 17/17 PASS. Ledger refactor is bit-perfect: POST/GET/CSV /leagues/{id}/ledger + POST /entry-fees/collect all return the same shapes and honor the same 401/403/200 auth semantics as pre-refactor. Entry-fee collect creates exactly the expected 7 ledger rows (3 Entry Fee credits + 3 auto-split credits Weekly/Ace/Club @ 70/20/10 + 1 debit) and increments league.ace_pool by the exact ace-bucket amount ($6 on a $30 collection). Compliance endpoint returns 401/403/200 correctly and its shape + logic match spec exactly: with 3 scorecards and 0/1/3 player_certified flips, can_sweep_finalize is false/false/true and pending_certification is 3/2/0 (rows include member_id, member_name, bag_tag, scorecard_id, total, finalized, certified_by_director, player_certified). iter33 regression: 13/13 PASS. Frontend: verified director sees Compliance tab (shows Clubhouse Fair Play 1/2 = 50%, outstanding chip, No rounds yet), non-director does NOT see the tab. All data-testids present (compliance-tab, compliance-clubhouse-card, compliance-outstanding-<id>, compliance-agreed-pct, compliance-rounds-empty).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration34.py",
+    "/app/backend/tests/test_iteration33.py",
+    "/app/test_reports/pytest/iteration_34.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Refactor is clean: leagues_ledger_router.py and leagues_compliance_router.py both attach handlers to the SAME api_router imported from leagues_router.py — no double-mount risk. Tail-imports at leagues_router.py:1682-1683 correctly execute the module registration once server.py imports leagues_router.",
+    "Compliance endpoint: `can_sweep_finalize = total > 0 and certified == total`. Spec wording is 'true iff every scorecard is certified' — the `total > 0` guard means an empty round (0 scorecards) returns false rather than vacuously true, which matches the frontend's `canSweep && r.scorecard_total > 0` gating anyway. Minor gotcha to be aware of if a round is later expected to be 'ready' when empty.",
+    "Ledger CSV endpoint accepts token via ?auth= query param (for browser download links). This is preserved from the pre-refactor version and works fine, but is worth double-checking against CSRF policies before public launch — a signed short-lived token would be safer than the raw Firebase idToken in a URL.",
+    "leagues_compliance_router.py doesn't paginate rounds (to_list(200)) — safe for the current league sizes but worth revisiting if a league accumulates >200 rounds.",
+    "Minor DRY: both new routers import `api_router` from leagues_router which creates a tight coupling loop. If leagues_router ever grows a compile-time import cycle, moving api_router to its own tiny `routers/_shared.py` would future-proof this."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration34.py (new)"],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "100% (director tab + non-director gate verified)"},
+  "test_credentials": "Firebase signUp: TEST_i34_*@example.com / demo1234 for API tests; TEST_i34d_*@example.com and TEST_i34o_*@example.com for UI director/non-director verification.",
+  "seed_data_creation": "Created ~5 test-email users, 2 test leagues (one API-only, one UI-created), plus 1 test round + 3 scorecards seeded directly into Mongo (round id starting with 'rd_' and scorecards 'sc_'). All prefixed TEST_ and test-email domains, so backfill/first_run counts unaffected.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter34 shipped clean. Two new files (leagues_ledger_router.py, leagues_compliance_router.py) both use the tail-import pattern into leagues_router — this idiom now has 3 examples (clubhouse, ledger, compliance) and looks like the going pattern for further sub-router extraction. If future iters extract more sections, mirror the same pattern (imports from .leagues_router). The compliance endpoint reads scorecards[player_certified|certified_by_director|finalized] flags — none of these are exposed via public write APIs today (only /scorecards/{id}/finalize sets `finalized`), so player_certified is currently a director-only concept that must be set by the finalize flow or a future 'player certifies own card' endpoint.",
+  "rca of the issue": "N/A — no bugs found."
+}
