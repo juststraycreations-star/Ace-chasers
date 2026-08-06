@@ -45,7 +45,9 @@ export default function RoundScorecard() {
   const [certifyChecked, setCertifyChecked] = useState(false);
   const [certifying, setCertifying] = useState(false);
   const [selfCertifying, setSelfCertifying] = useState(null); // holds scorecardId while POST is in flight
-  // "score" = per-hole scoring UI (default) · "grid" = UDisc-style summary table
+  // "score" = per-hole scoring UI (default while round is active).
+  // "grid"  = UDisc-style summary table (default once round is completed).
+  // A useEffect below flips to "grid" the moment we detect a completed round.
   const [viewMode, setViewMode] = useState("score");
   // Director-only sweep finalize
   const [showSweep, setShowSweep] = useState(false);
@@ -79,7 +81,11 @@ export default function RoundScorecard() {
   useEffect(() => { loadChat(); }, [loadChat]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [chat.length]);
 
-  // WebSocket for realtime updates
+  // WebSocket for realtime updates. Disabled on completed rounds — no
+  // more score updates are coming, so we don't want to sit on a live
+  // socket (or worse, a stale "RECONNECTING…" indicator).
+  const roundStatus = data?.round?.status;
+  const wsEnabled = !!roundStatus && roundStatus !== "completed";
   const { connected } = useWebSocket(`/api/ws/rounds/${roundId}`, useCallback((msg) => {
     if (msg.type === "score_update") {
       load();
@@ -95,7 +101,7 @@ export default function RoundScorecard() {
     } else if (msg.type === "ctp_entry" || msg.type === "ctp_deleted") {
       setCtpRefresh((v) => v + 1);
     }
-  }, [load, selectedCardId]));
+  }, [load, selectedCardId]), wsEnabled);
 
   const round = data?.round;
   const cards = data?.cards || [];
@@ -247,19 +253,28 @@ export default function RoundScorecard() {
   // One-tap PDF export of the ScorecardGrid via the browser's Print dialog.
   // Uses a data attribute on <body> + `@media print` rules in index.css so
   // we ship zero extra JS deps. Any browser's Print → "Save as PDF" works.
+  //
+  // Behavior: the printed output is ALWAYS the green-themed Scorecard
+  // grid, regardless of which view the user is looking at when they tap.
+  // We flip to grid, wait for React to actually paint the new markup,
+  // then invoke window.print().
   const handlePrintScorecard = () => {
-    if (viewMode !== "grid") setViewMode("grid");
-    // Give React one paint cycle to swap views before invoking print.
+    setViewMode("grid");
+    // Two rAFs = one commit + one paint. Guarantees the grid DOM is on
+    // screen before the browser snapshot for print, regardless of what
+    // view the user was on when they tapped.
     requestAnimationFrame(() => {
-      document.body.setAttribute("data-print-target", "scorecard-grid");
-      const cleanup = () => {
-        document.body.removeAttribute("data-print-target");
-        window.removeEventListener("afterprint", cleanup);
-      };
-      window.addEventListener("afterprint", cleanup);
-      // Fallback if the browser never fires afterprint (some Safari versions).
-      setTimeout(cleanup, 5000);
-      window.print();
+      requestAnimationFrame(() => {
+        document.body.setAttribute("data-print-target", "scorecard-grid");
+        const cleanup = () => {
+          document.body.removeAttribute("data-print-target");
+          window.removeEventListener("afterprint", cleanup);
+        };
+        window.addEventListener("afterprint", cleanup);
+        // Fallback if the browser never fires afterprint (some Safari versions).
+        setTimeout(cleanup, 5000);
+        window.print();
+      });
     });
   };
 
@@ -303,50 +318,59 @@ export default function RoundScorecard() {
       <div className="max-w-4xl mx-auto px-4 py-6">
         <DirectorNotesBanner round={round} isDirector={isDirector} onUpdated={load} />
 
-        {/* View mode toggle — SCORE (per-hole entry) vs GRID (UDisc-style table) */}
+        {/* View mode toggle — SCORE (live entry) vs GRID (UDisc-style table).
+            When the round is COMPLETED we hide the toggle entirely and
+            only show Print / PDF — there's nothing more to score. */}
         <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
-          <div
-            className="flex items-center gap-1.5 bg-emerald-50/70 border border-emerald-100 rounded-full p-1 w-fit"
-            data-testid="scorecard-view-toggle"
-          >
-            <button
-              type="button"
-              data-testid="scorecard-view-score"
-              onClick={() => setViewMode("score")}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                viewMode === "score"
-                  ? "bg-emerald-800 text-white shadow-sm"
-                  : "text-emerald-800 hover:bg-emerald-100"
-              }`}
+          {roundStatus !== "completed" ? (
+            <div
+              className="flex items-center gap-1.5 bg-emerald-50/70 border border-emerald-100 rounded-full p-1 w-fit"
+              data-testid="scorecard-view-toggle"
             >
-              Score
-            </button>
-            <button
-              type="button"
-              data-testid="scorecard-view-grid"
-              onClick={() => setViewMode("grid")}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                viewMode === "grid"
-                  ? "bg-emerald-800 text-white shadow-sm"
-                  : "text-emerald-800 hover:bg-emerald-100"
-              }`}
+              <button
+                type="button"
+                data-testid="scorecard-view-score"
+                onClick={() => setViewMode("score")}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  viewMode === "score"
+                    ? "bg-emerald-800 text-white shadow-sm"
+                    : "text-emerald-800 hover:bg-emerald-100"
+                }`}
+              >
+                Score
+              </button>
+              <button
+                type="button"
+                data-testid="scorecard-view-grid"
+                onClick={() => setViewMode("grid")}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  viewMode === "grid"
+                    ? "bg-emerald-800 text-white shadow-sm"
+                    : "text-emerald-800 hover:bg-emerald-100"
+                }`}
+              >
+                Scorecard
+              </button>
+            </div>
+          ) : (
+            <div
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-800 text-white font-mono text-[10px] uppercase tracking-wider"
+              data-testid="scorecard-round-final-badge"
             >
-              Scorecard
-            </button>
-          </div>
-
-          {viewMode === "grid" && (
-            <button
-              type="button"
-              onClick={handlePrintScorecard}
-              data-testid="scorecard-print-btn"
-              title="Save or print the scorecard as PDF"
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold text-emerald-800 border border-emerald-200 bg-white hover:bg-emerald-50 hover:border-emerald-400 transition-all shadow-sm"
-            >
-              <Printer size={14} weight="duotone" />
-              Print / PDF
-            </button>
+              Round Final
+            </div>
           )}
+
+          <button
+            type="button"
+            onClick={handlePrintScorecard}
+            data-testid="scorecard-print-btn"
+            title="Save or print the scorecard as PDF"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold text-emerald-800 border border-emerald-200 bg-white hover:bg-emerald-50 hover:border-emerald-400 transition-all shadow-sm"
+          >
+            <Printer size={14} weight="duotone" />
+            Print / PDF
+          </button>
         </div>
 
         {viewMode === "grid" && (
