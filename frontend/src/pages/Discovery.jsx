@@ -29,6 +29,7 @@ export default function Discovery() {
   const {
     deck,
     loading,
+    error,
     deckHasMore,
     deckRadius,
     deckInterestedIn,
@@ -43,15 +44,48 @@ export default function Discovery() {
   const navigate = useNavigate();
   const [toast, setToast] = useState(null);
   const [composeRecipient, setComposeRecipient] = useState(null);
+  const [autoRetryCount, setAutoRetryCount] = useState(0);
 
-  const sentSet = new Set(inbox?.sent_friend_request_uids || []);
-  const friendSet = new Set(inbox?.friend_uids || []);
-  const myLocation = useAuthStore((s) => s.profile?.location);
+  // Defensive: every store field these depend on may be null/undefined on
+  // the first mount, or become so if the response payload is malformed.
+  // Fall back to empty structures so downstream JSX never crashes.
+  const safeDeck = Array.isArray(deck) ? deck : [];
+  const safeInbox = inbox || {};
+  const sentSet = new Set(safeInbox.sent_friend_request_uids || []);
+  const friendSet = new Set(safeInbox.friend_uids || []);
+  const myLocation = useAuthStore((s) => s?.profile?.location);
   const showLocationHint = !!deckRadius && !(myLocation && myLocation.trim());
 
+  // Initial + refetch on prop change. Wrapped so an unhandled promise
+  // rejection can never freeze the page.
   useEffect(() => {
-    fetchDeck();
+    let cancelled = false;
+    (async () => {
+      try {
+        await fetchDeck();
+      } catch (err) {
+        // The store already stores `error` internally, but a throw
+        // that bypasses that would land here. Log + surface a toast.
+        if (!cancelled) {
+    
+          console.error("Discovery.fetchDeck threw:", err);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
   }, [fetchDeck]);
+
+  // If the last fetch failed with a transient error (network hiccup),
+  // auto-retry once after 3s. After that it becomes a manual retry.
+  useEffect(() => {
+    if (!error) return undefined;
+    if (autoRetryCount >= 1) return undefined;
+    const t = setTimeout(() => {
+      setAutoRetryCount((n) => n + 1);
+      fetchDeck().catch(() => { /* the store has stored the error */ });
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [error, autoRetryCount, fetchDeck]);
 
   const flashToast = (msg) => {
     setToast(msg);
@@ -59,32 +93,63 @@ export default function Discovery() {
   };
 
   const handleNice = async (e, player) => {
-    e.stopPropagation();
-    e.preventDefault();
-    await likePlayer(player);
-    flashToast(`Nice — you tagged ${player.name || 'them'} 💚`);
+    try {
+      e.stopPropagation();
+      e.preventDefault();
+      if (!player?.uid) return;
+      await likePlayer(player);
+      flashToast(`Nice — you tagged ${player.name || 'them'} 💚`);
+    } catch (err) {
+
+      console.error("handleNice failed:", err);
+      flashToast("Couldn't like — try again");
+    }
   };
 
   const handlePlayer = async (e, player) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const res = await sendFriendRequest(player);
-    if (res?.error) flashToast(`Request failed: ${res.error}`);
-    else if (res?.friended) flashToast(`✅ You're now players with ${player.name || 'them'} 🥏`);
-    else flashToast(`✅ Player request sent to ${player.name || 'them'}`);
+    try {
+      e.stopPropagation();
+      e.preventDefault();
+      if (!player?.uid) return;
+      const res = await sendFriendRequest(player);
+      if (res?.error) flashToast(`Request failed: ${res.error}`);
+      else if (res?.friended) flashToast(`✅ You're now players with ${player.name || 'them'} 🥏`);
+      else flashToast(`✅ Player request sent to ${player.name || 'them'}`);
+    } catch (err) {
+
+      console.error("handlePlayer failed:", err);
+      flashToast("Couldn't send request — try again");
+    }
   };
 
   const handleMessage = (e, player) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setComposeRecipient({
-      uid: player.uid,
-      name: player.name,
-      profilePictureUrl: player.profilePictureUrl,
-    });
+    try {
+      e.stopPropagation();
+      e.preventDefault();
+      if (!player?.uid) return;
+      setComposeRecipient({
+        uid: player.uid,
+        name: player.name,
+        profilePictureUrl: player.profilePictureUrl,
+      });
+    } catch (err) {
+
+      console.error("handleMessage failed:", err);
+    }
   };
 
-  const openProfile = (uid) => navigate(`/players/${uid}`);
+  const openProfile = (uid) => {
+    if (!uid) return;
+    try { navigate(`/players/${uid}`); } catch (err) {
+
+      console.error("openProfile failed:", err);
+    }
+  };
+
+  const handleRetryFetch = () => {
+    setAutoRetryCount(0);
+    fetchDeck().catch(() => { /* store owns error state */ });
+  };
 
   const radiusBar = (
     <div
@@ -140,7 +205,7 @@ export default function Discovery() {
     </div>
   );
 
-  if (loading && deck.length === 0) {
+  if (loading && safeDeck.length === 0) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-12" data-testid="discovery-loading">
         {radiusBar}
@@ -152,7 +217,45 @@ export default function Discovery() {
     );
   }
 
-  if (deck.length === 0) {
+  // Fetch failed AND we have nothing to show — surface a friendly retry
+  // instead of the misleading "No more players" empty state.
+  if (error && safeDeck.length === 0) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-12" data-testid="discovery-error">
+        {radiusBar}
+        {interestBar}
+        <div className="max-w-md mx-auto bg-white border border-red-200 rounded-2xl shadow-sm p-8 text-center">
+          <div className="text-3xl mb-3" aria-hidden="true">🥏</div>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">
+            We couldn&apos;t load the roster
+          </h2>
+          <p className="text-sm text-gray-600 mb-5">
+            {autoRetryCount >= 1
+              ? "Auto-retry didn't clear it — please try again."
+              : "Auto-retrying in a moment… or tap below to retry now."}
+          </p>
+          <button
+            type="button"
+            onClick={handleRetryFetch}
+            data-testid="discovery-error-retry-btn"
+            className="px-5 py-2.5 rounded-full bg-disc-green hover:bg-disc-green/90 text-white font-semibold text-sm"
+          >
+            Try again
+          </button>
+          <details className="mt-5 text-left">
+            <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 font-mono">
+              Error details
+            </summary>
+            <pre className="mt-2 text-[10px] text-gray-500 bg-gray-50 rounded p-2 overflow-x-auto whitespace-pre-wrap">
+              {String(error)}
+            </pre>
+          </details>
+        </div>
+      </div>
+    );
+  }
+
+  if (safeDeck.length === 0) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-12" data-testid="discovery-empty">
         {radiusBar}
@@ -206,8 +309,8 @@ export default function Discovery() {
             // The visible count reflects players you can still act on —
             // friends and already-requested users are shown in the deck
             // (with a status pill) but shouldn't inflate the counter.
-            const actionable = deck.filter(
-              (p) => !friendSet.has(p.uid) && !sentSet.has(p.uid)
+            const actionable = safeDeck.filter(
+              (p) => p && p.uid && !friendSet.has(p.uid) && !sentSet.has(p.uid)
             ).length;
             return (
               <>
@@ -256,7 +359,9 @@ export default function Discovery() {
         className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
         data-testid="discovery-grid"
       >
-        {deck.map((player) => {
+        {safeDeck.map((player) => {
+          // Skip malformed player rows so a single bad row can't crash the grid.
+          if (!player || !player.uid) return null;
           const isFriend = friendSet.has(player.uid);
           const sent = sentSet.has(player.uid);
           const actions = (

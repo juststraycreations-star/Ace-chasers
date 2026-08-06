@@ -6,6 +6,7 @@ import Navigation from './components/Navigation';
 import EmailVerificationBanner from './components/EmailVerificationBanner';
 import OnboardingGate from './components/OnboardingGate';
 import FirstRunWelcomeModal from './components/FirstRunWelcomeModal';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
 // Login + SignUp stay eager — they are the first paint for logged-out
 // visitors so shipping them in the initial bundle saves a round-trip.
 // Every other page is code-split via React.lazy.
@@ -81,7 +82,14 @@ function AppRoutes() {
               <Route path="/courses" element={<Courses />} />
               <Route path="/courses/:id" element={<CourseDetail />} />
               <Route path="/daily-plastic" element={<DailyPlastic />} />
-              <Route path="/discovery" element={<Discovery />} />
+              <Route
+                path="/discovery"
+                element={
+                  <RouteErrorBoundary name="Discovery">
+                    <Discovery />
+                  </RouteErrorBoundary>
+                }
+              />
               <Route path="/likes" element={<Likes />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="/profile" element={<Profile />} />
