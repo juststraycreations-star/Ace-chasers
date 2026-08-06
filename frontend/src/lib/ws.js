@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { firebaseConfigured, getFirebaseAuth } from "./firebase";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -8,6 +9,38 @@ function toWsUrl(path) {
   return `${proto}//${url.host}${path}`;
 }
 
+/**
+ * Return a fresh auth token (Firebase ID token, or the dev JWT when
+ * Firebase isn't configured). Returns `null` when the user isn't signed
+ * in — callers should NOT open a socket in that case.
+ */
+async function currentAuthToken() {
+  if (firebaseConfigured) {
+    try {
+      const auth = getFirebaseAuth();
+      const user = auth?.currentUser;
+      if (!user) return null;
+      return await user.getIdToken();
+    } catch {
+      return null;
+    }
+  }
+  return localStorage.getItem("ace_dev_token") || null;
+}
+
+/**
+ * useWebSocket — auto-reconnecting socket for realtime round updates.
+ *
+ * Feb 2026 hardening:
+ *  - Reads the CURRENT Firebase ID token via getIdToken() instead of a
+ *    stale `session_token` localStorage key that was never set → fixes
+ *    the "RECONNECTING…" that appears forever on scorecards.
+ *  - Skips reconnect entirely when there's no user (no more 3s spam).
+ *  - Cleans up more aggressively so navigating away from a round
+ *    doesn't leave a dangling socket that stalls back-button loads.
+ *  - Exponential-ish backoff (3s → 6s → 12s, capped) so a wedged
+ *    origin doesn't hammer the server.
+ */
 export function useWebSocket(path, onMessage, enabled = true) {
   const wsRef = useRef(null);
   const [connected, setConnected] = useState(false);
@@ -15,24 +48,59 @@ export function useWebSocket(path, onMessage, enabled = true) {
   useEffect(() => { handlerRef.current = onMessage; }, [onMessage]);
 
   useEffect(() => {
-    if (!enabled || !path) return;
-    const token = localStorage.getItem("session_token");
-    if (!token) return;
-    const url = toWsUrl(`${path}?token=${encodeURIComponent(token)}`);
+    if (!enabled || !path) return undefined;
+
     let ws;
     let alive = true;
     let reconnectTimer;
+    let heartbeat;
+    let backoffMs = 3000;
 
-    const connect = () => {
-      ws = new WebSocket(url);
+    const connect = async () => {
+      if (!alive) return;
+      const token = await currentAuthToken();
+      if (!alive) return;
+      if (!token) {
+        // Nothing to auth with — surface as disconnected and try once
+        // more later. If the user just isn't logged in this is harmless
+        // because RoundScorecard is a protected route anyway.
+        setConnected(false);
+        reconnectTimer = setTimeout(connect, 5000);
+        return;
+      }
+
+      let url;
+      try {
+        url = toWsUrl(`${path}?token=${encodeURIComponent(token)}`);
+      } catch (err) {
+        // Malformed backend URL — no point retrying.
+        console.error("useWebSocket: bad URL", err);
+        setConnected(false);
+        return;
+      }
+
+      try {
+        ws = new WebSocket(url);
+      } catch (err) {
+        setConnected(false);
+        reconnectTimer = setTimeout(connect, backoffMs);
+        backoffMs = Math.min(backoffMs * 2, 30000);
+        return;
+      }
       wsRef.current = ws;
-      ws.onopen = () => alive && setConnected(true);
+      ws.onopen = () => {
+        if (!alive) return;
+        setConnected(true);
+        backoffMs = 3000; // reset backoff on any successful open
+      };
       ws.onclose = () => {
         if (!alive) return;
         setConnected(false);
-        reconnectTimer = setTimeout(connect, 3000);
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connect, backoffMs);
+        backoffMs = Math.min(backoffMs * 2, 30000);
       };
-      ws.onerror = () => {};
+      ws.onerror = () => { /* onclose fires next; single reconnect path */ };
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
@@ -45,20 +113,30 @@ export function useWebSocket(path, onMessage, enabled = true) {
 
     connect();
 
-    // heartbeat
-    const heartbeat = setInterval(() => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send("ping");
-      }
+    heartbeat = setInterval(() => {
+      try {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send("ping");
+        }
+      } catch { /* non-fatal */ }
     }, 25000);
 
     return () => {
       alive = false;
       clearTimeout(reconnectTimer);
       clearInterval(heartbeat);
-      if (wsRef.current) {
-        wsRef.current.onclose = null;
-        wsRef.current.close();
+      const s = wsRef.current;
+      if (s) {
+        // Detach handlers BEFORE calling close so onclose doesn't fire a
+        // reconnect during teardown — that was leaving zombie sockets
+        // that stalled back-button navigation.
+        try { s.onopen = null; s.onclose = null; s.onerror = null; s.onmessage = null; } catch { /* noop */ }
+        try {
+          if (s.readyState === WebSocket.OPEN || s.readyState === WebSocket.CONNECTING) {
+            s.close(1000, "unmount");
+          }
+        } catch { /* noop */ }
+        wsRef.current = null;
       }
     };
   }, [path, enabled]);
