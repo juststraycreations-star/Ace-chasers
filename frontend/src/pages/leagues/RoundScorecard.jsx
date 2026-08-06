@@ -85,7 +85,8 @@ export default function RoundScorecard() {
   // more score updates are coming, so we don't want to sit on a live
   // socket (or worse, a stale "RECONNECTING…" indicator).
   const roundStatus = data?.round?.status;
-  const wsEnabled = !!roundStatus && roundStatus !== "completed";
+  const isCompleted = roundStatus === "completed";
+  const wsEnabled = !!roundStatus && !isCompleted;
   const { connected } = useWebSocket(`/api/ws/rounds/${roundId}`, useCallback((msg) => {
     if (msg.type === "score_update") {
       load();
@@ -301,22 +302,26 @@ export default function RoundScorecard() {
             </div>
           </div>
 
-          {/* Hole nav */}
-          <div className="mt-3 flex gap-1 overflow-x-auto pb-1">
-            {round.par_per_hole.map((p, i) => (
-              <button
-                key={i}
-                data-testid={`hole-nav-${i+1}`}
-                onClick={() => setCurrentHole(i + 1)}
-                className={`flex-shrink-0 w-9 h-9 rounded-lg text-xs font-bold transition-colors ${currentHole === i + 1 ? "bg-[#F5C542] text-black" : "bg-white/5 text-zinc-400 hover:bg-white/10"}`}
-              >{i + 1}</button>
-            ))}
-          </div>
+          {/* Hole nav — hidden on completed rounds so the on-screen view matches the PDF */}
+          {!isCompleted && (
+            <div className="mt-3 flex gap-1 overflow-x-auto pb-1">
+              {round.par_per_hole.map((p, i) => (
+                <button
+                  key={i}
+                  data-testid={`hole-nav-${i+1}`}
+                  onClick={() => setCurrentHole(i + 1)}
+                  className={`flex-shrink-0 w-9 h-9 rounded-lg text-xs font-bold transition-colors ${currentHole === i + 1 ? "bg-[#F5C542] text-black" : "bg-white/5 text-zinc-400 hover:bg-white/10"}`}
+                >{i + 1}</button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
-        <DirectorNotesBanner round={round} isDirector={isDirector} onUpdated={load} />
+        {!isCompleted && (
+          <DirectorNotesBanner round={round} isDirector={isDirector} onUpdated={load} />
+        )}
 
         {/* View mode toggle — SCORE (live entry) vs GRID (UDisc-style table).
             When the round is COMPLETED we hide the toggle entirely and
@@ -855,8 +860,10 @@ export default function RoundScorecard() {
           );
         })()}
 
-        {/* Round total footer */}
-        {activeCard && (
+        {/* RECONNECTING footer — only meaningful while a card is being scored
+            live. Hidden on completed rounds (no WS in play) and only shown
+            when we're actually in Score view with an active card. */}
+        {activeCard && !isCompleted && (
           <div className="mt-8 text-xs text-zinc-500 font-mono-data flex items-center gap-2">
             <span className={`inline-block w-1.5 h-1.5 rounded-full ${connected ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`}></span>
             {connected ? "LIVE · WEBSOCKET CONNECTED" : "RECONNECTING…"}
