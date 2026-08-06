@@ -1,10 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { firebaseConfigured, getFirebaseAuth } from "./firebase";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+// Resolve the backend host the same way api.js does. When the page is
+// served from any *.acechasers.net origin, WebSocket URLs are built off
+// window.location so they hit the same domain (avoids cross-origin WS
+// upgrades that Cloudflare rejects). Falls back to the build-time env
+// var everywhere else (preview, localhost, mobile TWA shell, etc.).
+function resolveWsBase() {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.endsWith('acechasers.net')) {
+      return window.location.origin;
+    }
+  }
+  const fromEnv = process.env.REACT_APP_BACKEND_URL;
+  if (fromEnv) return fromEnv;
+  if (typeof window !== 'undefined') return window.location.origin;
+  return '';
+}
 
 function toWsUrl(path) {
-  const url = new URL(BACKEND_URL);
+  const base = resolveWsBase();
+  if (!base) throw new Error('No backend base URL');
+  const url = new URL(base);
   const proto = url.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${url.host}${path}`;
 }
