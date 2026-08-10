@@ -8,6 +8,7 @@ import ClubhouseTab from "@/components/ClubhouseTab";
 import ComplianceTab from "@/components/ComplianceTab";
 import ManagerDMPanel from "@/components/ManagerDMPanel";
 import RoundQRPanel from "@/components/RoundQRPanel";
+import BracketView from "@/components/BracketView";
 import ClubhouseAgreementModal from "@/components/ClubhouseAgreementModal";
 import { useAuth } from "@/context/AuthContext";
 import LeagueLiveNotifier from "@/components/LeagueLiveNotifier";
@@ -116,6 +117,9 @@ export default function LeagueDetail() {
 
   const tabs = [
     { key: "rounds", label: "Rounds", icon: <Calendar size={15} /> },
+    ...(league.format === "Match Play"
+      ? [{ key: "bracket", label: "Bracket", icon: <Trophy size={15} /> }]
+      : []),
     { key: "standings", label: "Standings", icon: <Trophy size={15} /> },
     { key: "ledger", label: "Ledger", icon: <Coins size={15} /> },
     { key: "clubhouse", label: "Clubhouse", icon: <ChatCircle size={15} /> },
@@ -270,6 +274,14 @@ export default function LeagueDetail() {
         )}
 
         {tab === "standings" && <StandingsTab leagueId={leagueId} />}
+        {tab === "bracket" && (
+          <BracketView
+            leagueId={leagueId}
+            members={members}
+            isDirector={league.is_director}
+            format={league.format}
+          />
+        )}
         {tab === "ledger" && <LedgerTab leagueId={leagueId} isDirector={league.is_director} />}
         {tab === "clubhouse" && <ClubhouseTab leagueId={leagueId} isDirector={league.is_director} currentUser={user} />}
         {tab === "compliance" && <ComplianceTab leagueId={leagueId} isDirector={league.is_director} />}

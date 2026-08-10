@@ -14,6 +14,7 @@ const FORMATS = [
   { key: "Random-Draw Doubles", desc: "Random pairs at check-in." },
   { key: "BYOP", desc: "Bring Your Own Partner doubles." },
   { key: "Team", desc: "Structured team play." },
+  { key: "Match Play", desc: "Single-elimination head-to-head bracket." },
 ];
 
 export default function CreateLeague() {

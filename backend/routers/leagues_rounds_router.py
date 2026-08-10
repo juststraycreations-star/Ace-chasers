@@ -1,16 +1,11 @@
-"""Round side-data endpoints — chat, CTP entries, director notes.
-
-Extracted from `leagues_router.py` as phase 3 of the router split. This
-covers the "side data" surface of a round: chat threads, closest-to-pin
-entries, and the director's per-round notes / CTP hole configuration.
-
-Scoring, finalize, sweep-finalize, WebSocket handlers, and the payout
-distribution engine intentionally stay in `leagues_router.py` for now.
-Their extraction is a separate, higher-risk task.
+"""Round side-data endpoints — chat, CTP entries, director notes,
+and (as of Phase 4) the scorecard scoring / proof / finalize / certify
+surface previously living inline in `leagues_router.py`.
 
 Attaches all handlers to the same `api_router` instance imported from
-`leagues_router`, matching the tail-import pattern used by clubhouse,
-ledger and compliance sub-routers.
+`leagues_router`, matching the tail-import pattern used by the other
+sub-routers. Router registration order is preserved so URL surface and
+auth semantics don't change.
 """
 from __future__ import annotations
 
@@ -22,10 +17,12 @@ from pydantic import BaseModel
 from .leagues_router import (
     CTPEntry,
     ChatMessage,
+    ProofLog,
     _require_member,
     api_router,
     db,
     get_current_user,
+    now_iso,
     ws_manager,
 )
 
@@ -167,3 +164,177 @@ async def delete_ctp(entry_id: str, request: Request,
     await db.ctp_entries.delete_one({"id": entry_id})
     await ws_manager.broadcast(f"round:{e['round_id']}", {"type": "ctp_deleted", "entry_id": entry_id})
     return {"ok": True}
+
+
+# ══════════════════════════════════════════════════════════════════
+# PHASE 4 — SCORECARD endpoints (moved from leagues_router.py)
+# ══════════════════════════════════════════════════════════════════
+class ScoreUpdate(BaseModel):
+    hole: int  # 1-indexed
+    strokes: int
+
+
+@api_router.patch("/scorecards/{scorecard_id}/score")
+async def update_score(scorecard_id: str, payload: ScoreUpdate, request: Request,
+                        session_token: Optional[str] = Cookie(None),
+                        authorization: Optional[str] = Header(None),
+                        idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key")):
+    user = await get_current_user(request, session_token, authorization)
+    if idempotency_key:
+        cached = await db.idempotency_keys.find_one(
+            {"key": idempotency_key, "scope": "score_update",
+             "scorecard_id": scorecard_id, "user_id": user.user_id},
+            {"_id": 0, "response": 1},
+        )
+        if cached and cached.get("response"):
+            return cached["response"]
+    sc = await db.scorecards.find_one({"id": scorecard_id}, {"_id": 0})
+    if not sc:
+        raise HTTPException(status_code=404, detail="Scorecard not found")
+    await _require_member(sc["league_id"], user.user_id)
+    if payload.hole < 1 or payload.hole > len(sc["scores"]):
+        raise HTTPException(status_code=400, detail="Invalid hole")
+
+    idx = payload.hole - 1
+    old_val = sc["scores"][idx]
+    if sc.get("finalized"):
+        raise HTTPException(status_code=409, detail="Scorecard already finalized")
+    scores = list(sc["scores"])
+    scores[idx] = int(payload.strokes)
+    total = sum(scores)
+    rd = await db.rounds.find_one({"id": sc["round_id"]}, {"_id": 0})
+    par_total = sum(rd["par_per_hole"][i] for i, s in enumerate(scores) if s > 0)
+    played_strokes = sum(s for s in scores if s > 0)
+    plus_minus = played_strokes - par_total if par_total > 0 else 0
+
+    await db.scorecards.update_one(
+        {"id": scorecard_id},
+        {"$set": {"scores": scores, "total": total, "plus_minus": plus_minus,
+                  "updated_at": now_iso()},
+         "$inc": {"version": 1}}
+    )
+    log = ProofLog(scorecard_id=scorecard_id, round_id=sc["round_id"], hole=payload.hole,
+                   old_value=old_val, new_value=int(payload.strokes),
+                   edited_by_user_id=user.user_id, edited_by_name=user.name)
+    await db.proof_logs.insert_one(log.model_dump())
+    await ws_manager.broadcast(f"round:{sc['round_id']}", {
+        "type": "score_update", "scorecard_id": scorecard_id, "hole": payload.hole,
+        "strokes": int(payload.strokes), "total": total, "plus_minus": plus_minus,
+        "edited_by": user.name,
+    })
+    response = {"ok": True, "total": total, "plus_minus": plus_minus}
+    if idempotency_key:
+        try:
+            await db.idempotency_keys.insert_one({
+                "key": idempotency_key,
+                "scope": "score_update",
+                "scorecard_id": scorecard_id,
+                "user_id": user.user_id,
+                "response": response,
+                "created_at": now_iso(),
+            })
+        except Exception:
+            pass
+    return response
+
+
+@api_router.get("/scorecards/{scorecard_id}/proof")
+async def get_proof(scorecard_id: str, request: Request,
+                     session_token: Optional[str] = Cookie(None),
+                     authorization: Optional[str] = Header(None)):
+    await get_current_user(request, session_token, authorization)
+    logs = await db.proof_logs.find({"scorecard_id": scorecard_id}, {"_id": 0}).sort("timestamp", -1).to_list(500)
+    return logs
+
+
+class ScorecardFinalizePayload(BaseModel):
+    certified: bool = False
+
+
+@api_router.post("/scorecards/{scorecard_id}/finalize")
+async def finalize_scorecard(scorecard_id: str, payload: ScorecardFinalizePayload,
+                             request: Request,
+                             session_token: Optional[str] = Cookie(None),
+                             authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    if not payload.certified:
+        raise HTTPException(
+            status_code=400,
+            detail="Certification required. You must attest that the scores are accurate before finalizing.",
+        )
+    sc = await db.scorecards.find_one({"id": scorecard_id}, {"_id": 0})
+    if not sc:
+        raise HTTPException(status_code=404, detail="Scorecard not found")
+    await _require_member(sc["league_id"], user.user_id)
+    if sc.get("finalized"):
+        return {"ok": True, "already_finalized": True}
+    now = now_iso()
+    await db.scorecards.update_one(
+        {"id": scorecard_id},
+        {"$set": {
+            "finalized": True,
+            "certified": True,
+            "certified_by_user_id": user.user_id,
+            "certified_by_name": user.name,
+            "certified_at": now,
+            "updated_at": now,
+        }},
+    )
+    audit = ProofLog(
+        scorecard_id=scorecard_id,
+        round_id=sc["round_id"],
+        hole=0,
+        old_value=0,
+        new_value=int(sc.get("total") or 0),
+        edited_by_user_id=user.user_id,
+        edited_by_name=f"{user.name} · CERTIFIED",
+    )
+    await db.proof_logs.insert_one(audit.model_dump())
+    await ws_manager.broadcast(
+        f"round:{sc['round_id']}",
+        {"type": "score_update", "scorecard_id": scorecard_id, "finalized": True},
+    )
+    return {
+        "ok": True,
+        "finalized": True,
+        "certified_by_user_id": user.user_id,
+        "certified_at": now,
+    }
+
+
+@api_router.post("/scorecards/{scorecard_id}/certify")
+async def player_self_certify(scorecard_id: str, request: Request,
+                                session_token: Optional[str] = Cookie(None),
+                                authorization: Optional[str] = Header(None)):
+    """Player self-certification. Marks the scorecard `player_certified`
+    so the director's compliance board can clear it out. Idempotent.
+    """
+    user = await get_current_user(request, session_token, authorization)
+    sc = await db.scorecards.find_one({"id": scorecard_id}, {"_id": 0})
+    if not sc:
+        raise HTTPException(status_code=404, detail="Scorecard not found")
+    m = await _require_member(sc["league_id"], user.user_id)
+    if m["id"] != sc["member_id"]:
+        raise HTTPException(status_code=403, detail="Only the scorecard owner can self-certify")
+    if sc.get("player_certified"):
+        return {"ok": True, "already_certified": True}
+    now = now_iso()
+    await db.scorecards.update_one(
+        {"id": scorecard_id},
+        {"$set": {"player_certified": True,
+                   "player_certified_at": now,
+                   "player_certified_by_uid": user.user_id,
+                   "updated_at": now}},
+    )
+    audit = ProofLog(
+        scorecard_id=scorecard_id, round_id=sc["round_id"], hole=0,
+        old_value=0, new_value=int(sc.get("total") or 0),
+        edited_by_user_id=user.user_id,
+        edited_by_name=f"{user.name} · PLAYER-CERTIFIED",
+    )
+    await db.proof_logs.insert_one(audit.model_dump())
+    await ws_manager.broadcast(
+        f"round:{sc['round_id']}",
+        {"type": "score_update", "scorecard_id": scorecard_id, "player_certified": True},
+    )
+    return {"ok": True, "player_certified": True}

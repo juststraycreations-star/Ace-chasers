@@ -129,10 +129,10 @@ export default function LiveSimulatorPanel({
             if (sharing) return;
             setSharing(true);
             try {
-              const blob = await renderShareCard({
+              const common = {
                 roundName: round?.name,
                 leagueName: league?.name,
-                leaders: standings.slice(0, 3).map((r) => ({
+                leaders: standings.slice(0, 5).map((r) => ({
                   name: r.name,
                   total: r.total,
                   plusMinus: r.plusMinus,
@@ -140,20 +140,12 @@ export default function LiveSimulatorPanel({
                 payouts: payoutSplit,
                 acePool: league?.ace_pool || 0,
                 pool,
-              });
+              };
+              const blob = await renderShareCard({ ...common, template: "winner" });
               if (!blob) throw new Error("no blob");
               const safe = (round?.name || "round").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
-              downloadBlob(blob, `ace-chasers-${safe}-live.png`);
-              // Best-effort native share on mobile.
-              if (navigator.canShare && navigator.canShare({ files: [new File([blob], "share.png", { type: "image/png" })] })) {
-                try {
-                  await navigator.share({
-                    files: [new File([blob], "share.png", { type: "image/png" })],
-                    title: `${round?.name} — live`,
-                  });
-                } catch { /* user cancelled */ }
-              }
-              toast.success("Share card generated");
+              downloadBlob(blob, `ace-chasers-${safe}-winner.png`);
+              toast.success("Winner's Circle card downloaded");
             } catch {
               toast.error("Share card failed");
             } finally {
@@ -161,11 +153,47 @@ export default function LiveSimulatorPanel({
             }
           }}
           disabled={sharing}
-          data-testid="simulator-share-card-btn"
+          data-testid="simulator-share-winner-btn"
           className="ml-2 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-900 bg-amber-400 hover:bg-amber-500 rounded-full px-3 py-1.5 disabled:opacity-40"
         >
           <ShareNetwork size={12} weight="duotone" />
-          {sharing ? "Rendering…" : "Share card"}
+          {sharing ? "…" : "Winner card"}
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            if (sharing) return;
+            setSharing(true);
+            try {
+              const blob = await renderShareCard({
+                roundName: round?.name,
+                leagueName: league?.name,
+                leaders: standings.slice(0, 5).map((r) => ({
+                  name: r.name,
+                  total: r.total,
+                  plusMinus: r.plusMinus,
+                })),
+                payouts: payoutSplit,
+                acePool: league?.ace_pool || 0,
+                pool,
+                template: "leaderboard",
+              });
+              if (!blob) throw new Error("no blob");
+              const safe = (round?.name || "round").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+              downloadBlob(blob, `ace-chasers-${safe}-leaderboard.png`);
+              toast.success("Leaderboard card downloaded");
+            } catch {
+              toast.error("Share card failed");
+            } finally {
+              setSharing(false);
+            }
+          }}
+          disabled={sharing}
+          data-testid="simulator-share-leaderboard-btn"
+          className="ml-2 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-100 border border-slate-500 hover:border-slate-300 rounded-full px-3 py-1.5 disabled:opacity-40"
+        >
+          <ShareNetwork size={12} weight="duotone" />
+          Leaderboard
         </button>
       </div>
 
