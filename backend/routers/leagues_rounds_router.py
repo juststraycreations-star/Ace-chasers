@@ -322,7 +322,9 @@ async def _maybe_advance_bracket_on_finalize(sc: dict) -> Optional[dict]:
     """When a scorecard on a Match-Play round is finalized, check the
     league's bracket for an open match containing this player. If both
     scorecards on the round are finalized, resolve the winner (lowest
-    total wins) and slot them into the linked next-tier match.
+    total wins) and slot them into the linked next-tier match. For
+    double-elim brackets, also drops the loser into their linked LB
+    match via `loses_to_match_id`.
     """
     round_id = sc.get("round_id")
     league_id = sc.get("league_id")
@@ -335,16 +337,28 @@ async def _maybe_advance_bracket_on_finalize(sc: dict) -> Optional[dict]:
     if not bracket:
         return None
     finalizer_mem = sc.get("member_id")
-    tiers = bracket.get("tiers", [])
+
+    # Walk every match across single- and double-elim shapes.
+    def _all_matches(b: dict):
+        for tier in b.get("tiers", []) or []:
+            for m in tier:
+                yield m
+        for tier in b.get("wb_tiers", []) or []:
+            for m in tier:
+                yield m
+        for tier in b.get("lb_tiers", []) or []:
+            for m in tier:
+                yield m
+        gf = b.get("grand_final")
+        if gf:
+            yield gf
+
     target = None
-    for tier in tiers:
-        for m in tier:
-            if m.get("winner_id"):
-                continue
-            if finalizer_mem in (m.get("a_member_id"), m.get("b_member_id")):
-                target = m
-                break
-        if target:
+    for m in _all_matches(bracket):
+        if m.get("winner_id"):
+            continue
+        if finalizer_mem in (m.get("a_member_id"), m.get("b_member_id")):
+            target = m
             break
     if not target:
         return None
@@ -366,8 +380,6 @@ async def _maybe_advance_bracket_on_finalize(sc: dict) -> Optional[dict]:
     a_total = a_sc.get("total", 0)
     b_total = b_sc.get("total", 0)
     if a_total == b_total:
-        # Broadcast tie so directors/spectators subscribed to the league
-        # channel see the pending override state immediately.
         await ws_manager.broadcast(
             f"league:{league_id}",
             {"type": "bracket_tie", "match_id": target["id"],
@@ -378,37 +390,70 @@ async def _maybe_advance_bracket_on_finalize(sc: dict) -> Optional[dict]:
                 "a_member_id": a_id, "b_member_id": b_id,
                 "a_total": a_total, "b_total": b_total}
     winner_id = a_id if a_total < b_total else b_id
+    loser_id = a_id if winner_id == b_id else b_id
     target["winner_id"] = winner_id
     target["a_score"] = a_total
     target["b_score"] = b_total
     target["completed_at"] = now_iso()
     if target.get("advances_to_match_id"):
-        for tier in tiers:
-            for m in tier:
-                if m["id"] == target["advances_to_match_id"]:
-                    slot = target.get("advances_to_slot") or "a"
-                    m[f"{slot}_member_id"] = winner_id
-                    break
+        for m in _all_matches(bracket):
+            if m["id"] == target["advances_to_match_id"]:
+                slot = target.get("advances_to_slot") or "a"
+                m[f"{slot}_member_id"] = winner_id
+                break
+    if target.get("loses_to_match_id") and loser_id:
+        for m in _all_matches(bracket):
+            if m["id"] == target["loses_to_match_id"]:
+                slot = target.get("loses_to_slot") or "a"
+                m[f"{slot}_member_id"] = loser_id
+                break
+
+    # Persist. Match objects are shared refs inside `bracket`, so we
+    # write back the shape that matches the bracket kind.
+    update_fields: Dict[str, Any] = {"updated_at": now_iso()}
+    if bracket.get("kind") == "double":
+        update_fields["wb_tiers"] = bracket.get("wb_tiers", [])
+        update_fields["lb_tiers"] = bracket.get("lb_tiers", [])
+        update_fields["grand_final"] = bracket.get("grand_final")
+    else:
+        update_fields["tiers"] = bracket.get("tiers", [])
     await db.brackets.update_one(
         {"id": bracket["id"]},
-        {"$set": {"tiers": tiers, "updated_at": now_iso()}},
+        {"$set": update_fields},
     )
     winner_mem = await db.league_members.find_one(
         {"id": winner_id}, {"_id": 0, "name": 1}
     )
     winner_name = (winner_mem or {}).get("name") or "Winner"
     tier_idx = target.get("tier", 0)
-    total_tiers = len(tiers)
-    is_final = tier_idx >= total_tiers - 1
-    next_tier_label = "Champion" if is_final else (
-        "Final" if tier_idx == total_tiers - 2 else f"Tier {tier_idx + 2}"
-    )
+    # Compute is_final + next label locally (mirrors bracket_router helpers)
+    if bracket.get("kind") == "double":
+        gf = bracket.get("grand_final") or {}
+        is_final = target.get("id") == gf.get("id")
+        ref = target.get("tier_ref", "wb")
+        if is_final:
+            next_tier_label = "Champion"
+        elif ref == "wb":
+            wb_tiers = bracket.get("wb_tiers", [])
+            next_tier_label = "Grand Final" if tier_idx == len(wb_tiers) - 1 else f"WB Tier {tier_idx + 2}"
+        elif ref == "lb":
+            lb_tiers = bracket.get("lb_tiers", [])
+            next_tier_label = "Grand Final" if tier_idx == len(lb_tiers) - 1 else f"LB Tier {tier_idx + 2}"
+        else:
+            next_tier_label = "Grand Final"
+    else:
+        total_tiers = len(bracket.get("tiers", []))
+        is_final = tier_idx >= total_tiers - 1
+        next_tier_label = "Champion" if is_final else (
+            "Final" if tier_idx == total_tiers - 2 else f"Tier {tier_idx + 2}"
+        )
     payload = {
         "type": "bracket_advance",
         "match_id": target["id"],
         "winner_id": winner_id,
         "winner_name": winner_name,
         "tier": tier_idx,
+        "tier_ref": target.get("tier_ref", "wb"),
         "next_tier_label": next_tier_label,
         "is_final": is_final,
     }

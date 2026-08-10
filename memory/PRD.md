@@ -43,8 +43,56 @@ Enterprise-grade League Management platform:
   * Also available on an existing bracket via the "Re-seed" button
 
 ## Backlog (P1/P2)
-- **P3 — Bracket loser's-side / double elimination** — right now single-elim only.
-- **P3 — Live champion confetti** — fullscreen burst when the final match resolves.
+- **P3 — Double-elim grand-final "bracket reset"** — if LB champ wins first GF, play a second decider match. Current MVP: single GF, winner takes all.
+
+## Iteration 42 (Feb 2026) — Confetti, Recap poster, Double elimination
+
+### Item 1 · Champion confetti
+- New `/lib/confetti.js` exports `fireChampionConfetti()` — 2.2s cinematic burst (centre pop + side cannons) in the Ace Chasers gold/emerald palette. Wraps `canvas-confetti` (added via yarn).
+- `BracketView.jsx` fires it on any `bracket_advance` WebSocket event where `is_final === true`.
+- `RoundScorecard.jsx` also fires it when a Match-Play scorecard finalize response resolves the final match, so the finalizer sees the celebration even if they aren't on the bracket tab.
+
+### Item 2 · Round Recap Poster
+- New `RoundRecapPoster.jsx` — portrait-letter poster that auto-fires `window.print()`. Contains:
+  * **Podium · Top 3**: sorted by NET (total − handicap_at_round), ties → total → holes played
+  * **Hot Round**: deepest under-par score of the day (min plus_minus)
+  * **Closest to Pin**: one row per CTP hole with winner name + distance
+- Data is assembled entirely client-side from `/rounds/{id}/ctp` plus in-memory scorecards — no new backend surface.
+- Wired into `RoundScorecard.jsx` as an amber "Recap poster" button next to Print/PDF; visible to the director when at least one scorecard has a score.
+
+### Item 3 · Double Elimination
+- New `SeedBracketIn.kind: "single" | "double"` plus a full LB builder `_build_double_elim` in `leagues_bracket_router.py` producing:
+  * **Winners' bracket** (unchanged wiring)
+  * **Losers' bracket** with 2·(k−1) tiers (`k = log2(next_pow2(n))`). LB matches carry `tier_ref: "lb"`.
+  * **Grand Final** node (`tier_ref: "gf"`, `is_grand_final: true`)
+- Each WB match now has `loses_to_match_id` + `loses_to_slot` pointing into the correct LB slot. Standard "drop-in" pattern:
+  * WB tier 0 loser (index i) → LB tier 0, index i//2, slot a/b
+  * WB tier t≥1 loser (index i) → LB tier (2t−1), same index, slot "b"
+  * WB Final loser → LB Final slot "b"; WB Final winner → GF slot "a"; LB Final winner → GF slot "b"
+- Report / auto-advance flows updated:
+  * `POST /api/bracket/matches/{id}/report` now scans WB, LB and GF via `_iter_all_matches`, drops the loser via `loses_to_match_id`, and persists whichever shape the bracket uses.
+  * `_maybe_advance_bracket_on_finalize` in `leagues_rounds_router.py` mirrors the same double-elim aware traversal + loser drop, and emits the correct `next_tier_label` ("WB Tier N", "LB Tier N", "Grand Final").
+- `POST /api/leagues/{id}/bracket/auto-seed` accepts `?kind=double` and returns the same double-elim shape plus the `seed_order` snapshot for chip UIs.
+- **Frontend**
+  * `SeedManagementPanel.jsx` — Double-elimination checkbox toggle (auto-disabled below 4 players); passes `kind` in both `seed` and `auto-seed` calls.
+  * `BracketView.jsx` — When `bracket.kind === "double"`, renders **three stacked streams**: Winners bracket, Losers bracket (rose title), Grand Final (gold title). Extracted `renderMatch()` and `BracketStream()` helpers for DRY.
+  * `BracketPrintOverlay.jsx` — Double-elim now emits three labeled tier groups on the printable poster in the same order.
+  * Kind badge visible next to the "Match Play bracket" title when double.
+- **MVP limitations** (documented in backlog):
+  * Grand Final is a single match. A "bracket reset" second GF match when LB champ wins first is not implemented.
+  * Rosters < 4 players silently fall back to single-elim (`kind` field ignored).
+
+## Backend endpoints (this iteration)
+- `POST /api/leagues/{league_id}/bracket/seed` now accepts `kind: "single"|"double"` (defaults `single`).
+- `POST /api/leagues/{league_id}/bracket/auto-seed?kind=single|double`.
+- Extended `POST /api/bracket/matches/{id}/report` — supports loser drop wiring in double-elim.
+
+## Testing
+- `tests/test_iteration42.py` — 2/2 pass (double-elim seed shape + WB→LB drop wiring; single-elim regression).
+- `tests/test_iteration41.py` — 1/1 pass.
+- `tests/test_iteration40.py` — 1/1 pass.
+- `tests/test_iteration39.py` — 1/1 pass.
+- Total: 5/5 green.
 
 ## Iteration 41 (Feb 2026) — Handicap chips, CSV consolidation, Bracket print
 

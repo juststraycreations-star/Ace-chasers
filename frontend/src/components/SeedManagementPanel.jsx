@@ -23,6 +23,7 @@ export default function SeedManagementPanel({ leagueId, members, onSeeded, onCan
     (members || []).map((m) => ({ id: m.id, name: m.name, locked: false }))
   );
   const [seeding, setSeeding] = useState(false);
+  const [doubleElim, setDoubleElim] = useState(false);
   // handicapMap: { [memberId]: { handicap: number, played: number } | null }
   // `null` chip → unrated (no computed data yet), rendered as an em-dash.
   const [handicapMap, setHandicapMap] = useState({});
@@ -94,13 +95,15 @@ export default function SeedManagementPanel({ leagueId, members, onSeeded, onCan
 
   const seed = async () => {
     if (!canSeed) return;
-    if (!window.confirm(`Seed bracket with ${rows.length} players in this order?`)) return;
+    const kindLabel = doubleElim ? "double-elimination" : "single-elimination";
+    if (!window.confirm(`Seed a ${kindLabel} bracket with ${rows.length} players in this order?`)) return;
     setSeeding(true);
     try {
       await api.post(`/leagues/${leagueId}/bracket/seed`, {
         member_ids: rows.map((r) => r.id),
+        kind: doubleElim ? "double" : "single",
       });
-      toast.success("Bracket seeded");
+      toast.success(`Bracket seeded · ${kindLabel}`);
       onSeeded?.();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Seed failed");
@@ -111,17 +114,20 @@ export default function SeedManagementPanel({ leagueId, members, onSeeded, onCan
 
   const autoSeed = async () => {
     if (seeding) return;
+    const kindLabel = doubleElim ? "double-elimination" : "single-elimination";
     if (!window.confirm(
-      `Auto-seed by rolling handicap? Lowest handicap becomes seed #1. Any manual reorder or lock will be replaced.`
+      `Auto-seed a ${kindLabel} bracket by rolling handicap? Lowest handicap becomes seed #1. Any manual reorder or lock will be replaced.`
     )) return;
     setSeeding(true);
     try {
-      const { data } = await api.post(`/leagues/${leagueId}/bracket/auto-seed`);
+      const { data } = await api.post(
+        `/leagues/${leagueId}/bracket/auto-seed`,
+        null,
+        { params: { kind: doubleElim ? "double" : "single" } }
+      );
       const order = data?.seed_order || [];
       if (order.length) {
         setRows(order.map((s) => ({ id: s.member_id, name: s.name, locked: false })));
-        // Merge any handicap/played info from the auto-seed response so
-        // chips stay accurate even if the initial fetch was stale.
         setHandicapMap((prev) => {
           const next = { ...prev };
           for (const s of order) {
@@ -130,7 +136,7 @@ export default function SeedManagementPanel({ leagueId, members, onSeeded, onCan
           return next;
         });
       }
-      toast.success("Bracket auto-seeded by handicap");
+      toast.success(`Bracket auto-seeded · ${kindLabel}`);
       onSeeded?.();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Auto-seed failed");
@@ -168,6 +174,25 @@ export default function SeedManagementPanel({ leagueId, members, onSeeded, onCan
             <X size={18} />
           </button>
         )}
+      </div>
+
+      <div className="mb-3 flex items-center gap-3 rounded-lg bg-slate-50 border border-slate-200 p-3">
+        <label className="flex items-center gap-2 cursor-pointer" data-testid="seed-double-elim-toggle">
+          <input
+            type="checkbox"
+            checked={doubleElim}
+            onChange={(e) => setDoubleElim(e.target.checked)}
+            disabled={rows.length < 4}
+            className="w-4 h-4 accent-amber-600"
+            data-testid="seed-double-elim-checkbox"
+          />
+          <span className="text-sm font-semibold text-slate-900">Double elimination</span>
+        </label>
+        <div className="text-[11px] text-slate-500 flex-1">
+          {rows.length < 4
+            ? "Needs at least 4 players — falls back to single-elim otherwise."
+            : "Losers of any WB match drop into the losers' bracket for a second chance."}
+        </div>
       </div>
 
       <div className="flex items-center gap-2 mb-3 text-xs font-mono-data text-slate-500 justify-between">

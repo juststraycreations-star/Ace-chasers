@@ -13,6 +13,8 @@ import ScorecardGrid from "@/components/ScorecardGrid";
 import LiveSimulatorPanel from "@/components/LiveSimulatorPanel";
 import FormatLeaderboardPanel from "@/components/FormatLeaderboardPanel";
 import TieBreakOverridePanel from "@/components/TieBreakOverridePanel";
+import RoundRecapPoster from "@/components/RoundRecapPoster";
+import { fireChampionConfetti } from "@/lib/confetti";
 import { enqueueScore, bindOfflineQueueListeners, pendingCount, flushQueue } from "@/lib/offlineQueue";
 
 function scoreClass(strokes, par) {
@@ -53,6 +55,7 @@ export default function RoundScorecard() {
   // stash the payload here and open TieBreakOverridePanel so the director
   // can resolve manually.
   const [pendingTieBreak, setPendingTieBreak] = useState(null);
+  const [showRecap, setShowRecap] = useState(false);
   // "score" = per-hole scoring UI (default while round is active).
   // "grid"  = UDisc-style summary table (default once round is completed).
   // A useEffect below flips to "grid" the moment we detect a completed round.
@@ -192,6 +195,7 @@ export default function RoundScorecard() {
             ? `🏆 ${winName} · Bracket Champion!`
             : `${winName} advances to ${adv.next_tier_label || "the next tier"}`
         );
+        if (adv.is_final) fireChampionConfetti();
       }
     } catch (e) {
       toast.error(
@@ -496,6 +500,18 @@ export default function RoundScorecard() {
             <Printer size={14} weight="duotone" />
             Print / PDF
           </button>
+          {isDirector && scorecards?.some((sc) => (sc.total || 0) > 0) && (
+            <button
+              type="button"
+              onClick={() => setShowRecap(true)}
+              data-testid="recap-poster-btn"
+              title="Auto-generate a printable recap poster for the tee pad"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold text-amber-900 border border-amber-300 bg-amber-50 hover:bg-amber-100 hover:border-amber-500 transition-all shadow-sm"
+            >
+              <Printer size={14} weight="duotone" />
+              Recap poster
+            </button>
+          )}
         </div>
 
         {viewMode === "grid" && (
@@ -819,6 +835,16 @@ export default function RoundScorecard() {
               await load();
             }}
             onClose={() => setPendingTieBreak(null)}
+          />
+        )}
+
+        {showRecap && (
+          <RoundRecapPoster
+            round={round}
+            league={league}
+            scorecards={scorecards}
+            members={members}
+            onClose={() => setShowRecap(false)}
           />
         )}
 

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import math
 import secrets
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime, timezone
 
 from fastapi import Cookie, Header, HTTPException, Request
@@ -61,6 +61,7 @@ async def _require_director(league_id: str, user_id: str) -> dict:
 class SeedBracketIn(BaseModel):
     member_ids: List[str] = Field(min_length=2)
     season_id: Optional[str] = None
+    kind: Literal["single", "double"] = "single"
 
 
 class MatchReportIn(BaseModel):
@@ -143,6 +144,169 @@ def _build_next_tiers(first_tier: List[dict]) -> List[List[dict]]:
     return tiers
 
 
+def _empty_match(tier_ref: str, tier_idx: int) -> Dict[str, Any]:
+    """Empty match slot template used by both WB and LB builders. The
+    `tier_ref` field is "wb" or "lb" so the frontend can render each
+    stream in its own column strip.
+    """
+    return {
+        "id": secrets.token_hex(8),
+        "tier": tier_idx,
+        "tier_ref": tier_ref,
+        "a_member_id": None,
+        "b_member_id": None,
+        "a_score": None,
+        "b_score": None,
+        "winner_id": None,
+        "advances_to_match_id": None,
+        "advances_to_slot": None,
+        "loses_to_match_id": None,
+        "loses_to_slot": None,
+        "completed_at": None,
+    }
+
+
+def _build_double_elim(member_ids: List[str]) -> Dict[str, Any]:
+    """Build a full double-elimination structure: winners' bracket,
+    losers' bracket, and a single grand final match. See PRD for the
+    LB topology used (standard "drop-in" pattern).
+
+    Returns a dict with keys:
+      - wb_tiers:  List[List[match]]     (winners' bracket)
+      - lb_tiers:  List[List[match]]     (losers' bracket, 2*(k-1) tiers)
+      - grand_final: match               (WB champ vs LB champ)
+
+    All match nodes carry `tier_ref` ("wb" | "lb" | "gf"), and every WB
+    match plus every LB non-final match carry a `loses_to_match_id` /
+    `loses_to_slot` pointing into the LB (or into elimination = None).
+
+    NOTE: For n < 4 double-elim collapses to a single-match bracket, so
+    the caller should keep `kind: single` for n=2. This helper still
+    handles n=2 gracefully by producing an empty LB and skipping GF.
+    """
+    slots = _next_pow2(len(member_ids))
+    k = int(math.log2(slots))  # number of WB tiers
+
+    # ── Winners' bracket ─────────────────────────────────────────
+    wb_first = _build_seed_matches(member_ids)
+    for m in wb_first:
+        m["tier_ref"] = "wb"
+        m["loses_to_match_id"] = None
+        m["loses_to_slot"] = None
+    wb_tiers = _build_next_tiers(wb_first)
+    for tier in wb_tiers:
+        for m in tier:
+            m["tier_ref"] = "wb"
+            m.setdefault("loses_to_match_id", None)
+            m.setdefault("loses_to_slot", None)
+
+    lb_tiers: List[List[dict]] = []
+    grand_final: Optional[Dict[str, Any]] = None
+
+    if k >= 2:
+        # ── Losers' bracket skeleton ─────────────────────────────
+        # LB has 2*(k-1) tiers. Tier sizes follow this pattern:
+        #   even tier t → drop-in stage (same size as previous odd)
+        #   odd tier t  → consolidation stage (halves previous size)
+        # Tier 0 (even) is special — pairs WB R1 losers so its size is
+        # (n/2)/2 = n/4 matches to start.
+        sizes: List[int] = []
+        for t in range(2 * (k - 1)):
+            if t == 0:
+                sizes.append(max(1, slots // 4))
+            elif t % 2 == 1:
+                # drop-in tier: same size as previous
+                sizes.append(sizes[-1])
+            else:
+                # consolidation tier: halve previous size
+                sizes.append(max(1, sizes[-1] // 2))
+        for t_idx, size in enumerate(sizes):
+            tier = [_empty_match("lb", t_idx) for _ in range(size)]
+            lb_tiers.append(tier)
+
+        # ── LB internal advancement wiring ───────────────────────
+        # even-index tier → next tier: 1:1 (same match index, slot "a")
+        # odd-index tier  → next tier: paired (index//2, alternating a/b)
+        for t_idx in range(len(lb_tiers) - 1):
+            cur = lb_tiers[t_idx]
+            nxt = lb_tiers[t_idx + 1]
+            if t_idx % 2 == 0:
+                # 1:1 into slot "a" of the drop-in tier
+                for i, m in enumerate(cur):
+                    if i < len(nxt):
+                        m["advances_to_match_id"] = nxt[i]["id"]
+                        m["advances_to_slot"] = "a"
+            else:
+                # paired into the consolidation tier
+                for i, m in enumerate(cur):
+                    parent = nxt[i // 2]
+                    m["advances_to_match_id"] = parent["id"]
+                    m["advances_to_slot"] = "a" if i % 2 == 0 else "b"
+
+        # ── Grand final ──────────────────────────────────────────
+        grand_final = _empty_match("gf", 0)
+        grand_final["is_grand_final"] = True
+
+        # Route the LB Final winner into GF slot "b"
+        lb_final = lb_tiers[-1][0]
+        lb_final["advances_to_match_id"] = grand_final["id"]
+        lb_final["advances_to_slot"] = "b"
+
+        # ── WB → LB drop wiring ──────────────────────────────────
+        # WB tier 0 loser (index i) → LB tier 0, index i//2, slot a/b
+        for i, m in enumerate(wb_tiers[0]):
+            lb_target = lb_tiers[0][i // 2]
+            m["loses_to_match_id"] = lb_target["id"]
+            m["loses_to_slot"] = "a" if i % 2 == 0 else "b"
+            # If WB tier 0 was a bye that already resolved a winner,
+            # pre-seat the bye "loser" logic doesn't apply — byes have
+            # no loser to drop. Leave the LB slot empty.
+        # WB tier t≥1 loser (index i) → LB tier (2t-1), index i, slot "b"
+        for t in range(1, len(wb_tiers)):
+            lb_t = 2 * t - 1
+            for i, m in enumerate(wb_tiers[t]):
+                if lb_t < len(lb_tiers):
+                    lb_target = lb_tiers[lb_t][i] if i < len(lb_tiers[lb_t]) else lb_tiers[lb_t][-1]
+                    m["loses_to_match_id"] = lb_target["id"]
+                    m["loses_to_slot"] = "b"
+                else:
+                    # WB Final loser → LB Final slot "b" (already wired
+                    # above via lb_final.b; but WB Final has its own
+                    # loses_to_match_id → LB Final).
+                    m["loses_to_match_id"] = lb_final["id"]
+                    m["loses_to_slot"] = "b"
+
+        # WB Final winner → GF slot "a"
+        wb_final = wb_tiers[-1][0]
+        wb_final["advances_to_match_id"] = grand_final["id"]
+        wb_final["advances_to_slot"] = "a"
+
+    return {
+        "wb_tiers": wb_tiers,
+        "lb_tiers": lb_tiers,
+        "grand_final": grand_final,
+    }
+
+
+def _iter_all_matches(bracket: dict):
+    """Yield every match across WB, LB, and GF. Handles both single-elim
+    (matches under `tiers`) and double-elim (`wb_tiers`, `lb_tiers`,
+    `grand_final`).
+    """
+    for tier in bracket.get("tiers", []) or []:
+        for m in tier:
+            yield m
+    for tier in bracket.get("wb_tiers", []) or []:
+        for m in tier:
+            yield m
+    for tier in bracket.get("lb_tiers", []) or []:
+        for m in tier:
+            yield m
+    gf = bracket.get("grand_final")
+    if gf:
+        yield gf
+
+
 @api_router.post("/leagues/{league_id}/bracket/seed")
 async def seed_bracket(league_id: str, payload: SeedBracketIn, request: Request,
                         session_token: Optional[str] = Cookie(None),
@@ -151,16 +315,35 @@ async def seed_bracket(league_id: str, payload: SeedBracketIn, request: Request,
     await _require_director(league_id, user.user_id)
     # Wipe any previous bracket so a fresh seed is deterministic.
     await db.brackets.delete_many({"league_id": league_id})
-    first_tier = _build_seed_matches(payload.member_ids)
-    tiers = _build_next_tiers(first_tier)
-    doc = {
-        "id": secrets.token_hex(12),
-        "league_id": league_id,
-        "season_id": payload.season_id,
-        "tiers": tiers,
-        "seeded_by": user.user_id,
-        "seeded_at": _now_iso(),
-    }
+    kind = payload.kind
+    # Double-elim below 4 seeded players collapses to a single match; use single.
+    if kind == "double" and len(payload.member_ids) < 4:
+        kind = "single"
+    if kind == "double":
+        de = _build_double_elim(payload.member_ids)
+        doc = {
+            "id": secrets.token_hex(12),
+            "league_id": league_id,
+            "season_id": payload.season_id,
+            "kind": "double",
+            "wb_tiers": de["wb_tiers"],
+            "lb_tiers": de["lb_tiers"],
+            "grand_final": de["grand_final"],
+            "seeded_by": user.user_id,
+            "seeded_at": _now_iso(),
+        }
+    else:
+        first_tier = _build_seed_matches(payload.member_ids)
+        tiers = _build_next_tiers(first_tier)
+        doc = {
+            "id": secrets.token_hex(12),
+            "league_id": league_id,
+            "season_id": payload.season_id,
+            "kind": "single",
+            "tiers": tiers,
+            "seeded_by": user.user_id,
+            "seeded_at": _now_iso(),
+        }
     await db.brackets.insert_one(doc)
     doc.pop("_id", None)
     return doc
@@ -169,6 +352,7 @@ async def seed_bracket(league_id: str, payload: SeedBracketIn, request: Request,
 @api_router.post("/leagues/{league_id}/bracket/auto-seed")
 async def auto_seed_bracket(league_id: str, request: Request,
                              season_id: Optional[str] = None,
+                             kind: Literal["single", "double"] = "single",
                              session_token: Optional[str] = Cookie(None),
                              authorization: Optional[str] = Header(None)):
     """Rating-based automatic bracket seeding.
@@ -177,6 +361,8 @@ async def auto_seed_bracket(league_id: str, request: Request,
     and seeds the bracket in ascending handicap order (lowest handicap =
     top-rated = seed #1). Members with no rounds played (handicap 0)
     sort AFTER rated players, at the bottom seeds.
+
+    Pass `kind=double` to auto-seed a double-elimination bracket.
     """
     user = await get_current_user(request, session_token, authorization)
     await _require_director(league_id, user.user_id)
@@ -203,22 +389,47 @@ async def auto_seed_bracket(league_id: str, request: Request,
     ranked.sort(key=lambda r: (0 if r["played"] > 0 else 1, r["handicap"], r["name"].lower()))
     member_ids = [r["id"] for r in ranked]
     await db.brackets.delete_many({"league_id": league_id})
-    first_tier = _build_seed_matches(member_ids)
-    tiers = _build_next_tiers(first_tier)
-    doc = {
-        "id": secrets.token_hex(12),
-        "league_id": league_id,
-        "season_id": season_id,
-        "tiers": tiers,
-        "seeded_by": user.user_id,
-        "seeded_at": _now_iso(),
-        "seed_source": "auto_rating",
-        "seed_order": [
-            {"seed": i + 1, "member_id": r["id"], "name": r["name"],
-             "handicap": r["handicap"], "played": r["played"]}
-            for i, r in enumerate(ranked)
-        ],
-    }
+
+    effective_kind = kind
+    if effective_kind == "double" and len(member_ids) < 4:
+        effective_kind = "single"
+    if effective_kind == "double":
+        de = _build_double_elim(member_ids)
+        doc = {
+            "id": secrets.token_hex(12),
+            "league_id": league_id,
+            "season_id": season_id,
+            "kind": "double",
+            "wb_tiers": de["wb_tiers"],
+            "lb_tiers": de["lb_tiers"],
+            "grand_final": de["grand_final"],
+            "seeded_by": user.user_id,
+            "seeded_at": _now_iso(),
+            "seed_source": "auto_rating",
+            "seed_order": [
+                {"seed": i + 1, "member_id": r["id"], "name": r["name"],
+                 "handicap": r["handicap"], "played": r["played"]}
+                for i, r in enumerate(ranked)
+            ],
+        }
+    else:
+        first_tier = _build_seed_matches(member_ids)
+        tiers = _build_next_tiers(first_tier)
+        doc = {
+            "id": secrets.token_hex(12),
+            "league_id": league_id,
+            "season_id": season_id,
+            "kind": "single",
+            "tiers": tiers,
+            "seeded_by": user.user_id,
+            "seeded_at": _now_iso(),
+            "seed_source": "auto_rating",
+            "seed_order": [
+                {"seed": i + 1, "member_id": r["id"], "name": r["name"],
+                 "handicap": r["handicap"], "played": r["played"]}
+                for i, r in enumerate(ranked)
+            ],
+        }
     await db.brackets.insert_one(doc)
     doc.pop("_id", None)
     return doc
@@ -241,27 +452,22 @@ async def report_match(match_id: str, payload: MatchReportIn, request: Request,
                         session_token: Optional[str] = Cookie(None),
                         authorization: Optional[str] = Header(None)):
     user = await get_current_user(request, session_token, authorization)
-    # Locate the bracket that contains this match. `tiers` is a list of
-    # lists, so dot-notation across two array levels won't work. Scan
-    # the (typically small) bracket set instead.
+    # Locate the bracket that contains this match. Bracket doc may hold
+    # a single-elim `tiers` OR a double-elim `wb_tiers` + `lb_tiers` +
+    # `grand_final`. Scan all shapes.
     bracket = None
     match = None
     async for b in db.brackets.find({}, {"_id": 0}):
-        for tier in b.get("tiers", []):
-            for m in tier:
-                if m.get("id") == match_id:
-                    bracket = b
-                    match = m
-                    break
-            if match:
+        for m in _iter_all_matches(b):
+            if m.get("id") == match_id:
+                bracket = b
+                match = m
                 break
         if bracket:
             break
     if not bracket or not match:
         raise HTTPException(status_code=404, detail="Match not found")
     await _require_director(bracket["league_id"], user.user_id)
-
-    tiers = bracket.get("tiers", [])
 
     if match.get("winner_id") == payload.winner_id and match.get("completed_at"):
         # Idempotent replay.
@@ -275,37 +481,85 @@ async def report_match(match_id: str, payload: MatchReportIn, request: Request,
     match["b_score"] = payload.b_score
     match["completed_at"] = _now_iso()
 
-    # Advance winner to the next tier.
-    if match.get("advances_to_match_id"):
-        for tier in tiers:
-            for m in tier:
-                if m["id"] == match["advances_to_match_id"]:
-                    slot = match.get("advances_to_slot") or "a"
-                    m[f"{slot}_member_id"] = payload.winner_id
-                    break
+    # Determine loser for double-elim drop routing.
+    a_id = match.get("a_member_id")
+    b_id = match.get("b_member_id")
+    loser_id = a_id if payload.winner_id == b_id else b_id
 
+    # Advance winner to next tier (works for single, WB, LB and GF).
+    if match.get("advances_to_match_id"):
+        for m in _iter_all_matches(bracket):
+            if m["id"] == match["advances_to_match_id"]:
+                slot = match.get("advances_to_slot") or "a"
+                m[f"{slot}_member_id"] = payload.winner_id
+                break
+    # Drop loser into LB (double-elim only).
+    if match.get("loses_to_match_id") and loser_id:
+        for m in _iter_all_matches(bracket):
+            if m["id"] == match["loses_to_match_id"]:
+                slot = match.get("loses_to_slot") or "a"
+                m[f"{slot}_member_id"] = loser_id
+                break
+
+    update_fields: Dict[str, Any] = {"updated_at": _now_iso()}
+    if bracket.get("kind") == "double":
+        update_fields["wb_tiers"] = bracket.get("wb_tiers", [])
+        update_fields["lb_tiers"] = bracket.get("lb_tiers", [])
+        update_fields["grand_final"] = bracket.get("grand_final")
+    else:
+        update_fields["tiers"] = bracket.get("tiers", [])
     await db.brackets.update_one(
         {"id": bracket["id"]},
-        {"$set": {"tiers": tiers, "updated_at": _now_iso()}},
+        {"$set": update_fields},
     )
     winner_mem = await db.league_members.find_one(
         {"id": payload.winner_id}, {"_id": 0, "name": 1}
     )
     winner_name = (winner_mem or {}).get("name") or "Winner"
-    tier_idx = match.get("tier", 0)
-    total_tiers = len(tiers)
-    is_final = tier_idx >= total_tiers - 1
-    next_tier_label = "Champion" if is_final else (
-        "Final" if tier_idx == total_tiers - 2 else f"Tier {tier_idx + 2}"
-    )
+    is_final = _is_final_match(bracket, match)
+    next_tier_label = _next_tier_label_for(bracket, match)
     await ws_manager.broadcast(
         f"league:{bracket['league_id']}",
         {"type": "bracket_advance", "match_id": match["id"],
          "winner_id": payload.winner_id, "winner_name": winner_name,
-         "tier": tier_idx, "next_tier_label": next_tier_label,
+         "tier": match.get("tier", 0), "tier_ref": match.get("tier_ref", "wb"),
+         "next_tier_label": next_tier_label,
          "is_final": is_final, "manual": True},
     )
-    return {"already_reported": False, "bracket": {**bracket, "tiers": tiers}}
+    return {"already_reported": False, "bracket": bracket}
+
+
+def _is_final_match(bracket: dict, match: dict) -> bool:
+    """The 'final' is the last match whose winner is Bracket Champion.
+    Single-elim → last tier's only match. Double-elim → the grand_final.
+    """
+    if bracket.get("kind") == "double":
+        gf = bracket.get("grand_final")
+        return bool(gf and match.get("id") == gf.get("id"))
+    tiers = bracket.get("tiers", [])
+    return bool(tiers) and match.get("tier", 0) >= len(tiers) - 1
+
+
+def _next_tier_label_for(bracket: dict, match: dict) -> str:
+    if _is_final_match(bracket, match):
+        return "Champion"
+    if bracket.get("kind") == "double":
+        ref = match.get("tier_ref", "wb")
+        tier_idx = match.get("tier", 0)
+        if ref == "wb":
+            wb_tiers = bracket.get("wb_tiers", [])
+            if tier_idx == len(wb_tiers) - 1:
+                return "Grand Final"
+            return f"WB Tier {tier_idx + 2}"
+        if ref == "lb":
+            lb_tiers = bracket.get("lb_tiers", [])
+            if tier_idx == len(lb_tiers) - 1:
+                return "Grand Final"
+            return f"LB Tier {tier_idx + 2}"
+        return "Grand Final"
+    tiers = bracket.get("tiers", [])
+    tier_idx = match.get("tier", 0)
+    return "Final" if tier_idx == len(tiers) - 2 else f"Tier {tier_idx + 2}"
 
 
 @api_router.delete("/leagues/{league_id}/bracket")
