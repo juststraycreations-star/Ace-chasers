@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
-import { Trophy, ArrowRight } from "@phosphor-icons/react";
+import { Trophy, ArrowRight, Printer } from "@phosphor-icons/react";
 import SeedManagementPanel from "@/components/SeedManagementPanel";
+import BracketPrintOverlay from "@/components/BracketPrintOverlay";
 import { useWebSocket } from "@/lib/ws";
 
 /**
@@ -10,11 +11,12 @@ import { useWebSocket } from "@/lib/ws";
  * Directors can seed from the current member list and report match
  * results. Winners auto-advance to the linked next-tier slot.
  */
-export default function BracketView({ leagueId, members, isDirector, format }) {
+export default function BracketView({ leagueId, leagueName, members, isDirector, format }) {
   const [bracket, setBracket] = useState(null);
   const [loading, setLoading] = useState(true);
   const [reporting, setReporting] = useState(null); // match_id in-flight
   const [seedOverride, setSeedOverride] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -147,6 +149,15 @@ export default function BracketView({ leagueId, members, isDirector, format }) {
           <div className="ml-auto flex gap-2">
             <button
               type="button"
+              onClick={() => setPrintOpen(true)}
+              data-testid="bracket-print-btn"
+              className="text-xs font-semibold text-slate-700 border border-slate-200 rounded-full px-3 py-1.5 hover:bg-slate-50 inline-flex items-center gap-1.5"
+              title="Print or save as PDF — portrait letter"
+            >
+              <Printer size={12} weight="duotone" /> Print
+            </button>
+            <button
+              type="button"
               onClick={() => setSeedOverride(true)}
               data-testid="bracket-reseed-btn"
               className="text-xs font-semibold text-slate-700 border border-slate-200 rounded-full px-3 py-1.5 hover:bg-slate-50"
@@ -216,6 +227,15 @@ export default function BracketView({ leagueId, members, isDirector, format }) {
           </div>
         ))}
       </div>
+
+      {printOpen && (
+        <BracketPrintOverlay
+          bracket={bracket}
+          leagueName={leagueName}
+          memberMap={memberById}
+          onClose={() => setPrintOpen(false)}
+        />
+      )}
     </section>
   );
 }

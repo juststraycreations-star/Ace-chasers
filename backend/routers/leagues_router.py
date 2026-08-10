@@ -1030,26 +1030,9 @@ def _csv_response(rows: List[List[Any]], filename: str) -> Response:
     return Response(content=buf.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
-@api_router.get("/leagues/{league_id}/standings.csv")
-async def standings_csv(league_id: str, request: Request,
-                          session_token: Optional[str] = Cookie(None),
-                          authorization: Optional[str] = Header(None),
-                          auth: Optional[str] = Query(None)):
-    hdr = authorization or (f"Bearer {auth}" if auth else None)
-    user = await get_current_user(request, session_token, hdr)
-    await _require_member(league_id, user.user_id)
-    members = await db.league_members.find({"league_id": league_id}, {"_id": 0}).to_list(500)
-    rows = [["Rank", "Player", "Points", "Rounds", "Handicap", "Player Rating", "Bag Tag"]]
-    data = []
-    for m in members:
-        h = await _compute_handicap(league_id, m["id"], [3]*18)
-        pr = await _compute_player_rating(league_id, m["id"])
-        cnt = await db.scorecards.count_documents({"league_id": league_id, "member_id": m["id"], "total": {"$gt": 0}})
-        data.append((m, h, pr, cnt))
-    data.sort(key=lambda t: (-t[0].get("total_points", 0), t[0]["bag_tag"]))
-    for i, (m, h, pr, cnt) in enumerate(data):
-        rows.append([i + 1, m["name"], m.get("total_points", 0), cnt, h, pr, m["bag_tag"]])
-    return _csv_response(rows, f"standings-{league_id}.csv")
+# NOTE: `GET /api/leagues/{league_id}/standings.csv` moved to
+# `leagues_rounds_router.py` (Phase 4 CSV consolidation). Client URL and
+# response shape are unchanged.
 
 
 # ============= PLAYER PROFILE =============

@@ -43,8 +43,34 @@ Enterprise-grade League Management platform:
   * Also available on an existing bracket via the "Re-seed" button
 
 ## Backlog (P1/P2)
-- **P2 — Rounds route consolidation** — some CSV round-exports still live in `leagues_router.py`; a follow-up could co-locate them.
 - **P3 — Bracket loser's-side / double elimination** — right now single-elim only.
+- **P3 — Live champion confetti** — fullscreen burst when the final match resolves.
+
+## Iteration 41 (Feb 2026) — Handicap chips, CSV consolidation, Bracket print
+
+### Item 1 · Handicap Preview Chips
+- `SeedManagementPanel.jsx` fetches `/api/leagues/{id}/handicaps` on mount and stamps a chip beside each name.
+- Rated players → emerald `HCP +2.4` chip. Unrated players (no completed rounds) → slate `HCP —` chip.
+- Auto-seed by rating now also folds the response's `seed_order` handicap/played data back into the chip map so re-render is instant and accurate.
+
+### Item 2 · Phase-4 CSV consolidation
+- `GET /api/leagues/{league_id}/standings.csv` moved from `leagues_router.py` into `leagues_rounds_router.py`.
+- `_csv_response` helper remains in `leagues_router.py` so `leagues_ledger_router.py` (still importing it) is not disturbed. `leagues_rounds_router.py` now imports both `_csv_response` and `_compute_player_rating`.
+- URL, response shape, headers and Content-Disposition are byte-identical to the pre-move implementation — no frontend hooks touched.
+
+### Item 3 · Playoff Bracket Print overlay
+- New `BracketPrintOverlay.jsx` renders a portrait-letter print canvas (auto-fits tier count via a CSS grid template), winner rows filled emerald, scores in a mono column.
+- Embeds an in-page `@media print` block that hides the rest of the app so `window.print()` outputs only the poster. Directors can save as PDF from the same dialog.
+- Wired into `BracketView.jsx` as a "Print" button next to Re-seed and Reset. Overlay auto-fires the native print dialog on mount and offers a "Print again" button + "Close".
+- `LeagueDetail.jsx` passes `leagueName` down into `BracketView` so the printable header shows the correct league title.
+
+## Backend endpoints (this iteration)
+- **Moved** `GET /api/leagues/{league_id}/standings.csv` → `leagues_rounds_router.py` (URL unchanged).
+
+## Testing
+- `tests/test_iteration41.py` — 1/1 pass (CSV moved, still 200 + `text/csv` + Handicap header; `/handicaps` shape verified for chip UI).
+- `tests/test_iteration40.py` — 1/1 pass (regression: auto-seed + tie-break).
+- `tests/test_iteration39.py` — 1/1 pass (regression: auto-advance).
 
 ## Iteration 40 (Feb 2026) — Manual Tie-Break, Auto-Seed by Rating, Division Cards, Live Toast
 

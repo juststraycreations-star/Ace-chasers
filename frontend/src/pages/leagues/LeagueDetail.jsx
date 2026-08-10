@@ -277,6 +277,7 @@ export default function LeagueDetail() {
         {tab === "bracket" && (
           <BracketView
             leagueId={leagueId}
+            leagueName={league.name}
             members={members}
             isDirector={league.is_director}
             format={league.format}

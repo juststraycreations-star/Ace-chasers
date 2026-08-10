@@ -26,6 +26,8 @@ from .leagues_router import (
     Round,
     Scorecard,
     _compute_handicap,
+    _compute_player_rating,
+    _csv_response,
     _finalize_round,
     _require_member,
     api_router,
@@ -711,8 +713,33 @@ async def auto_pair(round_id: str, payload: AutoPairPayload, request: Request,
 
 
 # ============= CSV EXPORTS =============
-# NOTE: `_csv_response` lives in `leagues_router.py`; the CSV endpoints
-# that reference it remained there so no local helper is needed here.
+# The generic `_csv_response` helper stays in `leagues_router.py` so
+# other sub-routers (ledger) that still reference it don't need to
+# switch import surfaces. The endpoints that emit CSVs now live here.
+
+@api_router.get("/leagues/{league_id}/standings.csv")
+async def standings_csv(league_id: str, request: Request,
+                          session_token: Optional[str] = Cookie(None),
+                          authorization: Optional[str] = Header(None),
+                          auth: Optional[str] = Query(None)):
+    hdr = authorization or (f"Bearer {auth}" if auth else None)
+    user = await get_current_user(request, session_token, hdr)
+    await _require_member(league_id, user.user_id)
+    members = await db.league_members.find({"league_id": league_id}, {"_id": 0}).to_list(500)
+    rows = [["Rank", "Player", "Points", "Rounds", "Handicap", "Player Rating", "Bag Tag"]]
+    data = []
+    for m in members:
+        h = await _compute_handicap(league_id, m["id"], [3] * 18)
+        pr = await _compute_player_rating(league_id, m["id"])
+        cnt = await db.scorecards.count_documents(
+            {"league_id": league_id, "member_id": m["id"], "total": {"$gt": 0}}
+        )
+        data.append((m, h, pr, cnt))
+    data.sort(key=lambda t: (-t[0].get("total_points", 0), t[0]["bag_tag"]))
+    for i, (m, h, pr, cnt) in enumerate(data):
+        rows.append([i + 1, m["name"], m.get("total_points", 0), cnt, h, pr, m["bag_tag"]])
+    return _csv_response(rows, f"standings-{league_id}.csv")
+
 
 @api_router.get("/rounds/{round_id}/payout")
 async def get_payout(round_id: str, request: Request,

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { ArrowUp, ArrowDown, Lock, LockOpen, Shuffle, PlayCircle, X, ChartBar } from "@phosphor-icons/react";
@@ -23,6 +23,31 @@ export default function SeedManagementPanel({ leagueId, members, onSeeded, onCan
     (members || []).map((m) => ({ id: m.id, name: m.name, locked: false }))
   );
   const [seeding, setSeeding] = useState(false);
+  // handicapMap: { [memberId]: { handicap: number, played: number } | null }
+  // `null` chip → unrated (no computed data yet), rendered as an em-dash.
+  const [handicapMap, setHandicapMap] = useState({});
+
+  // Fetch rolling handicaps on open so the chips next to each name give
+  // the director confidence in the ordering (especially before auto-seed).
+  useEffect(() => {
+    if (!leagueId) return;
+    let dead = false;
+    (async () => {
+      try {
+        const { data } = await api.get(`/leagues/${leagueId}/handicaps`);
+        if (dead) return;
+        const map = {};
+        for (const row of data || []) {
+          map[row.member_id] = {
+            handicap: row.handicap,
+            played: row.rounds_played || 0,
+          };
+        }
+        setHandicapMap(map);
+      } catch { /* silent — chip just shows em-dash */ }
+    })();
+    return () => { dead = true; };
+  }, [leagueId]);
 
   const canSeed = rows.length >= 2 && !seeding;
 
@@ -95,6 +120,15 @@ export default function SeedManagementPanel({ leagueId, members, onSeeded, onCan
       const order = data?.seed_order || [];
       if (order.length) {
         setRows(order.map((s) => ({ id: s.member_id, name: s.name, locked: false })));
+        // Merge any handicap/played info from the auto-seed response so
+        // chips stay accurate even if the initial fetch was stale.
+        setHandicapMap((prev) => {
+          const next = { ...prev };
+          for (const s of order) {
+            next[s.member_id] = { handicap: s.handicap, played: s.played };
+          }
+          return next;
+        });
       }
       toast.success("Bracket auto-seeded by handicap");
       onSeeded?.();
@@ -175,8 +209,36 @@ export default function SeedManagementPanel({ leagueId, members, onSeeded, onCan
             <span className="w-8 h-8 shrink-0 rounded-md bg-slate-100 text-slate-800 font-mono text-xs flex items-center justify-center">
               {i + 1}
             </span>
-            <div className="flex-1 min-w-0 text-sm text-slate-900 truncate">
-              {row.name}
+            <div className="flex-1 min-w-0 flex items-center gap-2">
+              <div className="text-sm text-slate-900 truncate">
+                {row.name}
+              </div>
+              {(() => {
+                const h = handicapMap[row.id];
+                const played = h?.played ?? 0;
+                const rated = h && played > 0;
+                const value = rated ? h.handicap : null;
+                const label = rated
+                  ? (value > 0 ? `+${value}` : `${value}`)
+                  : "—";
+                return (
+                  <span
+                    data-testid={`seed-handicap-chip-${i + 1}`}
+                    title={
+                      rated
+                        ? `Rolling handicap · ${played} round${played === 1 ? "" : "s"} played`
+                        : "No completed rounds yet"
+                    }
+                    className={`shrink-0 font-mono-data text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                      rated
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                        : "bg-slate-100 border-slate-200 text-slate-500"
+                    }`}
+                  >
+                    HCP {label}
+                  </span>
+                );
+              })()}
             </div>
             <button
               type="button"
