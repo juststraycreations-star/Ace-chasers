@@ -171,4 +171,13 @@ async def list_feed(league_id: str, request: Request,
                       authorization: Optional[str] = Header(None)):
     user = await get_current_user(request, session_token, authorization)
     await _require_member(league_id, user.user_id)
-    return await db.feed_posts.find({"league_id": league_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    # Hide moderator-deleted posts from everyone except the director,
+    # who can still see them (greyed out in the UI) for audit.
+    lg = await db.leagues.find_one(
+        {"id": league_id}, {"_id": 0, "director_id": 1}
+    )
+    is_director = bool(lg and lg.get("director_id") == user.user_id)
+    q: dict = {"league_id": league_id}
+    if not is_director:
+        q["hidden"] = {"$ne": True}
+    return await db.feed_posts.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)

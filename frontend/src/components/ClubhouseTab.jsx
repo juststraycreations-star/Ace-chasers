@@ -3,7 +3,7 @@ import api from "@/lib/api";
 import AuthImage from "./AuthImage";
 import Lightbox from "./Lightbox";
 import { toast } from "sonner";
-import { PushPin, Warning, ImageSquare, Plus, Fire, TrendUp, Trash, CheckCircle } from "@phosphor-icons/react";
+import { PushPin, Warning, ImageSquare, Plus, Fire, TrendUp, Trash, CheckCircle, SpeakerX } from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -71,6 +71,28 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
 
   const deleteAnn = async (id) => {
     try { await api.delete(`/announcements/${id}`); await load(); } catch {}
+  };
+
+  // ── Moderation actions (director or post-author) ─────────────
+  const deleteFeedPost = async (id) => {
+    if (!window.confirm("Delete this post?")) return;
+    try {
+      await api.delete(`/feed/${id}`);
+      toast.success("Post removed");
+      await load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to delete");
+    }
+  };
+
+  const muteUser = async (userId, name) => {
+    if (!window.confirm(`Mute ${name}? They won't be able to post in this league.`)) return;
+    try {
+      await api.post(`/leagues/${leagueId}/mute/${userId}`);
+      toast.success(`${name} muted`);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to mute");
+    }
   };
 
   const uploadLFImage = async (file) => {
@@ -248,7 +270,7 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
                 </div>
               </div>
             ) : (
-              <div key={p.id} className="card-surface p-5" data-testid={`feed-post-${p.id}`}>
+              <div key={p.id} className={`card-surface p-5 ${p.hidden ? "opacity-40" : ""}`} data-testid={`feed-post-${p.id}`}>
                 <div className="flex items-start gap-3">
                   {p.author_picture ? (
                     <img src={p.author_picture} className="w-9 h-9 rounded-full" alt="" />
@@ -256,10 +278,41 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
                     <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center text-xs">{p.author_name?.charAt(0)}</div>
                   )}
                   <div className="flex-1">
-                    <div className="text-sm font-medium">{p.author_name}</div>
+                    <div className="text-sm font-medium flex items-center gap-2">
+                      {p.author_name}
+                      {p.hidden && (
+                        <span className="text-[9px] uppercase tracking-wider text-red-400 font-mono-data" data-testid={`feed-post-hidden-${p.id}`}>
+                          Removed
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[10px] font-mono-data text-zinc-500">{new Date(p.created_at).toLocaleString()}</div>
                     <div className="mt-2 text-sm text-zinc-200 whitespace-pre-wrap">{p.body}</div>
                   </div>
+                  {(isDirector || p.author_id === currentUser?.user_id) && !p.hidden && (
+                    <div className="flex items-center gap-1 shrink-0" data-testid={`feed-mod-panel-${p.id}`}>
+                      <button
+                        type="button"
+                        onClick={() => deleteFeedPost(p.id)}
+                        data-testid={`feed-delete-btn-${p.id}`}
+                        title="Delete post"
+                        className="p-1.5 rounded-md text-zinc-500 hover:text-red-500 hover:bg-red-500/10"
+                      >
+                        <Trash size={14} weight="duotone" />
+                      </button>
+                      {isDirector && p.author_id && p.author_id !== currentUser?.user_id && (
+                        <button
+                          type="button"
+                          onClick={() => muteUser(p.author_id, p.author_name)}
+                          data-testid={`feed-mute-btn-${p.id}`}
+                          title={`Mute ${p.author_name}`}
+                          className="p-1.5 rounded-md text-zinc-500 hover:text-amber-600 hover:bg-amber-500/10"
+                        >
+                          <SpeakerX size={14} weight="duotone" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )

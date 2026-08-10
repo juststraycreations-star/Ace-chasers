@@ -10,6 +10,7 @@ import CTPLeaderboard from "@/components/CTPLeaderboard";
 import DirectorNotesBanner from "@/components/DirectorNotesBanner";
 import PayoutDistribution from "@/components/PayoutDistribution";
 import ScorecardGrid from "@/components/ScorecardGrid";
+import LiveSimulatorPanel from "@/components/LiveSimulatorPanel";
 import { enqueueScore, bindOfflineQueueListeners, pendingCount, flushQueue } from "@/lib/offlineQueue";
 
 function scoreClass(strokes, par) {
@@ -406,6 +407,17 @@ export default function RoundScorecard() {
       <div className="max-w-4xl mx-auto px-4 py-6">
         {!isCompleted && (
           <DirectorNotesBanner round={round} isDirector={isDirector} onUpdated={load} />
+        )}
+
+        {/* Pre-finalization simulator — director-only, active rounds. */}
+        {!isCompleted && isDirector && round.status === "active" && (
+          <LiveSimulatorPanel
+            leagueId={round.league_id}
+            round={round}
+            scorecards={scorecards}
+            memberMap={memberMap}
+            isDirector={isDirector}
+          />
         )}
 
         {/* View mode toggle — SCORE (live entry) vs GRID (UDisc-style table).

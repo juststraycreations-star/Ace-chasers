@@ -4,32 +4,57 @@
 Build and polish "Ace Chasers," a React/FastAPI/MongoDB disc-golf social platform with League Operations, real-time round scoring, compliance, PWA/TWA, and a UDisc-style scorecard grid.
 
 ## Current state (Feb 2026)
-Full-stack app with Firebase Auth, League Ops, real-time WebSockets, green-themed Scorecard Grid, Compliance board, beta invites via Google Groups, Android PWA/TWA. Production is stable — Cloudflare 520s and WebSocket reconnect loops fixed.
+Enterprise-grade League Management platform. Firebase Auth, League Ops, real-time WebSockets, green-themed Scorecard Grid, Compliance board, Cloudflare-fronted Android PWA/TWA. Sign-in and WebSocket reconnect issues resolved. Offline-first score entry with UUID idempotency. Manager DM + broadcast. Pre-finalization simulator. Real QR self-enroll. Feed moderation.
 
-## Implemented in this session
-- **P0 — Completed scorecard 1:1 with printed PDF** (`RoundScorecard.jsx`)
-  Added a hard early-return branch when `round.status === "completed"`. The completed view renders exclusively: Back nav, "Round Final" pill, Print/PDF button, Round name, and the green `ScorecardGrid`. No toggle, no tabs, no chat FAB, no reconnect footer, no modals, no interactive controls.
-- **Offline-first score entry with idempotency** (`/app/frontend/src/lib/offlineQueue.js`)
-  New `enqueueScore` API writes to a localStorage queue with a UUID `Idempotency-Key` header per hole write. Coalesces duplicate hole writes. Auto-flushes on `online` events + 15s poll. Score entry is now non-blocking — the UI updates optimistically and never freezes on flaky cellular. Pending badge shown in the live-status footer.
-- **Manager welcome / quick-start module** (`/app/frontend/src/components/WelcomeChecklist.jsx`)
-  Slate-gray minimalist quick-start block pinned to the top of the League Dashboard for anyone with ≥1 league. Three actions: (1) Generate a Round QR, (2) Configure scoring engine, (3) Post to the clubhouse feed. Tooltips + progress counter.
+## Implemented in this session (Feb 2026)
+
+### Prior pass
+- **P0 — Completed scorecard 1:1 with printed PDF** (`RoundScorecard.jsx` early-return branch)
+- **Offline-first score entry with idempotency** (`/app/frontend/src/lib/offlineQueue.js`) — localStorage queue + `Idempotency-Key` header
+- **Manager welcome / quick-start module** (`WelcomeChecklist.jsx`) — pinned to League Dashboard
+
+### This pass (Items 2, 3, 4, 5 extensions)
+- **ITEM 4 · Server-side idempotency** — `PATCH /api/scorecards/{id}/score` now reads `Idempotency-Key` header, caches response in `idempotency_keys` collection, and replays return the original result byte-for-byte with zero duplicate `proof_logs` and no double increment of `scorecards.version`. Verified by `test_iteration36::test_score_idempotency_key_dedupes`.
+- **ITEM 3 · Real QR self-enroll**
+  * Backend: `POST /api/rounds/{id}/self-enroll` (auto-joins league if needed, creates or reuses card+scorecard, idempotent). `GET /api/rounds/{id}/qr` returns the deep-link payload.
+  * Frontend: `RoundQRPanel.jsx` renders a scannable `QRCodeCanvas` (via `qrcode.react`) per round on the director's League Detail page. New public route `/rounds/:roundId/checkin` handled by `RoundCheckin.jsx`.
+- **ITEM 2 · Pre-finalization simulator** — `LiveSimulatorPanel.jsx` mounted at the top of the `RoundScorecard` for directors while `round.status === "active"`. Read-only projections of (a) 70/20/10 payout split from the ledger's round-fee entries, (b) bag-tag reshuffle with old→new deltas.
+- **ITEM 5 · Manager DM + Feed moderation**
+  * Backend: `POST /api/leagues/{id}/broadcast` (director-only, fans out to every member's DM tray via existing `messages` collection). `DELETE /api/feed/{post_id}` (author or director soft-hides). `POST/DELETE /api/leagues/{id}/mute/{uid}` + `GET /api/leagues/{id}/mutes` (director mute registry).
+  * Frontend: `ManagerDMPanel.jsx` mounted above the tabs on League Detail for directors — Broadcast + DM modal. `ClubhouseTab.jsx` renders per-post moderation icons (delete + mute) for directors and post authors. Feed list filters `hidden` posts.
 
 ## Backlog (P1/P2)
 - **P1 — Founder Sponsor Referral Flow** — shareable invite link that stamps referred users with a Founder Sponsor badge + priority bag-tag placement.
-- **P1 — DM & Moderation** (Item 5 from user's request) — internal DM panel for managers, admin moderation on clubhouse feed (delete post, mute player). Requires new backend router + models.
-- **P2 — Pre-finalization simulator** (Item 2) — real-time projected payouts, draft victory graphics, rolling bag-tag reshuffles, schedule calendar publisher.
+- **P2 — Schedule Calendar publisher** (last remaining Item 2 sub-feature) — auto-publish scheduled round dates as structured feed announcements.
+- **P2 — Draft victory graphics** in the simulator (share-card preview).
 - **P2 — Rounds extraction Phase 4** — continue splitting `leagues_router.py`.
-- **P2 — QR check-in generation** — real QR code render + backend enrollment endpoint (checklist button currently deep-links to league tab).
-- **P2 — Backend Idempotency-Key handling** — server currently ignores the header; last-write-wins on `PATCH /scorecards/{id}/score` is already effectively idempotent, but explicit dedup would harden it.
+- **P2 — Bracket match play format** — currently we support Singles, Doubles (Best-disc), Random-Draw Doubles, BYOP, Team.
 
-## Architecture (unchanged this session)
+## Architecture
 - Backend: FastAPI + Motor (Async MongoDB), routers under `/app/backend/routers/`
 - Frontend: React (Vite) + Tailwind + Shadcn + Zustand, real-time via WebSockets
 - Auth: Firebase Admin (dev-mode fallback for local QA)
 - Deploy: Cloudflare tunnel, Android TWA v1.0.3
 
-## Key files touched
-- `/app/frontend/src/pages/leagues/RoundScorecard.jsx`
-- `/app/frontend/src/pages/leagues/LeagueDashboard.jsx`
-- `/app/frontend/src/lib/offlineQueue.js` (new)
-- `/app/frontend/src/components/WelcomeChecklist.jsx` (new)
+## New collections & indexes
+- `idempotency_keys` — `{key, scope, scorecard_id, user_id, response, created_at}` — dedup replays on score writes.
+- `league_mutes` — `{league_id, user_id, muted_by, muted_at}` — director mute registry.
+- `messages` (existing) — broadcast rows tagged with `broadcast_league_id` for audit.
+- `feed_posts` (existing) — soft-deletion via `hidden`, `hidden_by`, `hidden_at`.
+
+## Key files touched this session
+- `/app/backend/routers/leagues_router.py` (score endpoint idempotency)
+- `/app/backend/routers/leagues_extensions_router.py` (new — QR/broadcast/moderation)
+- `/app/backend/routers/leagues_clubhouse_router.py` (feed list filters hidden)
+- `/app/frontend/src/pages/leagues/RoundScorecard.jsx` (early-return + simulator mount)
+- `/app/frontend/src/pages/leagues/LeagueDetail.jsx` (DM panel + per-round QR)
+- `/app/frontend/src/pages/leagues/LeagueDashboard.jsx` (welcome checklist)
+- `/app/frontend/src/pages/RoundCheckin.jsx` (new)
+- `/app/frontend/src/components/RoundQRPanel.jsx` (new)
+- `/app/frontend/src/components/LiveSimulatorPanel.jsx` (new)
+- `/app/frontend/src/components/ManagerDMPanel.jsx` (new)
+- `/app/frontend/src/components/WelcomeChecklist.jsx` (new, prior pass)
+- `/app/frontend/src/components/ClubhouseTab.jsx` (moderation controls)
+- `/app/frontend/src/lib/offlineQueue.js` (new, prior pass)
+- `/app/frontend/src/App.jsx` (new checkin route)
+- `/app/backend/tests/test_iteration36.py` (new — 4 passing regression tests)

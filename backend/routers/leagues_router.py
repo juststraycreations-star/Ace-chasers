@@ -802,8 +802,25 @@ class ScoreUpdate(BaseModel):
 @api_router.patch("/scorecards/{scorecard_id}/score")
 async def update_score(scorecard_id: str, payload: ScoreUpdate, request: Request,
                         session_token: Optional[str] = Cookie(None),
-                        authorization: Optional[str] = Header(None)):
+                        authorization: Optional[str] = Header(None),
+                        idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key")):
     user = await get_current_user(request, session_token, authorization)
+    # ── Server-side idempotency dedup ──────────────────────────────
+    # Offline clients tag each hole write with a UUID `Idempotency-Key`
+    # header. If the same key ever hits us twice (retry after flaky
+    # cellular, TWA process kill, etc.) we short-circuit and return the
+    # original result — never double-writing the row or double-logging
+    # the proof entry. Keys are keyed on scorecard+user so a compromised
+    # client can't replay another user's writes. TTL is set via a
+    # background sweep on the `idempotency_keys` collection.
+    if idempotency_key:
+        cached = await db.idempotency_keys.find_one(
+            {"key": idempotency_key, "scope": "score_update",
+             "scorecard_id": scorecard_id, "user_id": user.user_id},
+            {"_id": 0, "response": 1},
+        )
+        if cached and cached.get("response"):
+            return cached["response"]
     sc = await db.scorecards.find_one({"id": scorecard_id}, {"_id": 0})
     if not sc:
         raise HTTPException(status_code=404, detail="Scorecard not found")
@@ -839,7 +856,23 @@ async def update_score(scorecard_id: str, payload: ScoreUpdate, request: Request
         "strokes": int(payload.strokes), "total": total, "plus_minus": plus_minus,
         "edited_by": user.name,
     })
-    return {"ok": True, "total": total, "plus_minus": plus_minus}
+    response = {"ok": True, "total": total, "plus_minus": plus_minus}
+    # Persist the idempotency key + response so replays match exactly.
+    if idempotency_key:
+        try:
+            await db.idempotency_keys.insert_one({
+                "key": idempotency_key,
+                "scope": "score_update",
+                "scorecard_id": scorecard_id,
+                "user_id": user.user_id,
+                "response": response,
+                "created_at": now_iso(),
+            })
+        except Exception:
+            # Duplicate insert (race between two concurrent replays) is
+            # exactly the outcome we want — the row already exists.
+            pass
+    return response
 
 
 @api_router.get("/scorecards/{scorecard_id}/proof")
@@ -1645,3 +1678,4 @@ from . import leagues_clubhouse_router  # noqa: E402,F401
 from . import leagues_ledger_router  # noqa: E402,F401
 from . import leagues_compliance_router  # noqa: E402,F401
 from . import leagues_rounds_router  # noqa: E402,F401
+from . import leagues_extensions_router  # noqa: E402,F401

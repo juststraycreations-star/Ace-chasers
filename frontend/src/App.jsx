@@ -29,6 +29,7 @@ const LeagueDashboard = lazy(() => import('./pages/leagues/LeagueDashboard'));
 const CreateLeague = lazy(() => import('./pages/leagues/CreateLeague'));
 const LeagueDetail = lazy(() => import('./pages/leagues/LeagueDetail'));
 const RoundScorecard = lazy(() => import('./pages/leagues/RoundScorecard'));
+const RoundCheckin = lazy(() => import('./pages/RoundCheckin'));
 const LeaguePlayerProfile = lazy(() => import('./pages/leagues/LeaguePlayerProfile'));
 const Privacy = lazy(() => import('./pages/legal/Privacy'));
 const Beta = lazy(() => import('./pages/Beta'));
@@ -99,6 +100,7 @@ function AppRoutes() {
               <Route path="/leagues/:leagueId" element={<LeagueDetail />} />
               <Route path="/leagues/:leagueId/players/:userId" element={<LeaguePlayerProfile />} />
               <Route path="/rounds/:roundId" element={<RoundScorecard />} />
+              <Route path="/rounds/:roundId/checkin" element={<RoundCheckin />} />
               <Route path="*" element={<Navigate to="/feed" replace />} />
             </>
           )}

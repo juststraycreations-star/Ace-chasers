@@ -6,6 +6,8 @@ import StandingsTab from "@/components/StandingsTab";
 import LedgerTab from "@/components/LedgerTab";
 import ClubhouseTab from "@/components/ClubhouseTab";
 import ComplianceTab from "@/components/ComplianceTab";
+import ManagerDMPanel from "@/components/ManagerDMPanel";
+import RoundQRPanel from "@/components/RoundQRPanel";
 import ClubhouseAgreementModal from "@/components/ClubhouseAgreementModal";
 import { useAuth } from "@/context/AuthContext";
 import LeagueLiveNotifier from "@/components/LeagueLiveNotifier";
@@ -25,6 +27,8 @@ export default function LeagueDetail() {
   const [showQR, setShowQR] = useState(false);
   // "New Round" modal state — director-only
   const [showNewRound, setShowNewRound] = useState(false);
+  // Which round the manager is currently displaying a QR panel for.
+  const [qrRoundId, setQrRoundId] = useState(null);
   const [newRound, setNewRound] = useState({
     name: "",
     date: new Date().toISOString().slice(0, 10),
@@ -154,6 +158,13 @@ export default function LeagueDetail() {
           )}
         </div>
 
+        {/* Manager comms — DM + broadcast, director-only */}
+        {league.is_director && (
+          <div className="mb-6" data-testid="manager-comms-wrapper">
+            <ManagerDMPanel leagueId={leagueId} isDirector={league.is_director} />
+          </div>
+        )}
+
         {/* Tabs */}
         <div className="flex gap-1 mb-6 overflow-x-auto">
           {tabs.map((t) => (
@@ -207,7 +218,22 @@ export default function LeagueDetail() {
                         <CheckCircle size={12} weight="fill" /> Finalize
                       </button>
                     )}
+                    {league.is_director && r.status !== "completed" && (
+                      <button
+                        data-testid={`round-qr-btn-${r.id}`}
+                        onClick={() => setQrRoundId(qrRoundId === r.id ? null : r.id)}
+                        className="text-xs px-3 py-1.5 rounded-full border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center gap-1"
+                        title="Show a QR code for players to self-enroll on this round"
+                      >
+                        <QrCode size={12} weight="bold" /> {qrRoundId === r.id ? "Hide QR" : "QR check-in"}
+                      </button>
+                    )}
                   </div>
+                  {qrRoundId === r.id && (
+                    <div className="mt-4" data-testid={`round-qr-wrapper-${r.id}`}>
+                      <RoundQRPanel roundId={r.id} roundName={r.name} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
