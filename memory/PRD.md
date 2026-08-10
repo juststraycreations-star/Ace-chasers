@@ -42,8 +42,32 @@ Enterprise-grade League Management platform:
   * Generate the bracket from the exact resulting order
   * Also available on an existing bracket via the "Re-seed" button
 
+## Iteration 43 (Feb 2026) — Auto cache-bust on deploy
+
+### Item · Build version stamp + auto-reload prompt
+- **Backend**: `GET /api/version` returns `{ build_id, built_at }`. `build_id` defaults to the backend boot timestamp; if `ACE_BUILD_ID` is set in the environment (e.g. git SHA from the deploy pipeline) it takes precedence. Contract is stable across calls to the same process.
+- **Vite**: `__ACE_BUILD_ID__` is baked in at build time via `define`. Sources: `ACE_BUILD_ID` env var (Vercel/Netlify/Docker), falls back to `'dev'` for `vite dev` (which short-circuits the check).
+- **Frontend watcher** (`/lib/buildVersion.js` → `startBuildVersionWatcher`): mounted once in `App.jsx`. Runs a first check 20s after boot, polls every 5 min, and on `window.focus` / `online`. When `build_id !== __ACE_BUILD_ID__` it opens a persistent Sonner toast — "New version available · Reload" — with a Reload action that:
+  1. Unregisters every service worker for the origin
+  2. Clears every Cache Storage entry
+  3. Hard-reloads with `?v=<timestamp>` cache-buster
+- **Login page**: mirrored the inline `<CacheNotice />` "Sign-in trouble?" banner onto `Login.jsx` (was previously Signup-only) so users landing directly on `/login` see the same manual escape hatch.
+
+### Testing
+- `tests/test_iteration43.py` — 2/2 pass (endpoint shape + stability across calls).
+- Full suite `39-43` — **9/9 PASS**.
+- Frontend smoke: login page renders, zero console errors, cache-notice banner visible.
+
+## Backend endpoints (this iteration)
+- `GET /api/version` — build id + boot timestamp.
+
+## Deployment note
+- CI/CD should set `ACE_BUILD_ID=<git-sha>` **before both** `vite build` (frontend) **and** the backend container start, so client bundle and server report the same id. Any subsequent deploy with a different id will trigger the reload prompt for every open tab within 5 minutes.
+
 ## Backlog (P1/P2)
 - **P3 — Double-elim grand-final "bracket reset"** — if LB champ wins first GF, play a second decider match. Current MVP: single GF, winner takes all.
+- **P3 — Recap poster Instagram share card** — 1080×1350 PNG twin of the recap poster.
+- **P3 — LB drop toast** — friendly "second life" toast when a player is bounced from WB into LB in double-elim.
 
 ## Iteration 42 (Feb 2026) — Confetti, Recap poster, Double elimination
 

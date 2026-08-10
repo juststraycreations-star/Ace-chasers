@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { useAuthStore } from './store/authStore';
 import AuthProvider from './components/AuthProvider';
 import Navigation from './components/Navigation';
@@ -7,6 +7,7 @@ import EmailVerificationBanner from './components/EmailVerificationBanner';
 import OnboardingGate from './components/OnboardingGate';
 import FirstRunWelcomeModal from './components/FirstRunWelcomeModal';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
+import { startBuildVersionWatcher } from './lib/buildVersion';
 // Login + SignUp stay eager — they are the first paint for logged-out
 // visitors so shipping them in the initial bundle saves a round-trip.
 // Every other page is code-split via React.lazy.
@@ -111,6 +112,7 @@ function AppRoutes() {
 }
 
 function App() {
+  useEffect(() => { startBuildVersionWatcher(); }, []);
   return (
     <Router>
       <AuthProvider>

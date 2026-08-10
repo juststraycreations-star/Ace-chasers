@@ -16,6 +16,8 @@ Routers:
 from __future__ import annotations
 
 import logging
+import os
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -181,6 +183,25 @@ async def _backfill_first_run_flag() -> None:
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Build version — source of truth the frontend polls to know when a
+# fresher bundle has been deployed. Client compares this to its baked-in
+# `__ACE_BUILD_ID__` (set at Vite build time via env `ACE_BUILD_ID`) and
+# prompts the user to reload when they diverge. This is what makes
+# "no more stale cache" auto-cache-bust actually work — see
+# /app/frontend/src/lib/buildVersion.js.
+_SERVER_BOOT_AT = datetime.now(timezone.utc).isoformat()
+_SERVER_BUILD_ID = os.environ.get("ACE_BUILD_ID") or _SERVER_BOOT_AT
+
+
+@app.get("/api/version")
+async def version():
+    return {
+        "build_id": _SERVER_BUILD_ID,
+        "built_at": _SERVER_BOOT_AT,
+    }
 
 
 @app.get("/api/config")

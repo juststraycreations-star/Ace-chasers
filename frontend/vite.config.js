@@ -60,6 +60,11 @@ export default defineConfig(({ mode }) => {
       hmr: { clientPort: 443 },
     },
     define: {
+      // Baked-in build stamp used by the auto-cache-bust check on the
+      // frontend. Prod builds should pass `ACE_BUILD_ID` at build time
+      // (git sha, timestamp, etc). In `vite dev` it collapses to 'dev'
+      // and the version-mismatch prompt is skipped.
+      '__ACE_BUILD_ID__': JSON.stringify(env.ACE_BUILD_ID || process.env.ACE_BUILD_ID || 'dev'),
       'process.env.REACT_APP_BACKEND_URL': JSON.stringify(env.REACT_APP_BACKEND_URL || ''),
       'process.env.REACT_APP_FIREBASE_API_KEY': JSON.stringify(env.REACT_APP_FIREBASE_API_KEY || ''),
       'process.env.REACT_APP_FIREBASE_PROJECT_ID': JSON.stringify(env.REACT_APP_FIREBASE_PROJECT_ID || ''),
