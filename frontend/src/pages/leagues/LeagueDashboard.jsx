@@ -6,6 +6,8 @@ import ReportBugButton from "@/components/ReportBugButton";
 import { LeagueGridSkeleton } from "@/components/Skeletons";
 import { Plus, MapPin, Users, TrendUp } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import WelcomeChecklist from "@/components/WelcomeChecklist";
+import { useAuth } from "@/context/AuthContext";
 
 /**
  * League Dashboard — restructured (Session 41):
@@ -17,6 +19,7 @@ import { toast } from "sonner";
  */
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [myLeagues, setMyLeagues] = useState([]);
   const [browse, setBrowse] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +62,16 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50" data-testid="dashboard-page">
       <AppHeader />
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+        {/* Zone 0 — Manager quick-start (only for users who run at least one league) */}
+        {!loading && myLeagues.length > 0 && (
+          <WelcomeChecklist
+            managerName={user?.name || user?.display_name}
+            onGenerateQr={() => navigate(`/leagues/${myLeagues[0].id}?tab=qr`)}
+            onConfigureScoring={() => navigate(`/leagues/${myLeagues[0].id}/edit`)}
+            onPostUpdate={() => navigate(`/leagues/${myLeagues[0].id}?tab=feed`)}
+          />
+        )}
+
         {/* Zone 1 — Header */}
         <header className="mb-6" data-testid="dashboard-header">
           <div className="font-mono-data text-xs text-zinc-500 mb-2">MY DASHBOARD</div>

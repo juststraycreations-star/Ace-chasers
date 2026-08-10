@@ -10,6 +10,7 @@ import CTPLeaderboard from "@/components/CTPLeaderboard";
 import DirectorNotesBanner from "@/components/DirectorNotesBanner";
 import PayoutDistribution from "@/components/PayoutDistribution";
 import ScorecardGrid from "@/components/ScorecardGrid";
+import { enqueueScore, bindOfflineQueueListeners, pendingCount, flushQueue } from "@/lib/offlineQueue";
 
 function scoreClass(strokes, par) {
   if (!strokes) return "";
@@ -80,6 +81,16 @@ export default function RoundScorecard() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadChat(); }, [loadChat]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [chat.length]);
+  // Bind offline-queue listeners once on mount so queued score writes
+  // drain automatically when connectivity returns.
+  useEffect(() => { bindOfflineQueueListeners(); }, []);
+  // Poll pending count so we can show a tiny indicator when writes are
+  // buffered locally waiting for the network.
+  const [pending, setPending] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setPending(pendingCount()), 2000);
+    return () => clearInterval(t);
+  }, []);
 
   // WebSocket for realtime updates. Disabled on completed rounds — no
   // more score updates are coming, so we don't want to sit on a live
@@ -115,10 +126,28 @@ export default function RoundScorecard() {
 
   const updateScore = async (scorecardId, hole, strokes) => {
     if (strokes < 0) strokes = 0;
-    try {
-      await api.patch(`/scorecards/${scorecardId}/score`, { hole, strokes });
-      await load();
-    } catch { toast.error("Failed to save"); }
+    // Offline-first: enqueue with a UUID idempotency key. Update local
+    // state optimistically so the UI never blocks or freezes on a slow
+    // network. The queue drains in the background when connectivity
+    // returns; duplicate replays collapse server-side by idempotency key.
+    enqueueScore({ scorecardId, hole, strokes });
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        scorecards: prev.scorecards.map((sc) => {
+          if (sc.id !== scorecardId) return sc;
+          const nextScores = [...sc.scores];
+          nextScores[hole - 1] = strokes;
+          const total = nextScores.reduce((a, b) => a + (b || 0), 0);
+          const parToHole = round.par_per_hole.reduce(
+            (acc, p, i) => acc + (nextScores[i] ? p : 0),
+            0
+          );
+          return { ...sc, scores: nextScores, total, plus_minus: total - parToHole };
+        }),
+      };
+    });
   };
 
   const openProof = async (scorecardId) => {
@@ -280,6 +309,62 @@ export default function RoundScorecard() {
   };
 
   if (!round) return <div className="min-h-screen bg-white flex items-center justify-center text-zinc-500 font-mono-data text-xs">LOADING…</div>;
+
+  // ══════════════════════════════════════════════════════════════════
+  // COMPLETED-ROUND EARLY RETURN — 1:1 with the printed PDF.
+  // When the round is finalized there is nothing to score, no cards to
+  // shuffle, no chat to open. We render ONLY:
+  //   • a minimal header (Back + round name + "Round Final" pill)
+  //   • the Print / PDF button
+  //   • the green ScorecardGrid (identical to the print export)
+  // No tabs, no toggles, no modals, no chat FAB, no reconnect footer.
+  // ══════════════════════════════════════════════════════════════════
+  if (isCompleted) {
+    return (
+      <div className="min-h-screen bg-white pb-20" data-testid="round-scorecard-page-completed">
+        <div className="max-w-4xl mx-auto px-4 py-5">
+          <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+            <button
+              data-testid="back-to-league-btn"
+              onClick={() => navigate(`/leagues/${round.league_id}`)}
+              className="text-zinc-500 hover:text-gray-900 flex items-center gap-1 text-sm"
+            >
+              <CaretLeft size={16} /> Back
+            </button>
+            <div className="flex items-center gap-3">
+              <span
+                data-testid="scorecard-round-final-badge"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-800 text-white font-mono text-[10px] uppercase tracking-wider"
+              >
+                Round Final
+              </span>
+              <button
+                type="button"
+                onClick={handlePrintScorecard}
+                data-testid="scorecard-print-btn"
+                title="Save or print the scorecard as PDF"
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold text-emerald-800 border border-emerald-200 bg-white hover:bg-emerald-50 hover:border-emerald-400 transition-all shadow-sm"
+              >
+                <Printer size={14} weight="duotone" />
+                Print / PDF
+              </button>
+            </div>
+          </div>
+          <div className="text-center mb-6">
+            <div className="font-mono-data text-[10px] text-zinc-500 tracking-wider">ROUND</div>
+            <div className="font-display text-2xl tracking-tight text-gray-900">{round.name}</div>
+          </div>
+          <ScorecardGrid
+            league={league}
+            round={round}
+            scorecards={scorecards}
+            memberMap={memberMap}
+            distances={round.distances_per_hole}
+          />
+        </div>
+      </div>
+    );
+  }
 
   const par = round.par_per_hole[currentHole - 1];
 
@@ -864,9 +949,19 @@ export default function RoundScorecard() {
             live. Hidden on completed rounds (no WS in play) and only shown
             when we're actually in Score view with an active card. */}
         {activeCard && !isCompleted && (
-          <div className="mt-8 text-xs text-zinc-500 font-mono-data flex items-center gap-2">
+          <div className="mt-8 text-xs text-zinc-500 font-mono-data flex items-center gap-2" data-testid="scorecard-connection-status">
             <span className={`inline-block w-1.5 h-1.5 rounded-full ${connected ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`}></span>
             {connected ? "LIVE · WEBSOCKET CONNECTED" : "RECONNECTING…"}
+            {pending > 0 && (
+              <span
+                data-testid="offline-pending-badge"
+                onClick={() => flushQueue()}
+                className="ml-2 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 cursor-pointer hover:bg-amber-100"
+                title="Score writes buffered offline — will sync when back online"
+              >
+                {pending} PENDING · TAP TO SYNC
+              </span>
+            )}
           </div>
         )}
 
