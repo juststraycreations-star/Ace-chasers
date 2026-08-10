@@ -2,7 +2,7 @@ import { useMemo, useEffect, useState } from "react";
 import api from "@/lib/api";
 import { ChartLineUp, MoneyWavy, Tag, Info, ShareNetwork } from "@phosphor-icons/react";
 import { toast } from "sonner";
-import { renderShareCard, downloadBlob } from "@/lib/shareCard";
+import { renderShareCard, renderDivisionCards, downloadBlob } from "@/lib/shareCard";
 
 /**
  * LiveSimulatorPanel — director-only "pre-finalization" preview shown
@@ -74,6 +74,7 @@ export default function LiveSimulatorPanel({
         scorecardId: sc.id,
         memberId: sc.member_id,
         name: m?.name || "Player",
+        division: m?.division || "Open",
         oldBagTag: m?.bag_tag ?? null,
         total: sc.total || 0,
         plusMinus: sc.plus_minus || 0,
@@ -87,6 +88,18 @@ export default function LiveSimulatorPanel({
     });
     return rows;
   }, [scorecards, memberMap]);
+
+  const divisionGroups = useMemo(() => {
+    const map = new Map();
+    for (const r of standings) {
+      const key = r.division || "Open";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(r);
+    }
+    return Array.from(map.entries())
+      .map(([divisionLabel, leaders]) => ({ divisionLabel, leaders: leaders.slice(0, 5) }))
+      .sort((a, b) => a.divisionLabel.localeCompare(b.divisionLabel));
+  }, [standings]);
 
   const payoutSplit = useMemo(() => {
     if (!pool) return [];
@@ -195,6 +208,50 @@ export default function LiveSimulatorPanel({
           <ShareNetwork size={12} weight="duotone" />
           Leaderboard
         </button>
+        {divisionGroups.length > 1 && (
+          <button
+            type="button"
+            onClick={async () => {
+              if (sharing) return;
+              setSharing(true);
+              try {
+                const cards = await renderDivisionCards({
+                  roundName: round?.name,
+                  leagueName: league?.name,
+                  divisions: divisionGroups.map((d) => ({
+                    divisionLabel: d.divisionLabel,
+                    leaders: d.leaders.map((r) => ({
+                      name: r.name,
+                      total: r.total,
+                      plusMinus: r.plusMinus,
+                    })),
+                  })),
+                  acePool: league?.ace_pool || 0,
+                });
+                let count = 0;
+                for (const { divisionLabel, blob } of cards) {
+                  if (!blob) continue;
+                  const safeR = (round?.name || "round").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+                  const safeD = divisionLabel.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+                  downloadBlob(blob, `ace-chasers-${safeR}-${safeD}.png`);
+                  count += 1;
+                }
+                toast.success(`Downloaded ${count} division card${count === 1 ? "" : "s"}`);
+              } catch {
+                toast.error("Division cards failed");
+              } finally {
+                setSharing(false);
+              }
+            }}
+            disabled={sharing}
+            data-testid="simulator-share-divisions-btn"
+            className="ml-2 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-900 bg-emerald-400 hover:bg-emerald-500 rounded-full px-3 py-1.5 disabled:opacity-40"
+            title={`One leaderboard PNG per division · ${divisionGroups.length} active`}
+          >
+            <ShareNetwork size={12} weight="duotone" />
+            {sharing ? "…" : `Division cards · ${divisionGroups.length}`}
+          </button>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

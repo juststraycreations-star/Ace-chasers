@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 
 from .leagues_router import (
     ProofLog,
+    _compute_handicap,
     _require_member,
     api_router,
     db,
@@ -165,6 +166,64 @@ async def seed_bracket(league_id: str, payload: SeedBracketIn, request: Request,
     return doc
 
 
+@api_router.post("/leagues/{league_id}/bracket/auto-seed")
+async def auto_seed_bracket(league_id: str, request: Request,
+                             season_id: Optional[str] = None,
+                             session_token: Optional[str] = Cookie(None),
+                             authorization: Optional[str] = Header(None)):
+    """Rating-based automatic bracket seeding.
+
+    Fetches all league members, computes each member's rolling handicap,
+    and seeds the bracket in ascending handicap order (lowest handicap =
+    top-rated = seed #1). Members with no rounds played (handicap 0)
+    sort AFTER rated players, at the bottom seeds.
+    """
+    user = await get_current_user(request, session_token, authorization)
+    await _require_director(league_id, user.user_id)
+    members = await db.league_members.find(
+        {"league_id": league_id}, {"_id": 0}
+    ).to_list(500)
+    if len(members) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 league members to seed a bracket")
+    # Compute handicap per member; unrated (0.0 from no scorecards) is
+    # pushed to the bottom of the seed list so rated players fill top seeds.
+    ranked: List[Dict[str, Any]] = []
+    for m in members:
+        h = await _compute_handicap(league_id, m["id"], [3] * 18)
+        played = await db.scorecards.count_documents(
+            {"league_id": league_id, "member_id": m["id"], "total": {"$gt": 0}}
+        )
+        ranked.append({
+            "id": m["id"],
+            "name": m.get("name") or "Player",
+            "handicap": h,
+            "played": played,
+        })
+    # Sort: rated players first (played > 0) by handicap asc, then unrated by name.
+    ranked.sort(key=lambda r: (0 if r["played"] > 0 else 1, r["handicap"], r["name"].lower()))
+    member_ids = [r["id"] for r in ranked]
+    await db.brackets.delete_many({"league_id": league_id})
+    first_tier = _build_seed_matches(member_ids)
+    tiers = _build_next_tiers(first_tier)
+    doc = {
+        "id": secrets.token_hex(12),
+        "league_id": league_id,
+        "season_id": season_id,
+        "tiers": tiers,
+        "seeded_by": user.user_id,
+        "seeded_at": _now_iso(),
+        "seed_source": "auto_rating",
+        "seed_order": [
+            {"seed": i + 1, "member_id": r["id"], "name": r["name"],
+             "handicap": r["handicap"], "played": r["played"]}
+            for i, r in enumerate(ranked)
+        ],
+    }
+    await db.brackets.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
 @api_router.get("/leagues/{league_id}/bracket")
 async def get_bracket(league_id: str, request: Request,
                        session_token: Optional[str] = Cookie(None),
@@ -228,6 +287,23 @@ async def report_match(match_id: str, payload: MatchReportIn, request: Request,
     await db.brackets.update_one(
         {"id": bracket["id"]},
         {"$set": {"tiers": tiers, "updated_at": _now_iso()}},
+    )
+    winner_mem = await db.league_members.find_one(
+        {"id": payload.winner_id}, {"_id": 0, "name": 1}
+    )
+    winner_name = (winner_mem or {}).get("name") or "Winner"
+    tier_idx = match.get("tier", 0)
+    total_tiers = len(tiers)
+    is_final = tier_idx >= total_tiers - 1
+    next_tier_label = "Champion" if is_final else (
+        "Final" if tier_idx == total_tiers - 2 else f"Tier {tier_idx + 2}"
+    )
+    await ws_manager.broadcast(
+        f"league:{bracket['league_id']}",
+        {"type": "bracket_advance", "match_id": match["id"],
+         "winner_id": payload.winner_id, "winner_name": winner_name,
+         "tier": tier_idx, "next_tier_label": next_tier_label,
+         "is_final": is_final, "manual": True},
     )
     return {"already_reported": False, "bracket": {**bracket, "tiers": tiers}}
 

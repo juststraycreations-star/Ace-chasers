@@ -12,6 +12,7 @@ import PayoutDistribution from "@/components/PayoutDistribution";
 import ScorecardGrid from "@/components/ScorecardGrid";
 import LiveSimulatorPanel from "@/components/LiveSimulatorPanel";
 import FormatLeaderboardPanel from "@/components/FormatLeaderboardPanel";
+import TieBreakOverridePanel from "@/components/TieBreakOverridePanel";
 import { enqueueScore, bindOfflineQueueListeners, pendingCount, flushQueue } from "@/lib/offlineQueue";
 
 function scoreClass(strokes, par) {
@@ -48,6 +49,10 @@ export default function RoundScorecard() {
   const [certifyChecked, setCertifyChecked] = useState(false);
   const [certifying, setCertifying] = useState(false);
   const [selfCertifying, setSelfCertifying] = useState(null); // holds scorecardId while POST is in flight
+  // When a Match-Play scorecard finalize returns bracket_advance.tied, we
+  // stash the payload here and open TieBreakOverridePanel so the director
+  // can resolve manually.
+  const [pendingTieBreak, setPendingTieBreak] = useState(null);
   // "score" = per-hole scoring UI (default while round is active).
   // "grid"  = UDisc-style summary table (default once round is completed).
   // A useEffect below flips to "grid" the moment we detect a completed round.
@@ -169,13 +174,25 @@ export default function RoundScorecard() {
     if (!certifyChecked || !certifyForScorecardId) return;
     setCertifying(true);
     try {
-      await api.post(`/scorecards/${certifyForScorecardId}/finalize`, {
+      const { data: finRes } = await api.post(`/scorecards/${certifyForScorecardId}/finalize`, {
         certified: true,
       });
       toast.success("Scorecard finalized · logged to Proof of Score");
       setCertifyForScorecardId(null);
       setCertifyChecked(false);
       await load();
+      // Match-Play tie detection — director must resolve manually.
+      const adv = finRes?.bracket_advance;
+      if (adv?.tied && league?.is_director) {
+        setPendingTieBreak(adv);
+      } else if (adv?.resolved) {
+        const winName = adv.winner_name || "Winner";
+        toast.success(
+          adv.is_final
+            ? `🏆 ${winName} · Bracket Champion!`
+            : `${winName} advances to ${adv.next_tier_label || "the next tier"}`
+        );
+      }
     } catch (e) {
       toast.error(
         e?.response?.data?.detail || "Finalize failed. Certification required."
@@ -790,6 +807,19 @@ export default function RoundScorecard() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Match Play tie-break override — director resolves manually */}
+        {pendingTieBreak && (
+          <TieBreakOverridePanel
+            tie={pendingTieBreak}
+            memberMap={memberMap}
+            onResolved={async () => {
+              setPendingTieBreak(null);
+              await load();
+            }}
+            onClose={() => setPendingTieBreak(null)}
+          />
         )}
 
         {/* Finalize Round / Certification modal */}

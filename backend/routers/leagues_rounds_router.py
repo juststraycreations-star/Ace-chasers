@@ -364,7 +364,16 @@ async def _maybe_advance_bracket_on_finalize(sc: dict) -> Optional[dict]:
     a_total = a_sc.get("total", 0)
     b_total = b_sc.get("total", 0)
     if a_total == b_total:
+        # Broadcast tie so directors/spectators subscribed to the league
+        # channel see the pending override state immediately.
+        await ws_manager.broadcast(
+            f"league:{league_id}",
+            {"type": "bracket_tie", "match_id": target["id"],
+             "a_member_id": a_id, "b_member_id": b_id,
+             "a_total": a_total, "b_total": b_total},
+        )
         return {"tied": True, "match_id": target["id"],
+                "a_member_id": a_id, "b_member_id": b_id,
                 "a_total": a_total, "b_total": b_total}
     winner_id = a_id if a_total < b_total else b_id
     target["winner_id"] = winner_id
@@ -382,13 +391,32 @@ async def _maybe_advance_bracket_on_finalize(sc: dict) -> Optional[dict]:
         {"id": bracket["id"]},
         {"$set": {"tiers": tiers, "updated_at": now_iso()}},
     )
-    await ws_manager.broadcast(
-        f"round:{round_id}",
-        {"type": "bracket_advance", "match_id": target["id"],
-         "winner_id": winner_id},
+    winner_mem = await db.league_members.find_one(
+        {"id": winner_id}, {"_id": 0, "name": 1}
     )
+    winner_name = (winner_mem or {}).get("name") or "Winner"
+    tier_idx = target.get("tier", 0)
+    total_tiers = len(tiers)
+    is_final = tier_idx >= total_tiers - 1
+    next_tier_label = "Champion" if is_final else (
+        "Final" if tier_idx == total_tiers - 2 else f"Tier {tier_idx + 2}"
+    )
+    payload = {
+        "type": "bracket_advance",
+        "match_id": target["id"],
+        "winner_id": winner_id,
+        "winner_name": winner_name,
+        "tier": tier_idx,
+        "next_tier_label": next_tier_label,
+        "is_final": is_final,
+    }
+    await ws_manager.broadcast(f"round:{round_id}", payload)
+    await ws_manager.broadcast(f"league:{league_id}", payload)
     return {"resolved": True, "match_id": target["id"],
-            "winner_id": winner_id, "a_total": a_total, "b_total": b_total}
+            "winner_id": winner_id, "winner_name": winner_name,
+            "a_total": a_total, "b_total": b_total,
+            "tier": tier_idx, "is_final": is_final,
+            "next_tier_label": next_tier_label}
 
 
 @api_router.post("/scorecards/{scorecard_id}/certify")

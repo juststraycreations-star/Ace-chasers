@@ -3,6 +3,7 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { Trophy, ArrowRight } from "@phosphor-icons/react";
 import SeedManagementPanel from "@/components/SeedManagementPanel";
+import { useWebSocket } from "@/lib/ws";
 
 /**
  * BracketView — single-elimination visual for "Match Play" leagues.
@@ -28,6 +29,35 @@ export default function BracketView({ leagueId, members, isDirector, format }) {
   };
 
   useEffect(() => { load(); }, [leagueId]);
+
+  // Live toast on any `bracket_advance` broadcast fired by scorecard
+  // finalize or director match-report. We subscribe on the LEAGUE
+  // channel because bracket state is league-scoped and directors watch
+  // this tab across many concurrent rounds.
+  useWebSocket(`/api/ws/leagues/${leagueId}`, (msg) => {
+    if (!msg) return;
+    if (msg.type === "bracket_advance") {
+      const win = msg.winner_name || "Winner";
+      if (msg.is_final) {
+        toast.success(`🏆 ${win} · Bracket Champion!`, {
+          description: "Final match resolved — season crown claimed.",
+          duration: 8000,
+        });
+      } else {
+        toast.success(`${win} advances`, {
+          description: `Winner promoted to ${msg.next_tier_label || "the next tier"}`,
+          duration: 5000,
+        });
+      }
+      // Live-refresh the bracket render so viewers see the pin move.
+      load();
+    } else if (msg.type === "bracket_tie") {
+      toast.warning("Match Play tie · director override required", {
+        description: "Both finalists tied — sudden-death playoff needed.",
+        duration: 6000,
+      });
+    }
+  }, format === "Match Play");
 
   if (format !== "Match Play") return null;
   if (loading) return null;

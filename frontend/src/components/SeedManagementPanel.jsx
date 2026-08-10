@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import api from "@/lib/api";
-import { ArrowUp, ArrowDown, Lock, LockOpen, Shuffle, PlayCircle, X } from "@phosphor-icons/react";
+import { ArrowUp, ArrowDown, Lock, LockOpen, Shuffle, PlayCircle, X, ChartBar } from "@phosphor-icons/react";
 
 /**
  * SeedManagementPanel — director-only UI to reorder / lock member seeds
@@ -84,6 +84,27 @@ export default function SeedManagementPanel({ leagueId, members, onSeeded, onCan
     }
   };
 
+  const autoSeed = async () => {
+    if (seeding) return;
+    if (!window.confirm(
+      `Auto-seed by rolling handicap? Lowest handicap becomes seed #1. Any manual reorder or lock will be replaced.`
+    )) return;
+    setSeeding(true);
+    try {
+      const { data } = await api.post(`/leagues/${leagueId}/bracket/auto-seed`);
+      const order = data?.seed_order || [];
+      if (order.length) {
+        setRows(order.map((s) => ({ id: s.member_id, name: s.name, locked: false })));
+      }
+      toast.success("Bracket auto-seeded by handicap");
+      onSeeded?.();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Auto-seed failed");
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   const lockedCount = useMemo(() => rows.filter((r) => r.locked).length, [rows]);
 
   return (
@@ -119,14 +140,26 @@ export default function SeedManagementPanel({ leagueId, members, onSeeded, onCan
         <span>
           {rows.length} player{rows.length === 1 ? "" : "s"} · {lockedCount} locked
         </span>
-        <button
-          type="button"
-          onClick={shuffleUnlocked}
-          data-testid="seed-shuffle-btn"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 border border-slate-200 hover:border-slate-400 rounded-full px-3 py-1.5"
-        >
-          <Shuffle size={12} weight="duotone" /> Shuffle unlocked
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={autoSeed}
+            disabled={seeding || rows.length < 2}
+            data-testid="seed-auto-rating-btn"
+            title="Order players by rolling handicap · lowest = seed #1"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 rounded-full px-3 py-1.5"
+          >
+            <ChartBar size={12} weight="duotone" /> Auto-seed by rating
+          </button>
+          <button
+            type="button"
+            onClick={shuffleUnlocked}
+            data-testid="seed-shuffle-btn"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 border border-slate-200 hover:border-slate-400 rounded-full px-3 py-1.5"
+          >
+            <Shuffle size={12} weight="duotone" /> Shuffle unlocked
+          </button>
+        </div>
       </div>
 
       <ol

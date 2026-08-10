@@ -161,10 +161,13 @@ function renderWinnerTemplate(ctx, { roundName, leagueName, leaders, payouts, po
 // ═════════════════════════════════════════════════════════════════
 // Template B — Season Leaderboard
 // ═════════════════════════════════════════════════════════════════
-function renderLeaderboardTemplate(ctx, { roundName, leagueName, leaders, acePool }) {
+function renderLeaderboardTemplate(ctx, { roundName, leagueName, leaders, acePool, divisionLabel }) {
   paintBackground(ctx);
   paintWatermark(ctx);
-  paintBrandHeader(ctx, "SEASON LEADERBOARD · LIVE");
+  const sublabel = divisionLabel
+    ? `${divisionLabel.toUpperCase()} · LEADERBOARD · LIVE`
+    : "SEASON LEADERBOARD · LIVE";
+  paintBrandHeader(ctx, sublabel);
 
   ctx.fillStyle = "#dfe7dd";
   ctx.font = "500 28px system-ui, -apple-system, sans-serif";
@@ -175,10 +178,33 @@ function renderLeaderboardTemplate(ctx, { roundName, leagueName, leaders, acePoo
 
   ctx.fillStyle = CREAM;
   ctx.font = "700 52px system-ui, -apple-system, sans-serif";
-  ctx.fillText(String(roundName || "Standings").slice(0, 28), 60, y + 40);
+  const title = divisionLabel
+    ? `${divisionLabel} · ${String(roundName || "Standings").slice(0, 24)}`
+    : String(roundName || "Standings").slice(0, 28);
+  ctx.fillText(title.slice(0, 32), 60, y + 40);
+
+  // Division pill under the title, when provided
+  if (divisionLabel) {
+    const pillY = y + 60;
+    ctx.fillStyle = GOLD;
+    const pillW = ctx.measureText(divisionLabel).width + 40;
+    ctx.beginPath();
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(60, pillY, pillW, 40, 20);
+    } else {
+      ctx.rect(60, pillY, pillW, 40);
+    }
+    ctx.fill();
+    ctx.fillStyle = GREEN;
+    ctx.font = "700 22px monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(divisionLabel.toUpperCase(), 80, pillY + 20);
+    ctx.textBaseline = "alphabetic";
+  }
 
   const rows = leaders.slice(0, 5);
-  const rowsY = y + 100;
+  const rowsY = y + (divisionLabel ? 160 : 100);
   const rowH = 130;
 
   rows.forEach((row, i) => {
@@ -228,6 +254,7 @@ export async function renderShareCard({
   acePool = 0,
   pool = 0,
   template = "winner", // "winner" | "leaderboard"
+  divisionLabel = null,
 }) {
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -235,7 +262,7 @@ export async function renderShareCard({
   const ctx = canvas.getContext("2d");
 
   if (template === "leaderboard") {
-    renderLeaderboardTemplate(ctx, { roundName, leagueName, leaders, acePool });
+    renderLeaderboardTemplate(ctx, { roundName, leagueName, leaders, acePool, divisionLabel });
   } else {
     renderWinnerTemplate(ctx, { roundName, leagueName, leaders, payouts, pool, acePool });
   }
@@ -254,4 +281,32 @@ export function downloadBlob(blob, filename) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
+/**
+ * renderDivisionCards — emit one Leaderboard PNG per division.
+ *
+ * `divisions` is an array of `{ divisionLabel, leaders }` where `leaders`
+ * is already top-N sorted for that division. Returns an ordered array of
+ * `{ divisionLabel, blob }` so the caller can label the download.
+ */
+export async function renderDivisionCards({
+  roundName,
+  leagueName,
+  divisions = [],
+  acePool = 0,
+}) {
+  const out = [];
+  for (const d of divisions) {
+    const blob = await renderShareCard({
+      roundName,
+      leagueName,
+      leaders: d.leaders || [],
+      acePool,
+      template: "leaderboard",
+      divisionLabel: d.divisionLabel,
+    });
+    out.push({ divisionLabel: d.divisionLabel, blob });
+  }
+  return out;
 }
