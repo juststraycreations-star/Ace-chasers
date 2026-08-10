@@ -180,4 +180,4 @@ async def list_feed(league_id: str, request: Request,
     q: dict = {"league_id": league_id}
     if not is_director:
         q["hidden"] = {"$ne": True}
-    return await db.feed_posts.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return await db.feed_posts.find(q, {"_id": 0}).sort([("pinned", -1), ("created_at", -1)]).to_list(200)

@@ -4,31 +4,46 @@
 Build and polish "Ace Chasers," a React/FastAPI/MongoDB disc-golf social platform with League Operations, real-time round scoring, compliance, PWA/TWA, and a UDisc-style scorecard grid.
 
 ## Current state (Feb 2026)
-Enterprise-grade League Management platform. Firebase Auth, League Ops, real-time WebSockets, green-themed Scorecard Grid, Compliance board, Cloudflare-fronted Android PWA/TWA. Sign-in and WebSocket reconnect issues resolved. Offline-first score entry with UUID idempotency. Manager DM + broadcast. Pre-finalization simulator. Real QR self-enroll. Feed moderation.
+Enterprise-grade League Management platform. Firebase Auth, League Ops, real-time WebSockets, green-themed UDisc-style Scorecard Grid, Compliance board, Cloudflare-fronted Android PWA/TWA. Sign-in and WebSocket reconnect issues resolved. Offline-first score entry with UUID idempotency (client + server). Manager DM + broadcast. Pre-finalization simulator with **live share cards**. Real QR self-enroll. Feed moderation + pinned auto-scheduling. **Format-aware leaderboards (Singles/Doubles/Team/BYOP)**. **Founder-Sponsor referral engine**.
 
 ## Implemented in this session (Feb 2026)
 
-### Prior pass
-- **P0 — Completed scorecard 1:1 with printed PDF** (`RoundScorecard.jsx` early-return branch)
-- **Offline-first score entry with idempotency** (`/app/frontend/src/lib/offlineQueue.js`) — localStorage queue + `Idempotency-Key` header
-- **Manager welcome / quick-start module** (`WelcomeChecklist.jsx`) — pinned to League Dashboard
+### Prior passes
+- P0 completed-scorecard = printed PDF layout
+- Offline-first score entry (`offlineQueue.js`, localStorage + UUID Idempotency-Key)
+- Manager welcome / quick-start module (`WelcomeChecklist.jsx`)
+- Server-side idempotency dedup (`Idempotency-Key` header, `idempotency_keys` collection)
+- Real QR self-enroll (`RoundQRPanel` + `/rounds/:id/checkin`)
+- Pre-finalization simulator (`LiveSimulatorPanel`)
+- Manager DM + broadcast + feed moderation (`ManagerDMPanel`, `/feed/:id` DELETE, mute registry)
 
-### This pass (Items 2, 3, 4, 5 extensions)
-- **ITEM 4 · Server-side idempotency** — `PATCH /api/scorecards/{id}/score` now reads `Idempotency-Key` header, caches response in `idempotency_keys` collection, and replays return the original result byte-for-byte with zero duplicate `proof_logs` and no double increment of `scorecards.version`. Verified by `test_iteration36::test_score_idempotency_key_dedupes`.
-- **ITEM 3 · Real QR self-enroll**
-  * Backend: `POST /api/rounds/{id}/self-enroll` (auto-joins league if needed, creates or reuses card+scorecard, idempotent). `GET /api/rounds/{id}/qr` returns the deep-link payload.
-  * Frontend: `RoundQRPanel.jsx` renders a scannable `QRCodeCanvas` (via `qrcode.react`) per round on the director's League Detail page. New public route `/rounds/:roundId/checkin` handled by `RoundCheckin.jsx`.
-- **ITEM 2 · Pre-finalization simulator** — `LiveSimulatorPanel.jsx` mounted at the top of the `RoundScorecard` for directors while `round.status === "active"`. Read-only projections of (a) 70/20/10 payout split from the ledger's round-fee entries, (b) bag-tag reshuffle with old→new deltas.
-- **ITEM 5 · Manager DM + Feed moderation**
-  * Backend: `POST /api/leagues/{id}/broadcast` (director-only, fans out to every member's DM tray via existing `messages` collection). `DELETE /api/feed/{post_id}` (author or director soft-hides). `POST/DELETE /api/leagues/{id}/mute/{uid}` + `GET /api/leagues/{id}/mutes` (director mute registry).
-  * Frontend: `ManagerDMPanel.jsx` mounted above the tabs on League Detail for directors — Broadcast + DM modal. `ClubhouseTab.jsx` renders per-post moderation icons (delete + mute) for directors and post authors. Feed list filters `hidden` posts.
+### This pass (Items 1, 2, 3, 4)
+- **ITEM 1 · Multi-mode leaderboards** — new `GET /api/rounds/{id}/leaderboard` returns `mode=singles|best_disc|team_sum` based on the league format. Best-disc semantics = per-hole MIN across cardmates' scorecards; Team = straight sum of totals. Frontend `FormatLeaderboardPanel.jsx` polls every 10s on active rounds and mounts on the RoundScorecard. Regression covers both singles and doubles.
+- **ITEM 2 · Schedule publisher & auto-feed sync** — `POST /api/leagues/{id}/rounds` now accepts `course_location` + `publish_announcement` fields and, when opted-in, inserts a **pinned** `FeedPost` with `kind="schedule"` and structured body (date + course + par). Feed list sorts pinned first. `NewRound` modal exposes the fields. `ClubhouseTab` renders a "Pinned" pill on pinned posts.
+- **ITEM 3 · Founder-Sponsor referral engine** —
+  * Backend: `GET /api/users/me/referral` (lazy-mints an 8-char `ref_code`), `POST /api/users/me/redeem-referral` (stamps `founder_sponsor_by`, `founder_sponsor_at`, `priority_tier: true` and sweeps existing `league_members` rows to inherit `priority_tier`). Self-referral 400, unknown code 404, second redeem idempotent.
+  * Frontend: SignUp reads `?ref=CODE` from URL, shows referrer banner, auto-calls redeem after `/auth/sync`. New `ReferralCard.jsx` on Profile (`Copy` + native `Share`). Profile displays a **🏆 Founder Sponsor** pill for `profile.priorityTier`.
+- **ITEM 4 · Simulator share cards** — new `renderShareCard()` in `/app/frontend/src/lib/shareCard.js` renders a 1080×1350 canvas with round header, top-3 leaders, 70/20/10 payout tiles, and ace-pool footer. A **Share card** button on the `LiveSimulatorPanel` triggers download + native Web Share when available. Zero external deps (pure HTML5 canvas).
 
 ## Backlog (P1/P2)
-- **P1 — Founder Sponsor Referral Flow** — shareable invite link that stamps referred users with a Founder Sponsor badge + priority bag-tag placement.
-- **P2 — Schedule Calendar publisher** (last remaining Item 2 sub-feature) — auto-publish scheduled round dates as structured feed announcements.
-- **P2 — Draft victory graphics** in the simulator (share-card preview).
+- **P2 — Bracket / single-elimination match play** — currently: Singles / Random-Draw Doubles / BYOP / Team.
 - **P2 — Rounds extraction Phase 4** — continue splitting `leagues_router.py`.
-- **P2 — Bracket match play format** — currently we support Singles, Doubles (Best-disc), Random-Draw Doubles, BYOP, Team.
+- **P2 — Draft victory graphics** in the simulator (multiple share-card templates).
+- **P2 — Team-format score entry UX** — cardmates currently score independently; a "team enter one shared score" mode could speed up scramble events.
+
+## New collections / new fields
+- `users.ref_code` (indexed), `users.ref_code_created_at`
+- `users.founder_sponsor_by`, `users.founder_sponsor_by_name`, `users.founder_sponsor_at`
+- `users.priority_tier: bool`
+- `league_members.priority_tier: bool` (propagated by redeem sweep)
+- `feed_posts.pinned: bool`, `feed_posts.kind: "post"|"recap"|"schedule"`
+- `feed_posts.meta.round_id / meta.round_date / meta.course_location`
+
+## New backend endpoints (this pass)
+- `GET /api/rounds/{round_id}/leaderboard`
+- `GET /api/users/me/referral`
+- `POST /api/users/me/redeem-referral`
+- `POST /api/leagues/{id}/rounds` extended with `course_location` and `publish_announcement`
 
 ## Architecture
 - Backend: FastAPI + Motor (Async MongoDB), routers under `/app/backend/routers/`
@@ -36,25 +51,21 @@ Enterprise-grade League Management platform. Firebase Auth, League Ops, real-tim
 - Auth: Firebase Admin (dev-mode fallback for local QA)
 - Deploy: Cloudflare tunnel, Android TWA v1.0.3
 
-## New collections & indexes
-- `idempotency_keys` — `{key, scope, scorecard_id, user_id, response, created_at}` — dedup replays on score writes.
-- `league_mutes` — `{league_id, user_id, muted_by, muted_at}` — director mute registry.
-- `messages` (existing) — broadcast rows tagged with `broadcast_league_id` for audit.
-- `feed_posts` (existing) — soft-deletion via `hidden`, `hidden_by`, `hidden_at`.
-
 ## Key files touched this session
-- `/app/backend/routers/leagues_router.py` (score endpoint idempotency)
-- `/app/backend/routers/leagues_extensions_router.py` (new — QR/broadcast/moderation)
-- `/app/backend/routers/leagues_clubhouse_router.py` (feed list filters hidden)
-- `/app/frontend/src/pages/leagues/RoundScorecard.jsx` (early-return + simulator mount)
-- `/app/frontend/src/pages/leagues/LeagueDetail.jsx` (DM panel + per-round QR)
-- `/app/frontend/src/pages/leagues/LeagueDashboard.jsx` (welcome checklist)
-- `/app/frontend/src/pages/RoundCheckin.jsx` (new)
-- `/app/frontend/src/components/RoundQRPanel.jsx` (new)
-- `/app/frontend/src/components/LiveSimulatorPanel.jsx` (new)
-- `/app/frontend/src/components/ManagerDMPanel.jsx` (new)
-- `/app/frontend/src/components/WelcomeChecklist.jsx` (new, prior pass)
-- `/app/frontend/src/components/ClubhouseTab.jsx` (moderation controls)
-- `/app/frontend/src/lib/offlineQueue.js` (new, prior pass)
-- `/app/frontend/src/App.jsx` (new checkin route)
-- `/app/backend/tests/test_iteration36.py` (new — 4 passing regression tests)
+- `/app/backend/routers/leagues_advanced_router.py` (new — leaderboard + referral)
+- `/app/backend/routers/leagues_router.py` (Round create hook, FeedPost.pinned)
+- `/app/backend/routers/leagues_clubhouse_router.py` (pinned-first sort)
+- `/app/backend/models.py`, `/app/backend/deps.py` (referral fields on ProfileOut)
+- `/app/frontend/src/pages/SignUp.jsx` (`?ref=CODE` capture + redeem)
+- `/app/frontend/src/pages/Profile.jsx` (ReferralCard + Founder Sponsor pill)
+- `/app/frontend/src/pages/leagues/LeagueDetail.jsx` (course_location + publish toggle)
+- `/app/frontend/src/pages/leagues/RoundScorecard.jsx` (FormatLeaderboardPanel mount)
+- `/app/frontend/src/components/FormatLeaderboardPanel.jsx` (new)
+- `/app/frontend/src/components/ReferralCard.jsx` (new)
+- `/app/frontend/src/components/LiveSimulatorPanel.jsx` (Share card button)
+- `/app/frontend/src/components/ClubhouseTab.jsx` (Pinned pill + title render)
+- `/app/frontend/src/lib/shareCard.js` (new — canvas renderer)
+- `/app/backend/tests/test_iteration37.py` (new — 6 passing regression tests)
+
+## Testing
+- iteration36 (4/4) + iteration37 (6/6) → **10/10 pass**

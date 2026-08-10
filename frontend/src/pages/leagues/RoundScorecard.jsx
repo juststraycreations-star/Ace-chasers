@@ -11,6 +11,7 @@ import DirectorNotesBanner from "@/components/DirectorNotesBanner";
 import PayoutDistribution from "@/components/PayoutDistribution";
 import ScorecardGrid from "@/components/ScorecardGrid";
 import LiveSimulatorPanel from "@/components/LiveSimulatorPanel";
+import FormatLeaderboardPanel from "@/components/FormatLeaderboardPanel";
 import { enqueueScore, bindOfflineQueueListeners, pendingCount, flushQueue } from "@/lib/offlineQueue";
 
 function scoreClass(strokes, par) {
@@ -418,6 +419,11 @@ export default function RoundScorecard() {
             memberMap={memberMap}
             isDirector={isDirector}
           />
+        )}
+
+        {/* Format-aware leaderboard (Singles / Doubles / Team). */}
+        {!isCompleted && (
+          <FormatLeaderboardPanel roundId={roundId} roundStatus={roundStatus} />
         )}
 
         {/* View mode toggle — SCORE (live entry) vs GRID (UDisc-style table).

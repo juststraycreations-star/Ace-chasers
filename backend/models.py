@@ -74,6 +74,18 @@ class ProfileOut(BaseModel):
     # Per-user "Leagues are live" nav announcement badge. Defaults false;
     # flipped true when the user clicks/opens Leagues for the first time.
     hasViewedLeaguesFeature: bool = False
+    # ---- Founder-referral engine (Feb 2026) ----------------------------
+    # Every user has a stable shareable code. Populated lazily on the
+    # first hit to GET /api/users/me/referral.
+    refCode: Optional[str] = None
+    # UID + name of the user who referred this account. Awarded once at
+    # signup and immutable after that.
+    founderSponsorBy: Optional[str] = None
+    founderSponsorByName: Optional[str] = None
+    # True if this account was created via a referral link. Grants the
+    # "Founder Sponsor" achievement badge on the profile and priority
+    # bag-tag placement in every league they join.
+    priorityTier: bool = False
 
 
 # --- Discovery / Swipes / Likes / Matches ----------------------------------

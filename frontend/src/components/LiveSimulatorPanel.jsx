@@ -1,6 +1,8 @@
 import { useMemo, useEffect, useState } from "react";
 import api from "@/lib/api";
-import { ChartLineUp, MoneyWavy, Tag, Info } from "@phosphor-icons/react";
+import { ChartLineUp, MoneyWavy, Tag, Info, ShareNetwork } from "@phosphor-icons/react";
+import { toast } from "sonner";
+import { renderShareCard, downloadBlob } from "@/lib/shareCard";
 
 /**
  * LiveSimulatorPanel — director-only "pre-finalization" preview shown
@@ -26,6 +28,20 @@ export default function LiveSimulatorPanel({
   isDirector,
 }) {
   const [pool, setPool] = useState(0);
+  const [league, setLeague] = useState(null);
+  const [sharing, setSharing] = useState(false);
+
+  useEffect(() => {
+    if (!leagueId) return;
+    let dead = false;
+    (async () => {
+      try {
+        const { data } = await api.get(`/leagues/${leagueId}`);
+        if (!dead) setLeague(data);
+      } catch { /* silent */ }
+    })();
+    return () => { dead = true; };
+  }, [leagueId]);
 
   // Pull the round's cash pool from the ledger. Falls back to 0 so the
   // panel still renders when no entry fees have been collected yet.
@@ -107,6 +123,50 @@ export default function LiveSimulatorPanel({
         >
           <Info size={12} /> read-only preview
         </div>
+        <button
+          type="button"
+          onClick={async () => {
+            if (sharing) return;
+            setSharing(true);
+            try {
+              const blob = await renderShareCard({
+                roundName: round?.name,
+                leagueName: league?.name,
+                leaders: standings.slice(0, 3).map((r) => ({
+                  name: r.name,
+                  total: r.total,
+                  plusMinus: r.plusMinus,
+                })),
+                payouts: payoutSplit,
+                acePool: league?.ace_pool || 0,
+                pool,
+              });
+              if (!blob) throw new Error("no blob");
+              const safe = (round?.name || "round").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+              downloadBlob(blob, `ace-chasers-${safe}-live.png`);
+              // Best-effort native share on mobile.
+              if (navigator.canShare && navigator.canShare({ files: [new File([blob], "share.png", { type: "image/png" })] })) {
+                try {
+                  await navigator.share({
+                    files: [new File([blob], "share.png", { type: "image/png" })],
+                    title: `${round?.name} — live`,
+                  });
+                } catch { /* user cancelled */ }
+              }
+              toast.success("Share card generated");
+            } catch {
+              toast.error("Share card failed");
+            } finally {
+              setSharing(false);
+            }
+          }}
+          disabled={sharing}
+          data-testid="simulator-share-card-btn"
+          className="ml-2 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-900 bg-amber-400 hover:bg-amber-500 rounded-full px-3 py-1.5 disabled:opacity-40"
+        >
+          <ShareNetwork size={12} weight="duotone" />
+          {sharing ? "Rendering…" : "Share card"}
+        </button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

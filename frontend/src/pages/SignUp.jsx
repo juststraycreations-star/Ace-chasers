@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
@@ -25,8 +25,16 @@ function friendlyError(err) {
 
 export default function SignUp() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const setUser = useAuthStore((s) => s.setUser);
   const setProfile = useAuthStore((s) => s.setProfile);
+  // ?ref=CODE — remember the founder-sponsor code across the async signup
+  // flow so we can stamp the new account after `/auth/sync` succeeds.
+  const [refCode, setRefCode] = useState('');
+  useEffect(() => {
+    const q = (searchParams.get('ref') || '').trim().toUpperCase();
+    if (q) setRefCode(q);
+  }, [searchParams]);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -55,6 +63,14 @@ export default function SignUp() {
       await api.post('/auth/sync', {
         invite_code: formData.inviteCode ? formData.inviteCode.trim() : undefined,
       });
+      // Redeem the founder-sponsor code (if any) — best-effort, non-fatal.
+      // Stamps the new account with `priority_tier: true` for bag-tag calcs
+      // and awards the "Founder Sponsor" badge on the profile.
+      if (refCode) {
+        try {
+          await api.post('/users/me/redeem-referral', { ref_code: refCode });
+        } catch { /* invalid or self-refer — silent */ }
+      }
       const payload = {
         name: formData.name || userObj.name || null,
         age: formData.age ? Number(formData.age) : null,
@@ -168,6 +184,15 @@ export default function SignUp() {
 
         <form onSubmit={handleEmailSignup} className="space-y-4" data-testid="signup-form">
           <CacheNotice />
+          {refCode && (
+            <div
+              className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-4 py-3 text-sm"
+              data-testid="signup-referral-badge"
+            >
+              🏆 You were invited by a founder — <span className="font-mono font-semibold">{refCode}</span>.
+              You&apos;ll receive the <strong>Founder Sponsor</strong> badge and priority bag-tag placement.
+            </div>
+          )}
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" data-testid="signup-error">
               {error}

@@ -34,6 +34,8 @@ export default function LeagueDetail() {
     date: new Date().toISOString().slice(0, 10),
     holes: 18,
     course_rating: "",
+    course_location: "",
+    publish_announcement: true,
   });
   const [creatingRound, setCreatingRound] = useState(false);
 
@@ -80,12 +82,23 @@ export default function LeagueDetail() {
         name: newRound.name.trim(),
         date: newRound.date,
         holes: Number(newRound.holes) || 18,
+        publish_announcement: newRound.publish_announcement,
       };
       if (newRound.course_rating) payload.course_rating = Number(newRound.course_rating);
+      if (newRound.course_location) payload.course_location = newRound.course_location.trim();
       const { data } = await api.post(`/leagues/${leagueId}/rounds`, payload);
-      toast.success("Round created");
+      toast.success(newRound.publish_announcement
+        ? "Round created · pinned to feed"
+        : "Round created");
       setShowNewRound(false);
-      setNewRound({ name: "", date: new Date().toISOString().slice(0, 10), holes: 18, course_rating: "" });
+      setNewRound({
+        name: "",
+        date: new Date().toISOString().slice(0, 10),
+        holes: 18,
+        course_rating: "",
+        course_location: "",
+        publish_announcement: true,
+      });
       // Take the director straight to the scorecard so they can build cards
       navigate(`/rounds/${data.id}`);
     } catch (e) {
@@ -335,6 +348,27 @@ export default function LeagueDetail() {
                     className="w-full h-11 bg-white border border-gray-200 rounded-md px-3 text-sm"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs text-zinc-500 font-mono-data uppercase tracking-wider mb-1">Course location (optional)</label>
+                  <input
+                    type="text"
+                    data-testid="new-round-location-input"
+                    value={newRound.course_location}
+                    onChange={(e) => setNewRound({ ...newRound, course_location: e.target.value })}
+                    placeholder="Maple Hill DGC · Leicester, MA"
+                    className="w-full h-11 bg-white border border-gray-200 rounded-md px-3 text-sm"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    data-testid="new-round-publish-checkbox"
+                    checked={newRound.publish_announcement}
+                    onChange={(e) => setNewRound({ ...newRound, publish_announcement: e.target.checked })}
+                    className="w-4 h-4 rounded border-gray-400"
+                  />
+                  Publish a pinned announcement on the clubhouse feed
+                </label>
                 {seasons.length === 0 && (
                   <div className="rounded-md border border-yellow-300 bg-yellow-50 text-[11px] text-yellow-900 p-2">
                     No active season detected — the round will still be created but standings may not compute.

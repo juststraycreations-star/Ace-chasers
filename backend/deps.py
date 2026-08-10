@@ -38,6 +38,10 @@ def user_to_profile(doc: dict, *, email_verified: Optional[bool] = None) -> Prof
         firstRun=bool(doc.get("first_run", False)),
         hasDismissedFirstRunModal=bool(doc.get("has_dismissed_first_run_modal", False)),
         hasViewedLeaguesFeature=bool(doc.get("has_viewed_leagues_feature", False)),
+        refCode=doc.get("ref_code"),
+        founderSponsorBy=doc.get("founder_sponsor_by"),
+        founderSponsorByName=doc.get("founder_sponsor_by_name"),
+        priorityTier=bool(doc.get("priority_tier", False)),
     )
 
 

@@ -368,13 +368,16 @@ class FeedPost(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     league_id: str
-    kind: Literal["post", "recap"] = "post"
+    kind: Literal["post", "recap", "schedule"] = "post"
     title: Optional[str] = None
     body: str
     meta: Optional[Dict[str, Any]] = None  # for recap: hot_round, most_improved
     author_id: str
     author_name: str
     author_picture: Optional[str] = None
+    # `pinned` posts sort to the top of the feed. Used by the auto-schedule
+    # publisher so newly-created rounds surface immediately in the clubhouse.
+    pinned: bool = False
     created_at: str = Field(default_factory=now_iso)
 
 
@@ -589,6 +592,11 @@ class RoundCreate(BaseModel):
     holes: int = 18
     par_per_hole: Optional[List[int]] = None
     course_rating: Optional[float] = None
+    # Optional free-text course/location string surfaced in the auto-published
+    # scheduling announcement on the clubhouse feed. Doesn't affect scoring.
+    course_location: Optional[str] = None
+    # Turn off the auto-announcement when the caller only wants a private round.
+    publish_announcement: bool = True
 
 @api_router.post("/leagues/{league_id}/rounds")
 async def create_round(league_id: str, payload: RoundCreate, request: Request,
@@ -603,6 +611,41 @@ async def create_round(league_id: str, payload: RoundCreate, request: Request,
                date=payload.date, holes=payload.holes, par_per_hole=par,
                course_rating=payload.course_rating)
     await db.rounds.insert_one(rd.model_dump())
+
+    # ── Auto-publish a pinned scheduling announcement to the clubhouse ──
+    # Beautifully formatted, one-tap for the manager. The frontend renders
+    # `pinned` posts at the top of the feed. Only fires when the caller
+    # opted in (default true) and the round has a date.
+    if payload.publish_announcement and payload.date:
+        try:
+            pretty_date = payload.date
+            try:
+                pretty_date = datetime.fromisoformat(payload.date.replace("Z", "")).strftime("%A, %b %d %Y")
+            except Exception:
+                pass
+            body_lines = [
+                f"📅  {pretty_date}",
+                f"🥏  {payload.holes} holes · par {sum(par)}",
+            ]
+            if payload.course_location:
+                body_lines.insert(1, f"📍  {payload.course_location.strip()}")
+            body = "\n".join(body_lines)
+            post = FeedPost(
+                league_id=league_id, kind="schedule",
+                title=f"Round scheduled — {payload.name}",
+                body=body,
+                meta={
+                    "round_id": rd.id,
+                    "round_date": payload.date,
+                    "course_location": payload.course_location,
+                },
+                author_id=user.user_id, author_name=user.name,
+                author_picture=user.picture,
+                pinned=True,
+            )
+            await db.feed_posts.insert_one(post.model_dump())
+        except Exception:
+            logger.exception("Failed to auto-publish schedule for round %s", rd.id)
     return rd.model_dump()
 
 
@@ -1679,3 +1722,4 @@ from . import leagues_ledger_router  # noqa: E402,F401
 from . import leagues_compliance_router  # noqa: E402,F401
 from . import leagues_rounds_router  # noqa: E402,F401
 from . import leagues_extensions_router  # noqa: E402,F401
+from . import leagues_advanced_router  # noqa: E402,F401

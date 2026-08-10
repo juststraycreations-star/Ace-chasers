@@ -270,7 +270,7 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
                 </div>
               </div>
             ) : (
-              <div key={p.id} className={`card-surface p-5 ${p.hidden ? "opacity-40" : ""}`} data-testid={`feed-post-${p.id}`}>
+              <div key={p.id} className={`card-surface p-5 ${p.hidden ? "opacity-40" : ""} ${p.pinned ? "ring-1 ring-amber-300 bg-amber-50/40" : ""}`} data-testid={`feed-post-${p.id}`}>
                 <div className="flex items-start gap-3">
                   {p.author_picture ? (
                     <img src={p.author_picture} className="w-9 h-9 rounded-full" alt="" />
@@ -280,6 +280,14 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
                   <div className="flex-1">
                     <div className="text-sm font-medium flex items-center gap-2">
                       {p.author_name}
+                      {p.pinned && (
+                        <span
+                          className="text-[9px] uppercase tracking-wider text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-1.5 py-0.5 font-mono-data inline-flex items-center gap-0.5"
+                          data-testid={`feed-post-pinned-${p.id}`}
+                        >
+                          <PushPin size={9} weight="fill" /> Pinned
+                        </span>
+                      )}
                       {p.hidden && (
                         <span className="text-[9px] uppercase tracking-wider text-red-400 font-mono-data" data-testid={`feed-post-hidden-${p.id}`}>
                           Removed
@@ -287,6 +295,11 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
                       )}
                     </div>
                     <div className="text-[10px] font-mono-data text-zinc-500">{new Date(p.created_at).toLocaleString()}</div>
+                    {p.title && (
+                      <div className="mt-1 font-display text-base text-slate-900" data-testid={`feed-post-title-${p.id}`}>
+                        {p.title}
+                      </div>
+                    )}
                     <div className="mt-2 text-sm text-zinc-200 whitespace-pre-wrap">{p.body}</div>
                   </div>
                   {(isDirector || p.author_id === currentUser?.user_id) && !p.hidden && (

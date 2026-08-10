@@ -13,6 +13,7 @@ import {
 } from '../lib/interestTags';
 import PublicProfilePreview from '../components/PublicProfilePreview';
 import FirstRunBadge from '../components/FirstRunBadge';
+import ReferralCard from '../components/ReferralCard';
 
 const DEFAULT_INTERESTS = ['tournaments', 'hiking', 'casual play'];
 const MAX_RAW_BYTES = 30 * 1024 * 1024;
@@ -291,9 +292,23 @@ export default function Profile() {
               {profile.age ? `, ${profile.age}` : ''}
             </span>
             {profile.firstRun && <FirstRunBadge size={20} />}
+            {profile.priorityTier && (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200"
+                data-testid="founder-sponsor-badge"
+                title={profile.founderSponsorByName ? `Sponsored by ${profile.founderSponsorByName}` : "Founder Sponsor"}
+              >
+                🏆 Founder Sponsor
+              </span>
+            )}
           </h2>
           <p className="text-disc-gold font-semibold">{profile.skillLevel || 'Beginner'}</p>
         </div>
+      </div>
+
+      {/* Founder referral card — always visible so users can share. */}
+      <div className="mt-4">
+        <ReferralCard />
       </div>
 
       {/* Editable fields */}
