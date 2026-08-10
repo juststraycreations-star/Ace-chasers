@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { Trophy, ArrowRight } from "@phosphor-icons/react";
+import SeedManagementPanel from "@/components/SeedManagementPanel";
 
 /**
  * BracketView — single-elimination visual for "Match Play" leagues.
@@ -11,8 +12,8 @@ import { Trophy, ArrowRight } from "@phosphor-icons/react";
 export default function BracketView({ leagueId, members, isDirector, format }) {
   const [bracket, setBracket] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [seeding, setSeeding] = useState(false);
   const [reporting, setReporting] = useState(null); // match_id in-flight
+  const [seedOverride, setSeedOverride] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -30,27 +31,6 @@ export default function BracketView({ leagueId, members, isDirector, format }) {
 
   if (format !== "Match Play") return null;
   if (loading) return null;
-
-  const seed = async () => {
-    if (!isDirector) return;
-    if (!members || members.length < 2) {
-      toast.error("Need at least 2 members to seed a bracket");
-      return;
-    }
-    if (!window.confirm(`Seed a new bracket from ${members.length} members? This wipes any existing bracket.`)) return;
-    setSeeding(true);
-    try {
-      await api.post(`/leagues/${leagueId}/bracket/seed`, {
-        member_ids: members.map((m) => m.id),
-      });
-      toast.success("Bracket seeded");
-      await load();
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "Seed failed");
-    } finally {
-      setSeeding(false);
-    }
-  };
 
   const reset = async () => {
     if (!window.confirm("Wipe the current bracket?")) return;
@@ -81,6 +61,16 @@ export default function BracketView({ leagueId, members, isDirector, format }) {
   const nameFor = (id) => (id ? memberById[id]?.name || "Player" : "BYE");
 
   if (!bracket) {
+    if (seedOverride) {
+      return (
+        <SeedManagementPanel
+          leagueId={leagueId}
+          members={members}
+          onSeeded={async () => { setSeedOverride(false); await load(); }}
+          onCancel={() => setSeedOverride(false)}
+        />
+      );
+    }
     return (
       <section
         className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm text-center"
@@ -89,17 +79,16 @@ export default function BracketView({ leagueId, members, isDirector, format }) {
         <Trophy size={28} weight="duotone" className="text-amber-600 mx-auto mb-2" />
         <div className="font-display text-lg text-slate-900">No bracket seeded</div>
         <div className="text-sm text-slate-600 mt-1">
-          Match Play leagues use a single-elimination bracket. Seed one from your active members.
+          Match Play leagues use a single-elimination bracket. Order your players, lock the fixed seeds, and generate.
         </div>
         {isDirector && (
           <button
             type="button"
-            onClick={seed}
-            disabled={seeding}
+            onClick={() => setSeedOverride(true)}
             data-testid="bracket-seed-btn"
-            className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-full px-4 py-2 disabled:opacity-40"
+            className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-full px-4 py-2"
           >
-            {seeding ? "Seeding…" : "Seed bracket now"}
+            Open seed manager
           </button>
         )}
       </section>
@@ -111,6 +100,16 @@ export default function BracketView({ leagueId, members, isDirector, format }) {
       className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm"
       data-testid="bracket-view"
     >
+      {seedOverride && (
+        <div className="mb-4" data-testid="bracket-seed-override">
+          <SeedManagementPanel
+            leagueId={leagueId}
+            members={members}
+            onSeeded={async () => { setSeedOverride(false); await load(); }}
+            onCancel={() => setSeedOverride(false)}
+          />
+        </div>
+      )}
       <div className="flex items-center gap-2 mb-4">
         <Trophy size={22} weight="duotone" className="text-amber-600" />
         <div className="font-display text-xl text-slate-900">Match Play bracket</div>
@@ -118,8 +117,7 @@ export default function BracketView({ leagueId, members, isDirector, format }) {
           <div className="ml-auto flex gap-2">
             <button
               type="button"
-              onClick={seed}
-              disabled={seeding}
+              onClick={() => setSeedOverride(true)}
               data-testid="bracket-reseed-btn"
               className="text-xs font-semibold text-slate-700 border border-slate-200 rounded-full px-3 py-1.5 hover:bg-slate-50"
             >
