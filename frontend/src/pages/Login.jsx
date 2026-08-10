@@ -9,6 +9,7 @@ import { firebaseConfigured, getFirebaseAuth, googleProvider } from '../lib/fire
 import { clearDevSession, makeDevSession } from '../lib/devAuth';
 import { api } from '../lib/api';
 import CacheNoticeModal from '../components/CacheNoticeModal';
+import CacheNotice from '../components/CacheNotice';
 import DiscIcon from '../components/DiscIcon';
 
 const CACHE_DISMISSED_KEY = 'ace_cache_notice_dismissed_v1';
@@ -169,6 +170,7 @@ export default function Login() {
         </Link>
 
         <form onSubmit={handleEmailLogin} className="space-y-4" data-testid="login-form">
+          <CacheNotice />
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" data-testid="login-error">
               {error}
