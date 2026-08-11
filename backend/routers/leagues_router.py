@@ -954,13 +954,30 @@ class WSManager:
 ws_manager = WSManager()
 
 async def _validate_ws_token(token: str) -> Optional[dict]:
+    """Verify a WebSocket bearer token.
+
+    Historically this checked a `session_token` row in `db.user_sessions`,
+    which was never populated by the current Firebase-backed auth path
+    — so every socket handshake failed 4401 and the client looped
+    "RECONNECTING…" forever. We now verify the Firebase JWT via the same
+    `_fb_get_current_user` helper used by HTTP routes, then upsert/return
+    the league user doc.
+    """
     if not token:
         return None
-    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
-    if not session:
+    try:
+        fb = await _fb_get_current_user(authorization=f"Bearer {token}")
+    except Exception:
         return None
-    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
-    return user
+    if not fb or not fb.get("uid"):
+        # Fallback for local dev tokens: preserve the legacy session_token
+        # code path so any tooling that still uses it keeps working.
+        session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+        if not session:
+            return None
+        return await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    doc = await _upsert_league_user(fb["uid"], fb)
+    return doc
 
 @api_router.websocket("/ws/rounds/{round_id}")
 async def ws_round(websocket: WebSocket, round_id: str, token: str = Query(...)):

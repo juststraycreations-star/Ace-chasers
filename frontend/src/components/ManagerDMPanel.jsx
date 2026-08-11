@@ -99,7 +99,7 @@ export default function ManagerDMPanel({ leagueId, isDirector }) {
             type="button"
             onClick={() => { setMode("broadcast"); setOpen(true); }}
             data-testid="manager-dm-open-broadcast"
-            className="text-xs font-semibold text-white bg-slate-800 hover:bg-slate-900 px-3 py-2 rounded-full"
+            className="text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-full shadow-sm transition-colors"
           >
             Broadcast
           </button>
@@ -107,7 +107,7 @@ export default function ManagerDMPanel({ leagueId, isDirector }) {
             type="button"
             onClick={() => { setMode("dm"); setOpen(true); }}
             data-testid="manager-dm-open-dm"
-            className="text-xs font-semibold text-slate-700 border border-slate-200 hover:border-slate-400 px-3 py-2 rounded-full"
+            className="text-xs font-semibold text-slate-700 border border-slate-300 hover:border-slate-500 bg-white px-4 py-2 rounded-full transition-colors"
           >
             DM
           </button>

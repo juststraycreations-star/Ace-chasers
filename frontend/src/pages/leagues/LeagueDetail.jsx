@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import AppHeader from "@/components/AppHeader";
 import StandingsTab from "@/components/StandingsTab";
@@ -20,11 +20,14 @@ export default function LeagueDetail() {
   const { leagueId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab") || "rounds";
   const [league, setLeague] = useState(null);
   const [rounds, setRounds] = useState([]);
   const [members, setMembers] = useState([]);
   const [seasons, setSeasons] = useState([]);
-  const [tab, setTab] = useState("rounds");
+  const [tab, setTab] = useState(initialTab);
+  const [completedOpen, setCompletedOpen] = useState(false);
   const [showQR, setShowQR] = useState(false);
   // "New Round" modal state — director-only
   const [showNewRound, setShowNewRound] = useState(false);
@@ -137,17 +140,46 @@ export default function LeagueDetail() {
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <div className="chip-orange px-2 py-1 rounded-md text-[10px] font-mono-data">{league.format}</div>
-                {league.is_director && <div className="chip-green px-2 py-1 rounded-md text-[10px] font-mono-data">DIRECTOR</div>}
+                <div className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 py-0.5 text-[10px] font-mono-data uppercase tracking-widest font-semibold">{league.format}</div>
+                {league.is_director && (
+                  <div className="inline-flex items-center gap-1 rounded-full bg-emerald-600 text-white px-2.5 py-0.5 text-[10px] font-mono-data uppercase tracking-widest font-semibold">
+                    <ShieldCheck size={11} weight="fill" /> Director
+                  </div>
+                )}
               </div>
-              <h1 className="font-display text-4xl sm:text-5xl tracking-tighter">{league.name}</h1>
-              <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-zinc-400">
-                <div className="flex items-center gap-1"><MapPin size={14} weight="duotone" /> {league.location}</div>
-                <div className="flex items-center gap-1"><Users size={14} weight="duotone" /> {league.member_count} players</div>
-                <div className="flex items-center gap-1 font-mono-data text-xs"><Coins size={14} weight="duotone" /> ACE POOL <span className="text-[#F5C542]">${(league.ace_pool || 0).toFixed(0)}</span></div>
-                {league.my_bag_tag && <div className="font-mono-data text-xs">MY BAG TAG <span className="text-[#F5C542]">#{league.my_bag_tag}</span></div>}
+              <h1 className="font-display text-4xl sm:text-5xl tracking-tighter text-slate-900">{league.name}</h1>
+              {/* Signature Ace Chasers badge-chip row — replaces the flat metadata line. */}
+              <div className="mt-4 flex flex-wrap items-center gap-2" data-testid="league-meta-chips">
+                <span
+                  data-testid="league-chip-location"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm"
+                >
+                  <MapPin size={13} weight="duotone" className="text-emerald-600" />
+                  {league.location}
+                </span>
+                <span
+                  data-testid="league-chip-players"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm"
+                >
+                  <Users size={13} weight="duotone" className="text-emerald-600" />
+                  {league.member_count} player{league.member_count === 1 ? "" : "s"}
+                </span>
+                <span
+                  data-testid="league-chip-ace-pool"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm font-mono-data"
+                >
+                  <Coins size={13} weight="duotone" className="text-emerald-600" />
+                  ACE POOL <span className="text-emerald-700">${(league.ace_pool || 0).toFixed(0)}</span>
+                </span>
+                <span
+                  data-testid="league-chip-bag-tag"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm font-mono-data"
+                >
+                  <Trophy size={13} weight="duotone" className="text-emerald-600" />
+                  BAG TAG <span className="text-emerald-700">{league.my_bag_tag ? `#${league.my_bag_tag}` : "—"}</span>
+                </span>
               </div>
-              {league.description && <p className="mt-3 text-sm text-zinc-400 max-w-2xl">{league.description}</p>}
+              {league.description && <p className="mt-4 text-sm text-slate-600 max-w-2xl">{league.description}</p>}
             </div>
             <div className="flex flex-col gap-2">
               {league.is_member && (
@@ -183,13 +215,17 @@ export default function LeagueDetail() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 overflow-x-auto">
+        <div className="flex gap-1 mb-6 overflow-x-auto pb-1" data-testid="league-tabs">
           {tabs.map((t) => (
             <button
               key={t.key}
               data-testid={`tab-${t.key}`}
               onClick={() => setTab(t.key)}
-              className={`px-4 py-2 rounded-lg text-sm flex items-center gap-2 flex-shrink-0 transition-colors ${tab === t.key ? "bg-[#F5C542] text-black font-bold" : "bg-white/5 text-zinc-300 hover:bg-white/10"}`}
+              className={`px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-2 flex-shrink-0 transition-colors ${
+                tab === t.key
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "bg-white text-slate-700 border border-slate-200 hover:border-slate-400"
+              }`}
             >
               {t.icon} {t.label}
             </button>
@@ -197,72 +233,201 @@ export default function LeagueDetail() {
         </div>
 
         {tab === "rounds" && (
-          <div className="space-y-4" data-testid="rounds-tab">
+          <div className="space-y-6" data-testid="rounds-tab">
             {league.is_director && (
               <div className="flex justify-end">
                 <button
                   data-testid="new-round-btn"
                   onClick={() => setShowNewRound(true)}
-                  className="btn-primary flex items-center gap-2"
+                  className="inline-flex items-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-4 py-2 shadow-sm transition-colors"
                 >
                   <Plus size={16} weight="bold" /> New Round
                 </button>
               </div>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {rounds.map((r) => (
-                <div key={r.id} className="card-surface p-5" data-testid={`round-card-${r.id}`}>
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="font-display text-lg">{r.name}</div>
-                    <div className={`text-[10px] font-mono-data px-2 py-1 rounded-md ${
-                      r.status === "completed" ? "chip-green" : r.status === "active" ? "chip-orange" : "bg-zinc-800/60 text-zinc-400 border border-gray-100"
-                    }`}>{r.status.toUpperCase()}</div>
-                  </div>
-                  <div className="text-xs text-zinc-500 mb-4">{new Date(r.date).toLocaleDateString()} · {r.holes} holes</div>
-                  <div className="flex gap-2 flex-wrap">
-                    <button
-                      data-testid={`round-open-${r.id}`}
-                      onClick={() => navigate(`/rounds/${r.id}`)}
-                      className="text-xs px-3 py-1.5 rounded-full border border-white/15 hover:bg-white/5"
-                    >Open Scorecard</button>
-                    {league.is_director && r.status === "scheduled" && (
-                      <button data-testid={`round-start-${r.id}`} onClick={() => startRound(r.id)} className="text-xs px-3 py-1.5 rounded-full chip-orange flex items-center gap-1">
-                        <PlayCircle size={12} weight="fill" /> Start
-                      </button>
-                    )}
-                    {league.is_director && r.status === "active" && (
-                      <button data-testid={`round-complete-${r.id}`} onClick={() => completeRound(r.id)} className="text-xs px-3 py-1.5 rounded-full chip-green flex items-center gap-1">
-                        <CheckCircle size={12} weight="fill" /> Finalize
-                      </button>
-                    )}
-                    {league.is_director && r.status !== "completed" && (
-                      <button
-                        data-testid={`round-qr-btn-${r.id}`}
-                        onClick={() => setQrRoundId(qrRoundId === r.id ? null : r.id)}
-                        className="text-xs px-3 py-1.5 rounded-full border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center gap-1"
-                        title="Show a QR code for players to self-enroll on this round"
-                      >
-                        <QrCode size={12} weight="bold" /> {qrRoundId === r.id ? "Hide QR" : "QR check-in"}
-                      </button>
-                    )}
-                  </div>
-                  {qrRoundId === r.id && (
-                    <div className="mt-4" data-testid={`round-qr-wrapper-${r.id}`}>
-                      <RoundQRPanel roundId={r.id} roundName={r.name} />
-                    </div>
+
+            {(() => {
+              const active = rounds.filter((r) => r.status === "active");
+              const upcoming = rounds.filter((r) => r.status === "scheduled");
+              const completed = rounds.filter((r) => r.status === "completed");
+              return (
+                <>
+                  {/* ═══ ACTIVE ROUND ═══ */}
+                  {active.length > 0 && (
+                    <section data-testid="rounds-active-section">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <h2 className="font-display text-sm uppercase tracking-widest text-emerald-800">Active Round</h2>
+                      </div>
+                      {active.map((r) => (
+                        <div
+                          key={r.id}
+                          data-testid={`round-card-active-${r.id}`}
+                          className="rounded-2xl border-2 border-emerald-500 bg-white shadow-md p-6 mb-3"
+                        >
+                          <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+                            <div>
+                              <div className="font-display text-2xl text-slate-900">{r.name}</div>
+                              <div className="text-xs text-slate-500 mt-1 font-mono-data uppercase tracking-wider">
+                                {new Date(r.date).toLocaleDateString()} · {r.holes} holes
+                              </div>
+                            </div>
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1 text-[10px] font-mono-data uppercase tracking-widest font-semibold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              LIVE
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              data-testid={`round-open-${r.id}`}
+                              onClick={() => navigate(`/rounds/${r.id}`)}
+                              className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-4 py-2 shadow-sm transition-colors"
+                            >
+                              Open Scorecard
+                            </button>
+                            {league.is_director && (
+                              <button
+                                data-testid={`round-complete-${r.id}`}
+                                onClick={() => completeRound(r.id)}
+                                className="inline-flex items-center gap-1.5 rounded-full bg-white text-slate-800 border border-slate-300 hover:border-slate-500 font-semibold text-sm px-4 py-2 transition-colors"
+                              >
+                                <CheckCircle size={14} weight="fill" className="text-emerald-600" /> Finalize
+                              </button>
+                            )}
+                            {league.is_director && (
+                              <button
+                                data-testid={`round-qr-btn-${r.id}`}
+                                onClick={() => setQrRoundId(qrRoundId === r.id ? null : r.id)}
+                                className="inline-flex items-center gap-1.5 rounded-full bg-white text-slate-800 border border-slate-300 hover:border-slate-500 font-semibold text-sm px-4 py-2 transition-colors"
+                                title="Show a QR code for players to self-enroll on this round"
+                              >
+                                <QrCode size={14} weight="bold" className="text-emerald-600" />
+                                {qrRoundId === r.id ? "Hide QR" : "Check-In QR"}
+                              </button>
+                            )}
+                          </div>
+                          {qrRoundId === r.id && (
+                            <div className="mt-4" data-testid={`round-qr-wrapper-${r.id}`}>
+                              <RoundQRPanel roundId={r.id} roundName={r.name} />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </section>
                   )}
-                </div>
-              ))}
-            </div>
+
+                  {/* ═══ UPCOMING SCHEDULE ═══ */}
+                  <section data-testid="rounds-upcoming-section">
+                    <h2 className="font-display text-sm uppercase tracking-widest text-slate-700 mb-3">
+                      Upcoming Schedule
+                      <span className="ml-2 font-mono-data text-xs text-slate-400">· {upcoming.length}</span>
+                    </h2>
+                    {upcoming.length === 0 ? (
+                      <div
+                        className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500"
+                        data-testid="rounds-upcoming-empty"
+                      >
+                        Nothing scheduled next.
+                      </div>
+                    ) : (
+                      <ul className="space-y-2">
+                        {upcoming.map((r) => (
+                          <li
+                            key={r.id}
+                            data-testid={`round-card-upcoming-${r.id}`}
+                            className="rounded-xl border border-slate-200 bg-white px-4 py-3 flex items-center justify-between gap-3 flex-wrap hover:border-slate-300 transition-colors"
+                          >
+                            <div className="min-w-0">
+                              <div className="font-display text-base text-slate-900 truncate">{r.name}</div>
+                              <div className="text-xs text-slate-500 font-mono-data uppercase tracking-wider mt-0.5">
+                                {new Date(r.date).toLocaleDateString()} · {r.holes} holes
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                data-testid={`round-open-${r.id}`}
+                                onClick={() => navigate(`/rounds/${r.id}`)}
+                                className="inline-flex items-center gap-1.5 rounded-full bg-white text-slate-800 border border-slate-300 hover:border-slate-500 font-semibold text-sm px-4 py-2 transition-colors"
+                              >
+                                Open Scorecard
+                              </button>
+                              {league.is_director && (
+                                <button
+                                  data-testid={`round-start-${r.id}`}
+                                  onClick={() => startRound(r.id)}
+                                  className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-4 py-2 shadow-sm transition-colors"
+                                >
+                                  <PlayCircle size={14} weight="fill" /> Start
+                                </button>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+
+                  {/* ═══ COMPLETED ARCHIVE ═══ */}
+                  {completed.length > 0 && (
+                    <section data-testid="rounds-completed-section">
+                      <button
+                        type="button"
+                        onClick={() => setCompletedOpen((v) => !v)}
+                        data-testid="rounds-completed-toggle"
+                        aria-expanded={completedOpen}
+                        className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 hover:bg-slate-50 transition-colors"
+                      >
+                        <h2 className="font-display text-sm uppercase tracking-widest text-slate-700">
+                          Completed Archive
+                          <span className="ml-2 font-mono-data text-xs text-slate-400">· {completed.length}</span>
+                        </h2>
+                        <span className="text-xs font-semibold text-slate-600">
+                          {completedOpen ? "Hide" : "Show"}
+                        </span>
+                      </button>
+                      {completedOpen && (
+                        <ul
+                          className="mt-2 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white overflow-hidden"
+                          data-testid="rounds-completed-list"
+                        >
+                          {completed.map((r) => (
+                            <li
+                              key={r.id}
+                              data-testid={`round-card-completed-${r.id}`}
+                              className="flex items-center justify-between gap-3 flex-wrap px-4 py-3"
+                            >
+                              <div className="min-w-0">
+                                <div className="font-display text-sm text-slate-900 truncate">{r.name}</div>
+                                <div className="text-[11px] text-slate-500 font-mono-data uppercase tracking-wider">
+                                  {new Date(r.date).toLocaleDateString()} · Winner —
+                                </div>
+                              </div>
+                              <button
+                                data-testid={`round-pdf-${r.id}`}
+                                onClick={() => navigate(`/rounds/${r.id}`)}
+                                className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3 py-1.5 shadow-sm transition-colors"
+                              >
+                                PDF Scorecard
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  )}
+                </>
+              );
+            })()}
+
             {rounds.length === 0 && (
-              <div className="text-zinc-500 text-sm text-center py-8" data-testid="rounds-empty-state">
+              <div className="text-slate-500 text-sm text-center py-8" data-testid="rounds-empty-state">
                 No rounds scheduled yet
                 {league.is_director && (
                   <div className="mt-3">
                     <button
                       data-testid="rounds-empty-create-btn"
                       onClick={() => setShowNewRound(true)}
-                      className="btn-primary text-xs"
+                      className="inline-flex items-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-4 py-2 shadow-sm transition-colors"
                     >
                       Create your first round
                     </button>

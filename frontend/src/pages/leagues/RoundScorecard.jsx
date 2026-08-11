@@ -4,7 +4,7 @@ import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useWebSocket } from "@/lib/ws";
 import { toast } from "sonner";
-import { CaretLeft, Minus, Plus, ChatCircleText, Terminal, ArrowsClockwise, UsersThree, Shuffle, Ghost, Target, MoneyWavy, Printer } from "@phosphor-icons/react";
+import { CaretLeft, Minus, Plus, ChatCircleText, Terminal, ArrowsClockwise, UsersThree, Shuffle, Ghost, Target, MoneyWavy, Printer, Newspaper, CaretDown, CaretUp } from "@phosphor-icons/react";
 import GhostOverlay from "@/components/GhostOverlay";
 import CTPLeaderboard from "@/components/CTPLeaderboard";
 import DirectorNotesBanner from "@/components/DirectorNotesBanner";
@@ -56,6 +56,10 @@ export default function RoundScorecard() {
   // can resolve manually.
   const [pendingTieBreak, setPendingTieBreak] = useState(null);
   const [showRecap, setShowRecap] = useState(false);
+  // Middle-zone accordion — collapses the LiveSimulator + FormatLeaderboard
+  // stack so directors can focus on active player cards without the
+  // pre-finalization panels squeezing the viewport.
+  const [previewOpen, setPreviewOpen] = useState(false);
   // "score" = per-hole scoring UI (default while round is active).
   // "grid"  = UDisc-style summary table (default once round is completed).
   // A useEffect below flips to "grid" the moment we detect a completed round.
@@ -347,13 +351,24 @@ export default function RoundScorecard() {
       <div className="min-h-screen bg-white pb-20" data-testid="round-scorecard-page-completed">
         <div className="max-w-4xl mx-auto px-4 py-5">
           <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
-            <button
-              data-testid="back-to-league-btn"
-              onClick={() => navigate(`/leagues/${round.league_id}`)}
-              className="text-zinc-500 hover:text-gray-900 flex items-center gap-1 text-sm"
-            >
-              <CaretLeft size={16} /> Back
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                data-testid="back-to-league-btn"
+                onClick={() => navigate(`/leagues/${round.league_id}`)}
+                className="text-zinc-500 hover:text-gray-900 flex items-center gap-1 text-sm"
+              >
+                <CaretLeft size={16} /> Back
+              </button>
+              <button
+                data-testid="go-to-league-feed-btn"
+                onClick={() => navigate(`/leagues/${round.league_id}?tab=clubhouse`)}
+                title="Open the League Clubhouse Feed"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900 border border-emerald-200 hover:border-emerald-400 bg-white rounded-full px-3 py-1 transition-colors"
+              >
+                <Newspaper size={12} weight="duotone" />
+                League Feed
+              </button>
+            </div>
             <div className="flex items-center gap-3">
               <span
                 data-testid="scorecard-round-final-badge"
@@ -393,13 +408,28 @@ export default function RoundScorecard() {
 
   return (
     <div className="min-h-screen bg-white pb-32" data-testid="round-scorecard-page">
-      {/* Sticky header */}
+      {/* Sticky header — TOP ZONE (fixed metadata + League Feed shortcut + hole nav) */}
       <div className="scorecard-header">
         <div className="max-w-4xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <button data-testid="back-to-league-btn" onClick={() => navigate(`/leagues/${round.league_id}`)} className="text-zinc-400 hover:text-gray-900 flex items-center gap-1 text-sm">
-              <CaretLeft size={16} /> Back
-            </button>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                data-testid="back-to-league-btn"
+                onClick={() => navigate(`/leagues/${round.league_id}`)}
+                className="text-zinc-400 hover:text-gray-900 flex items-center gap-1 text-sm"
+              >
+                <CaretLeft size={16} /> Back
+              </button>
+              <button
+                data-testid="go-to-league-feed-btn"
+                onClick={() => navigate(`/leagues/${round.league_id}?tab=clubhouse`)}
+                title="Open the League Clubhouse Feed"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900 border border-emerald-200 hover:border-emerald-400 bg-white rounded-full px-3 py-1 transition-colors"
+              >
+                <Newspaper size={12} weight="duotone" />
+                League Feed
+              </button>
+            </div>
             <div className="text-center">
               <div className="font-mono-data text-[10px] text-zinc-500">HOLE {currentHole} · PAR</div>
               <div className="font-mega text-4xl leading-none text-[#F5C542]">{par}</div>
@@ -431,21 +461,51 @@ export default function RoundScorecard() {
           <DirectorNotesBanner round={round} isDirector={isDirector} onUpdated={load} />
         )}
 
-        {/* Pre-finalization simulator — director-only, active rounds. */}
-        {!isCompleted && isDirector && round.status === "active" && (
-          <LiveSimulatorPanel
-            leagueId={round.league_id}
-            round={round}
-            scorecards={scorecards}
-            memberMap={memberMap}
-            isDirector={isDirector}
-          />
+        {/* ═══ MIDDLE ZONE ═══
+            Pre-Finalization Simulator + Format Leaderboard, wrapped in a
+            single collapsible accordion so directors can hide it while
+            actively scoring cards below. Completely unmounted when the
+            round is completed (see the isCompleted early-return above). */}
+        {!isCompleted && (
+          <section className="mb-6 rounded-xl border border-emerald-100 bg-emerald-50/40 overflow-hidden" data-testid="scorecard-middle-zone">
+            <button
+              type="button"
+              onClick={() => setPreviewOpen((v) => !v)}
+              data-testid="middle-zone-toggle"
+              aria-expanded={previewOpen}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-emerald-50 transition-colors"
+            >
+              <div className="text-left">
+                <div className="font-display text-sm text-emerald-900">Round preview & leaderboard</div>
+                <div className="font-mono-data text-[10px] uppercase tracking-widest text-emerald-700/70">
+                  Payouts · Bag tag · Live standings
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-emerald-800 text-xs font-semibold">
+                {previewOpen ? "Hide" : "Show"}
+                {previewOpen ? <CaretUp size={14} weight="bold" /> : <CaretDown size={14} weight="bold" />}
+              </div>
+            </button>
+            {previewOpen && (
+              <div className="px-4 pb-4 space-y-4" data-testid="middle-zone-content">
+                {isDirector && round.status === "active" && (
+                  <LiveSimulatorPanel
+                    leagueId={round.league_id}
+                    round={round}
+                    scorecards={scorecards}
+                    memberMap={memberMap}
+                    isDirector={isDirector}
+                  />
+                )}
+                <FormatLeaderboardPanel roundId={roundId} roundStatus={roundStatus} />
+              </div>
+            )}
+          </section>
         )}
 
-        {/* Format-aware leaderboard (Singles / Doubles / Team). */}
-        {!isCompleted && (
-          <FormatLeaderboardPanel roundId={roundId} roundStatus={roundStatus} />
-        )}
+        {/* ═══ BOTTOM ZONE ═══
+            Card builders + active player grids. Everything from the view
+            toggle downward. */}
 
         {/* View mode toggle — SCORE (live entry) vs GRID (UDisc-style table).
             When the round is COMPLETED we hide the toggle entirely and
@@ -555,7 +615,7 @@ export default function RoundScorecard() {
           <button data-testid="payout-open-btn" onClick={() => setShowPayout(true)} className="px-4 py-2 rounded-full text-sm border border-gray-200 text-zinc-400 hover:border-white/25 flex items-center gap-1 flex-shrink-0">
             <MoneyWavy size={14} weight="duotone" /> Payouts
           </button>
-          {isDirector && (
+          {isDirector && cards.length > 0 && (
             <button
               data-testid="sweep-finalize-btn"
               onClick={() => { setShowSweep(true); setSweepChecked(false); }}

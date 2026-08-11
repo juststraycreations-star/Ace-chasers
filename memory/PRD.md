@@ -64,10 +64,42 @@ Enterprise-grade League Management platform:
 ## Deployment note
 - CI/CD should set `ACE_BUILD_ID=<git-sha>` **before both** `vite build` (frontend) **and** the backend container start, so client bundle and server report the same id. Any subsequent deploy with a different id will trigger the reload prompt for every open tab within 5 minutes.
 
+## Iteration 44-46 (Feb 2026) — WS auth fix, scorecard zoning, dashboard palette overhaul
+
+### Iter 44 · Fix "RECONNECTING…" polling loop
+- **Root cause**: `_validate_ws_token` in `leagues_router.py` checked a legacy `session_token` row that Firebase auth never populates → every `/api/ws/rounds/{id}` handshake closed 4401 → client loop.
+- **Fix**: verify the incoming query-string token via `_fb_get_current_user`, upsert via `_upsert_league_user`, keep the old `session_token` path as a fallback so dev tooling still works.
+- **Coverage**: `tests/test_iteration44.py` opens a real WS with a Firebase idToken and asserts the hello frame + a `ping/pong` round-trip; a second test proves a garbage token still closes 4401.
+
+### Iter 45 · RoundScorecard three-zone refactor
+- **Top zone**: sticky header with Back button + new **"League Feed"** shortcut (`data-testid="go-to-league-feed-btn"`) → routes to `/leagues/{id}?tab=clubhouse`. `LeagueDetail.jsx` now honors `?tab=<key>` for initial-tab selection.
+- **Middle zone**: LiveSimulator + FormatLeaderboard are wrapped in a single collapsible accordion (`scorecard-middle-zone` + `middle-zone-toggle` + `middle-zone-content`) so directors can focus on card builders below.
+- **Bottom zone**: card builder + player grids (unchanged position).
+- **Conditional unmount**: Sweep Finalize (`sweep-finalize-btn`) gated behind `isDirector && cards.length > 0`. The `isCompleted` early return still enforces the P0 rule — no simulators, no card builders, no hole nav, no sweep button — only the green ScorecardGrid + Print PDF + League Feed + Round Final badge.
+
+### Iter 46 · League Dashboard palette + temporal round sections
+- **Brand palette**: white page bgs, dark slate text, emerald accents throughout `LeagueDetail.jsx` + `ManagerDMPanel.jsx`.
+- **Badge chip row**: replaced the flat metadata line with four white rounded chips carrying emerald icons — `league-chip-location`, `league-chip-players`, `league-chip-ace-pool`, `league-chip-bag-tag`.
+- **Format + Director pills**: converted `chip-orange` and `chip-green` to inline emerald pill styles (Director pill now `bg-emerald-600 text-white` with a shield-check icon).
+- **Rounds tab split into three temporal groups**:
+  - `rounds-active-section` — priority card with emerald border + LIVE pulse pill + Open Scorecard / Finalize / Check-In QR buttons.
+  - `rounds-upcoming-section` — minimalist white cards; empty state `rounds-upcoming-empty`.
+  - `rounds-completed-section` — collapsible accordion (`rounds-completed-toggle`, `aria-expanded` wired) holding a compact list with a green `round-pdf-<id>` link.
+- **Unified button system**:
+  - **Primary** (Open Scorecard, New Round, Start, Broadcast, PDF Scorecard): `rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-4 py-2 shadow-sm`.
+  - **Secondary** (Finalize, DM, Check-In QR): `rounded-full bg-white text-slate-800 border border-slate-300 hover:border-slate-500 font-semibold text-sm px-4 py-2`.
+- **Tabs bar**: emerald pill for active, white outline for others.
+- **Broadcast bar**: `ManagerDMPanel` Broadcast flipped to solid emerald (`bg-emerald-600` + `text-white`); DM stayed slate outline.
+
+## Testing
+- Backend pytest — **9/9 pass** (iterations 39-44 + regression suite).
+- Frontend e2e via testing_agent — **21/21 assertions pass** (`/app/test_reports/iteration_38.json`); no critical or minor issues, no design flags.
+
 ## Backlog (P1/P2)
-- **P3 — Double-elim grand-final "bracket reset"** — if LB champ wins first GF, play a second decider match. Current MVP: single GF, winner takes all.
-- **P3 — Recap poster Instagram share card** — 1080×1350 PNG twin of the recap poster.
-- **P3 — LB drop toast** — friendly "second life" toast when a player is bounced from WB into LB in double-elim.
+- **P3 — RoundScorecard.jsx & LeagueDetail.jsx are big** (~1100 + ~570 lines). Optional refactor: extract `<RoundCard variant="active|upcoming|completed" />` and split the scorecard's completed-round early-return into its own file.
+- **P3 — Double-elim grand-final "bracket reset"** — still MVP single GF.
+- **P3 — Recap poster Instagram share card** — 1080×1350 PNG twin.
+- **P3 — LB drop toast** — "second life" copy when a player is bumped WB → LB.
 
 ## Iteration 42 (Feb 2026) — Confetti, Recap poster, Double elimination
 
