@@ -64,6 +64,13 @@ Enterprise-grade League Management platform:
 ## Deployment note
 - CI/CD should set `ACE_BUILD_ID=<git-sha>` **before both** `vite build` (frontend) **and** the backend container start, so client bundle and server report the same id. Any subsequent deploy with a different id will trigger the reload prompt for every open tab within 5 minutes.
 
+## Iteration 47 (Feb 2026) — Tournament Bulk PDF Compiler
+
+- **New `BulkScorecardPrintOverlay.jsx`** — director-only "Print All Tournament Scorecards" flow. Groups every scorecard on the round by its parent `card_id` (orphans bucketed under `__solo__`), renders one read-only green `<ScorecardGrid />` per group with a physical page-break between each (via a `.ac-bulk-card-group` class + `@media print { page-break-after: always }`), and auto-fires `window.print()` ~350ms after mount. Uses landscape letter for wide scorecards.
+- **Button placement**: `data-testid="bulk-print-btn"` renders on BOTH the active view (top action row next to `scorecard-print-btn` and `recap-poster-btn`) AND the completed view (isCompleted early-return branch, next to `scorecard-print-btn`). Outline styling: `border-slate-700 text-slate-800 bg-white hover:bg-slate-100 rounded-full`. Gated by `isDirector && scorecards.length > 0` — non-directors and empty rounds never see it.
+- **P0 invariant preserved**: the overlay renders the exact same `<ScorecardGrid />` component the completed-round view uses, so printed PDF == on-screen green grid == the platform's canonical scorecard format. Verified visually.
+- **Testing** (`/app/test_reports/iteration_40.json`): 22/22 UI assertions PASS after fixing two flags from iteration_39 (missing button on completed view, duplicate testid). Backend pytest untouched — no backend changes this iteration.
+
 ## Iteration 44-46 (Feb 2026) — WS auth fix, scorecard zoning, dashboard palette overhaul
 
 ### Iter 44 · Fix "RECONNECTING…" polling loop

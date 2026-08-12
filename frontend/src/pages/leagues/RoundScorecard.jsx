@@ -14,6 +14,7 @@ import LiveSimulatorPanel from "@/components/LiveSimulatorPanel";
 import FormatLeaderboardPanel from "@/components/FormatLeaderboardPanel";
 import TieBreakOverridePanel from "@/components/TieBreakOverridePanel";
 import RoundRecapPoster from "@/components/RoundRecapPoster";
+import BulkScorecardPrintOverlay from "@/components/BulkScorecardPrintOverlay";
 import { fireChampionConfetti } from "@/lib/confetti";
 import { enqueueScore, bindOfflineQueueListeners, pendingCount, flushQueue } from "@/lib/offlineQueue";
 
@@ -60,6 +61,8 @@ export default function RoundScorecard() {
   // stack so directors can focus on active player cards without the
   // pre-finalization panels squeezing the viewport.
   const [previewOpen, setPreviewOpen] = useState(false);
+  // "Print All Tournament Scorecards" overlay — director-only.
+  const [showBulkPrint, setShowBulkPrint] = useState(false);
   // "score" = per-hole scoring UI (default while round is active).
   // "grid"  = UDisc-style summary table (default once round is completed).
   // A useEffect below flips to "grid" the moment we detect a completed round.
@@ -369,7 +372,7 @@ export default function RoundScorecard() {
                 League Feed
               </button>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <span
                 data-testid="scorecard-round-final-badge"
                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-800 text-white font-mono text-[10px] uppercase tracking-wider"
@@ -386,6 +389,18 @@ export default function RoundScorecard() {
                 <Printer size={14} weight="duotone" />
                 Print / PDF
               </button>
+              {isDirector && scorecards.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowBulkPrint(true)}
+                  data-testid="bulk-print-btn"
+                  title="Compile every scorecard on this round into a single printable PDF"
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold text-slate-800 border border-slate-700 bg-white hover:bg-slate-100 transition-all shadow-sm"
+                >
+                  <Printer size={14} weight="duotone" />
+                  Print All Scorecards
+                </button>
+              )}
             </div>
           </div>
           <div className="text-center mb-6">
@@ -400,6 +415,16 @@ export default function RoundScorecard() {
             distances={round.distances_per_hole}
           />
         </div>
+        {showBulkPrint && (
+          <BulkScorecardPrintOverlay
+            league={league}
+            round={round}
+            scorecards={scorecards}
+            cards={cards}
+            memberMap={memberMap}
+            onClose={() => setShowBulkPrint(false)}
+          />
+        )}
       </div>
     );
   }
@@ -570,6 +595,18 @@ export default function RoundScorecard() {
             >
               <Printer size={14} weight="duotone" />
               Recap poster
+            </button>
+          )}
+          {isDirector && scorecards.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowBulkPrint(true)}
+              data-testid="bulk-print-btn"
+              title="Compile every scorecard on this round into a single printable PDF"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold text-slate-800 border border-slate-700 bg-white hover:bg-slate-100 transition-all shadow-sm"
+            >
+              <Printer size={14} weight="duotone" />
+              Print All Scorecards
             </button>
           )}
         </div>
@@ -905,6 +942,17 @@ export default function RoundScorecard() {
             scorecards={scorecards}
             members={members}
             onClose={() => setShowRecap(false)}
+          />
+        )}
+
+        {showBulkPrint && (
+          <BulkScorecardPrintOverlay
+            league={league}
+            round={round}
+            scorecards={scorecards}
+            cards={cards}
+            memberMap={memberMap}
+            onClose={() => setShowBulkPrint(false)}
           />
         )}
 

@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 40 — Retest of the Tournament Bulk PDF Compiler (bulk-print-btn) after the two flagged fixes from iteration_39.json. Both P0/MEDIUM regressions are resolved. Seeded a fresh league + active 9-hole round + 2 members + 2 cards (Card A director-only, Card B player-only) via API, then drove RoundScorecard.jsx as the director in both the ACTIVE and COMPLETED views, plus a non-director player pass on the completed view. 22/22 assertions PASS. Screenshot /app/.screenshots/completed_bulk_overlay.png shows the overlay opened on the COMPLETED view rendering two green ScorecardGrids stacked (Card A · 1 player + Card B · 1 player) with toolbar (Print again / Close) — exactly the P0 layout invariant. window.print() fires ~350ms after mount (silent try/catch, no console error). No regressions detected: sweep-finalize-btn still renders on the active card-picker row, and the completed early-return branch remains strictly unmounted (no simulators, no card builder, no hole nav, no sweep-finalize-btn, no new-card-btn). Non-director sees zero bulk-print-btn nodes.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix is minimal and localized to the completed early-return in RoundScorecard.jsx (lines 392-403): a copy of the button gated by `isDirector && scorecards.length > 0`, plus the BulkScorecardPrintOverlay mount at lines 418-427. Duplicate button in the active-view card-picker row has been removed cleanly — grep confirms only 2 occurrences of `data-testid=\"bulk-print-btn\"` in the file (line 396 for completed, line 604 for active).",
+    "RoundScorecard.jsx is still 1205 lines. The completed early-return (lines 352-430) is a decent split-point candidate but not urgent — this iteration only touched ~20 lines and preserved the strict unmount contract.",
+    "BulkScorecardPrintOverlay.jsx is untouched from previous iteration — 145 lines, clean, well-commented, delegates to ScorecardGrid so the printed output is 1:1 with the on-screen completed view."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "not tested (frontend-only retest per brief)",
+    "frontend": "100% (22/22)"
+  },
+  "test_credentials": "Fresh Firebase signups per run. This iteration used director qa-i48d-xx7rww@example.com / demo1234 and player qa-i48p-<rand>@example.com / demo1234. Signup form requires name, email, age (number), password, confirm password. Profile-photo modal appears after signup+login and MUST be dismissed with 'Skip for now' or subsequent clicks will be intercepted (this was the cause of a false-negative in the first attempt — fixed by adding a dismiss_profile_modal() helper).",
+  "seed_data_creation": "TEST_i48-<rand> league (Singles, entry_fee 0), one active Week 1 round (9 holes par 3, publish_announcement=false), 2 members, 2 cards (Card A + Card B), 2 auto-generated scorecards. Round PATCHed to 'completed' between active-view and completed-view assertions.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Correct route is /rounds/{roundId}. Firebase token: localStorage['firebase:authUser:<apiKey>:[DEFAULT]'].stsTokenManager.accessToken. League create schema: {name, location, format, entry_fee} — NOT the num_weeks/holes_per_round shape. Rounds are created via POST /api/leagues/{id}/rounds with {season_id, name, date, holes, par_per_hole, publish_announcement}. `season_id` is available from GET /api/leagues/{id}/seasons (auto-created on league creation). Card creation accepts player_ids as user uids OR member ids (test uses uids and it works). Profile-photo modal blocks clicks unless dismissed — always call 'Skip for now' after login/signup. Both bulk-print-btn testids are now unique per view: one on the active shared row (line 604) and one on the completed shared row (line 396). No further action needed for this feature.",
+  "rca of the issue": "N/A — previous iteration_39 flags are all resolved. Diff summary: (1) added `{isDirector && scorecards.length > 0 && (<bulk-print-btn/>)}` inside the completed-view header at lines 392-403, using identical outline classes as the active-view instance, (2) mounted `<BulkScorecardPrintOverlay/>` inside the completed early-return at lines 418-427, gated by showBulkPrint, (3) removed the duplicate bulk-print-btn from the card-picker row (was at line 643 in iteration 39) so the active view now has exactly one instance in the shared top action row. Verified with grep: 2 total testid occurrences file-wide (line 396 completed + line 604 active), and Playwright confirms count === 1 on each rendered view."
+}
