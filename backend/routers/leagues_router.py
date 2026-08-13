@@ -877,6 +877,16 @@ async def _finalize_round(round_id: str):
         recap_meta["most_improved"] = {"member_id": most_improved[0], "name": _member_name(most_improved[0]),
                                         "delta": round(most_improved[1], 1)}
 
+    # Stamp the round doc with the winner (hot-round finisher) so the
+    # dashboard's Completed Archive can render a "Winner: <name>" chip
+    # without having to re-query every scorecard on every page load.
+    winner_id = hot_round["member_id"]
+    winner_name = _member_name(winner_id)
+    await db.rounds.update_one(
+        {"id": round_id},
+        {"$set": {"winner_id": winner_id, "winner_name": winner_name}},
+    )
+
     post = FeedPost(league_id=rd["league_id"], kind="recap",
                     title=f"{rd['name']} Recap",
                     body=f"Round complete. Hot Round goes to {_member_name(hot_round['member_id'])}.",

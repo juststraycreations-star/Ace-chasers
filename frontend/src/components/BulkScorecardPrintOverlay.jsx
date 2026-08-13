@@ -77,6 +77,7 @@ export default function BulkScorecardPrintOverlay({
           .ac-bulk-print-hide { display: none !important; }
           .ac-bulk-card-group { page-break-after: always; break-after: page; }
           .ac-bulk-card-group:last-child { page-break-after: auto; break-after: auto; }
+          .ac-bulk-print-header { opacity: 1 !important; }
         }
       `}</style>
 
@@ -121,12 +122,47 @@ export default function BulkScorecardPrintOverlay({
             No scorecards yet on this round.
           </div>
         )}
-        {groups.map((g) => (
+        {groups.map((g, idx) => (
           <div
             key={g.cardId}
             className="ac-bulk-card-group"
             data-testid={`bulk-print-group-${g.cardId}`}
           >
+            {/* Emerald tournament-official header. Faint on-screen so it
+                doesn't dominate the preview, but full-strength on paper
+                via `@media print` (see the class hooks). Sheet number
+                and card label give directors a paper trail. */}
+            <div className="ac-bulk-print-header flex items-center justify-between border-b-2 border-emerald-600 pb-2 mb-3 opacity-70">
+              <div className="flex items-center gap-3">
+                <svg
+                  width="34" height="34" viewBox="0 0 60 60"
+                  aria-hidden="true"
+                  className="text-emerald-600"
+                >
+                  {/* Ace Chasers wordmark disc — emerald flying-disc silhouette */}
+                  <circle cx="30" cy="30" r="28" fill="currentColor" opacity="0.15" />
+                  <ellipse cx="30" cy="34" rx="22" ry="7" fill="currentColor" opacity="0.35" />
+                  <ellipse cx="30" cy="30" rx="22" ry="7" fill="currentColor" />
+                  <path d="M12 30 Q30 20 48 30" stroke="#ffffff" strokeWidth="1.5" fill="none" opacity="0.65" />
+                </svg>
+                <div className="leading-tight">
+                  <div className="font-display text-lg text-emerald-800 tracking-tight">
+                    ACE CHASERS
+                  </div>
+                  <div className="font-mono-data text-[10px] uppercase tracking-widest text-emerald-700/80">
+                    Official Tournament Scorecard
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-display text-sm text-slate-900 truncate">
+                  {round?.name || "Round"}
+                </div>
+                <div className="font-mono-data text-[10px] uppercase tracking-widest text-slate-500">
+                  {g.label} · Sheet {idx + 1} of {totalCards}
+                </div>
+              </div>
+            </div>
             <div className="font-mono-data text-[10px] uppercase tracking-widest text-slate-500 mb-2">
               {g.label} · {g.scorecards.length} player{g.scorecards.length === 1 ? "" : "s"}
             </div>

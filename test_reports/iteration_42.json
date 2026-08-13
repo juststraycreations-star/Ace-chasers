@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 42 (Winner-stamp + Palette sweep + RoundCard extract + Bulk-Print watermark) — Backend pytest suite 17/17 green covering iterations 39-49 including test_iteration49::test_completed_round_carries_winner_name_and_id (round doc now carries winner_id + winner_name after _finalize_round; GET /api/leagues/{id}/rounds echoes them). Frontend live-app verification against preview URL: (1) Winner chip — completed round card [round-card-completed-<id>] now contains [round-winner-chip-<id>] with text 'Winner · test_i50_6df30b1cb1' inside an emerald pill (bg-emerald-50 border-emerald-200 text-emerald-800) ✅. Fallback (winner_name null) branch is also present in RoundCard.jsx code. (2) Bulk print watermark — clicking [bulk-print-btn] on an active round opens [bulk-scorecard-print-overlay] with exactly one .ac-bulk-print-header per [bulk-print-group-<cardId>] (1/1 groups), containing the emerald SVG disc icon, ACE CHASERS wordmark, round name (Live Round), and 'Sheet 1 of 1 · <card label>' text ✅. Screenshot confirms visible emerald-underlined header block above the ScorecardGrid. (3) Standings palette — [standings-tab] renders a white card (bg-white + rounded-2xl + border-slate-200), first-rank number is text-emerald-600, [standings-division-*] chips are emerald pills (bg-emerald-50 text-emerald-800). Export CSV button has slate outline. Rows render Points/Rounds/Rating/Handicap/Bag Tag correctly. (4) Ledger palette — [ledger-tab] renders; zero .bg-zinc-900/.bg-zinc-800/.card-surface descendants remain (dark-zinc surfaces fully migrated). Emerald chip count is 0 because the seed league has no fee ledger rows yet — expected, not a bug. (5) RoundCard extraction — three sections render with the exact testids the request calls out: round-card-completed-<id>, round-open-<id>, round-pdf-<id>; iteration_38 dashboard behavior preserved. Regression: Clubhouse remains default landing (/feed after login), bulk overlay still fires window.print() (intercepted), BracketView untouched.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration49.py",
+    "/app/test_reports/pytest/iter39-49.xml",
+    "/app/test_reports/pytest/iter49.xml",
+    "/app/tests/seed_iter50.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "BulkScorecardPrintOverlay.jsx — the on-screen opacity-70 watermark is helpful for QA but at 34px SVG + tracking-widest wordmark, it can dominate the preview modal for single-card rounds. Consider dropping to opacity-50 on-screen (still opacity 1 in @media print via the existing rule) so the actual scorecard remains the visual focus in the preview.",
+    "RoundCard.jsx completed variant renders the winner chip only when winner_name is present; the null-fallback branch is correct. If backend ever back-fills a legacy completed round WITHOUT re-running _finalize_round, those docs will render 'Winner · —'. Consider a lightweight one-shot migration to fill winner_name/winner_id on historic completed rounds so the archive is uniformly populated.",
+    "StandingsTab.jsx — nice bag-tag matrix + white card sweep, but the <table class='ledger-grid'> still uses the ledger-grid CSS class which historically shipped dark-zinc styles. Verified visually the rows render fine in the emerald theme, but audit ledger-grid CSS in App.css/index.css to make sure it isn't still declaring text-zinc-* colors that get overridden inline. Not blocking.",
+    "LedgerTab.jsx — tab shell verified clean of dark surfaces; because the test league had no ledger rows, the emerald chip variants (chip-orange/green migration) could not be visually asserted end-to-end. Recommend a one-off manual QA once a real league has ledger activity, or extend future pytest to seed a ledger row."
+  ],
+  "updated_files": [
+    "/app/tests/seed_iter50.py (new — seed helper for winner-chip + bulk-print UI verification)"
+  ],
+  "success_rate": {
+    "backend": "100% (17/17 pytest across iterations 39-49)",
+    "frontend": "100% (all 15 scripted spec assertions passed)"
+  },
+  "test_credentials": "Fresh Firebase signup per run. This iteration: TEST_i50_6df30b1cb1@example.com / demo1234 (director; created via Identity signUp + /api/auth/sync).",
+  "seed_data_creation": "seed_iter50.py creates 1 league (Singles, entry_fee 0), 1 COMPLETED round with 9-hole par card finalized by the director (hot round → winner_name populated), and 1 ACTIVE round with 1 joined scorecard used for the bulk-print watermark check.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Preview URL works with Firebase Identity signup. Login page selectors: input[type=email], input[type=password], button[type=submit]. Post-signup 'Skip for now' + Clubhouse 'I Agree' modals still intercept clicks — dismiss via role selectors. To exercise the winner-stamp UI end-to-end, use /app/tests/seed_iter50.py — it prints the credentials + league_id + round ids + winner_name so the Playwright script can jump straight to /leagues/{id}?tab=rounds and open the [rounds-completed-toggle]. For bulk print, remember to page.evaluate('window.print = () => {}') BEFORE clicking [bulk-print-btn] on /rounds/{id}, else the browser print dialog will block. Standings/Ledger tab structural changes verified via classList inspection in-page (see script). BracketView not exercised here — no bracket seeded — but no palette code was pushed to it per the diff.",
+  "rca of the issue": "N/A — all four features work end-to-end. Only minor code-review nits above."
+}

@@ -8,6 +8,7 @@ import ClubhouseTab from "@/components/ClubhouseTab";
 import ComplianceTab from "@/components/ComplianceTab";
 import ManagerDMPanel from "@/components/ManagerDMPanel";
 import RoundQRPanel from "@/components/RoundQRPanel";
+import RoundCard from "@/components/RoundCard";
 import BracketView from "@/components/BracketView";
 import ClubhouseAgreementModal from "@/components/ClubhouseAgreementModal";
 import { useAuth } from "@/context/AuthContext";
@@ -264,58 +265,16 @@ export default function LeagueDetail() {
                         <h2 className="font-display text-sm uppercase tracking-widest text-emerald-800">Active Round</h2>
                       </div>
                       {active.map((r) => (
-                        <div
+                        <RoundCard
                           key={r.id}
-                          data-testid={`round-card-active-${r.id}`}
-                          className="rounded-2xl border-2 border-emerald-500 bg-white shadow-md p-6 mb-3"
-                        >
-                          <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
-                            <div>
-                              <div className="font-display text-2xl text-slate-900">{r.name}</div>
-                              <div className="text-xs text-slate-500 mt-1 font-mono-data uppercase tracking-wider">
-                                {new Date(r.date).toLocaleDateString()} · {r.holes} holes
-                              </div>
-                            </div>
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1 text-[10px] font-mono-data uppercase tracking-widest font-semibold">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              LIVE
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              data-testid={`round-open-${r.id}`}
-                              onClick={() => navigate(`/rounds/${r.id}`)}
-                              className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-4 py-2 shadow-sm transition-colors"
-                            >
-                              Open Scorecard
-                            </button>
-                            {league.is_director && (
-                              <button
-                                data-testid={`round-complete-${r.id}`}
-                                onClick={() => completeRound(r.id)}
-                                className="inline-flex items-center gap-1.5 rounded-full bg-white text-slate-800 border border-slate-300 hover:border-slate-500 font-semibold text-sm px-4 py-2 transition-colors"
-                              >
-                                <CheckCircle size={14} weight="fill" className="text-emerald-600" /> Finalize
-                              </button>
-                            )}
-                            {league.is_director && (
-                              <button
-                                data-testid={`round-qr-btn-${r.id}`}
-                                onClick={() => setQrRoundId(qrRoundId === r.id ? null : r.id)}
-                                className="inline-flex items-center gap-1.5 rounded-full bg-white text-slate-800 border border-slate-300 hover:border-slate-500 font-semibold text-sm px-4 py-2 transition-colors"
-                                title="Show a QR code for players to self-enroll on this round"
-                              >
-                                <QrCode size={14} weight="bold" className="text-emerald-600" />
-                                {qrRoundId === r.id ? "Hide QR" : "Check-In QR"}
-                              </button>
-                            )}
-                          </div>
-                          {qrRoundId === r.id && (
-                            <div className="mt-4" data-testid={`round-qr-wrapper-${r.id}`}>
-                              <RoundQRPanel roundId={r.id} roundName={r.name} />
-                            </div>
-                          )}
-                        </div>
+                          variant="active"
+                          round={r}
+                          isDirector={league.is_director}
+                          qrOpen={qrRoundId === r.id}
+                          onOpenScorecard={() => navigate(`/rounds/${r.id}`)}
+                          onFinalize={() => completeRound(r.id)}
+                          onToggleQR={() => setQrRoundId(qrRoundId === r.id ? null : r.id)}
+                        />
                       ))}
                     </section>
                   )}
@@ -336,36 +295,14 @@ export default function LeagueDetail() {
                     ) : (
                       <ul className="space-y-2">
                         {upcoming.map((r) => (
-                          <li
+                          <RoundCard
                             key={r.id}
-                            data-testid={`round-card-upcoming-${r.id}`}
-                            className="rounded-xl border border-slate-200 bg-white px-4 py-3 flex items-center justify-between gap-3 flex-wrap hover:border-slate-300 transition-colors"
-                          >
-                            <div className="min-w-0">
-                              <div className="font-display text-base text-slate-900 truncate">{r.name}</div>
-                              <div className="text-xs text-slate-500 font-mono-data uppercase tracking-wider mt-0.5">
-                                {new Date(r.date).toLocaleDateString()} · {r.holes} holes
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                data-testid={`round-open-${r.id}`}
-                                onClick={() => navigate(`/rounds/${r.id}`)}
-                                className="inline-flex items-center gap-1.5 rounded-full bg-white text-slate-800 border border-slate-300 hover:border-slate-500 font-semibold text-sm px-4 py-2 transition-colors"
-                              >
-                                Open Scorecard
-                              </button>
-                              {league.is_director && (
-                                <button
-                                  data-testid={`round-start-${r.id}`}
-                                  onClick={() => startRound(r.id)}
-                                  className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-4 py-2 shadow-sm transition-colors"
-                                >
-                                  <PlayCircle size={14} weight="fill" /> Start
-                                </button>
-                              )}
-                            </div>
-                          </li>
+                            variant="upcoming"
+                            round={r}
+                            isDirector={league.is_director}
+                            onOpenScorecard={() => navigate(`/rounds/${r.id}`)}
+                            onStart={() => startRound(r.id)}
+                          />
                         ))}
                       </ul>
                     )}
@@ -395,25 +332,12 @@ export default function LeagueDetail() {
                           data-testid="rounds-completed-list"
                         >
                           {completed.map((r) => (
-                            <li
+                            <RoundCard
                               key={r.id}
-                              data-testid={`round-card-completed-${r.id}`}
-                              className="flex items-center justify-between gap-3 flex-wrap px-4 py-3"
-                            >
-                              <div className="min-w-0">
-                                <div className="font-display text-sm text-slate-900 truncate">{r.name}</div>
-                                <div className="text-[11px] text-slate-500 font-mono-data uppercase tracking-wider">
-                                  {new Date(r.date).toLocaleDateString()} · Winner —
-                                </div>
-                              </div>
-                              <button
-                                data-testid={`round-pdf-${r.id}`}
-                                onClick={() => navigate(`/rounds/${r.id}`)}
-                                className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3 py-1.5 shadow-sm transition-colors"
-                              >
-                                PDF Scorecard
-                              </button>
-                            </li>
+                              variant="completed"
+                              round={r}
+                              onOpenScorecard={() => navigate(`/rounds/${r.id}`)}
+                            />
                           ))}
                         </ul>
                       )}

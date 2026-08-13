@@ -64,6 +64,34 @@ Enterprise-grade League Management platform:
 ## Deployment note
 - CI/CD should set `ACE_BUILD_ID=<git-sha>` **before both** `vite build` (frontend) **and** the backend container start, so client bundle and server report the same id. Any subsequent deploy with a different id will trigger the reload prompt for every open tab within 5 minutes.
 
+## Iteration 49 (Feb 2026) — Winner chip · Palette sweep · RoundCard extract · Bulk-print watermark
+
+### Item 1 · Winner name stamped on completed rounds
+- `_finalize_round` in `leagues_router.py` now writes `winner_id` + `winner_name` back to the round document (hot-round finisher). `GET /api/leagues/{id}/rounds` echoes both fields.
+- Backfill note (P3): pre-existing completed rounds still show "Winner · —" until they are re-finalized. One-off migration recommended.
+
+### Item 2 · Standings + Ledger palette sweep
+- `StandingsTab.jsx` — white-card container (`rounded-2xl border border-slate-200 bg-white shadow-sm`), emerald first-rank number, emerald division chip, slate export button, slate text tokens throughout.
+- `LedgerTab.jsx` — same token migration via bulk replace: `card-surface` → white card, `text-zinc-*` → `text-slate-*`, `[#F5C542]` → `text-emerald-700`, `chip-orange`/`chip-green` → emerald pills. Verified no dark-zinc surfaces remain.
+- BracketView already matched the palette — no changes needed.
+
+### Item 3 · `<RoundCard variant="active|upcoming|completed" />` extracted
+- New `/app/frontend/src/components/RoundCard.jsx` — three-variant pure component with shared `primaryBtn` / `secondaryBtn` class tokens. LeagueDetail Rounds tab now delegates rendering to RoundCard, dropping ~150 lines of duplicated JSX.
+- Completed variant surfaces the new `data-testid="round-winner-chip-<id>"` — emerald pill for populated winner, slate pill for legacy rounds.
+
+### Item 4 · Bulk print watermark
+- `BulkScorecardPrintOverlay.jsx` now renders an `ac-bulk-print-header` block per card group containing an inline emerald SVG disc + ACE CHASERS wordmark + round name + "Sheet N of M · <card label>". On-screen the header sits at opacity-70; `@media print` promotes it to full opacity so paper copies look tournament-official.
+
+## Testing
+- Backend pytest — **17/17 PASS** across iterations 39-49. New test: `test_iteration49.py::test_completed_round_carries_winner_name_and_id`.
+- Frontend testing_agent (`/app/test_reports/iteration_42.json`) — **15/15 assertions PASS**. Zero UI/integration/design issues, `retest_needed: false`.
+
+## Backlog (P3 nice-to-haves surfaced by iteration 42 code review)
+- Bulk print header opacity-50 on-screen (already opacity-1 in print). Cosmetic.
+- One-off migration to backfill `winner_name`/`winner_id` on historic completed rounds so the archive is uniformly populated.
+- Audit `ledger-grid` CSS class in `App.css`/`index.css` for any residual `text-zinc-*` declarations.
+- Extend pytest to seed a ledger row so emerald chip variants (chip-orange/green migration) can be visually asserted end-to-end.
+
 ## Iteration 48 (Feb 2026) — Clubhouse feed as default landing + multimedia parity
 
 - **Default landing tab**: `LeagueDetail.jsx` `initialTab` default flipped from `"rounds"` to `"clubhouse"`. `?tab=<key>` URL param still overrides — `?tab=rounds` lands on Rounds as before.
