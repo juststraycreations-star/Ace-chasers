@@ -1,0 +1,45 @@
+{
+  "summary": "Focused retest of iteration_43's sole flagged issue: <Toaster /> mount. Verified via live Playwright run against preview URL as director TEST_i51_3964d5c6cc@example.com on league d297cf8b-7ea3-47ca-83e5-394f8881d1a1. All 4 requested checks PASS. Toaster is mounted in App.jsx (line 122) inside <LeagueAuthProvider>, sonner section is present in the DOM ('section[aria-label=\"Notifications alt+T\"]'), and toasts fire globally as expected.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_checks": [
+    {
+      "check": "TOASTER MOUNTED",
+      "result": "PASS",
+      "detail": "Sonner Toaster mounts a <section aria-label='Notifications alt+T'> at document.body. Note: sonner v2.0.7 no longer places the 'data-sonner-toaster' attribute on the outer <section>; the previous test's exact selector query returned false for that reason. Robust selector: section[aria-label='Notifications alt+T']. Presence confirmed on both /feed and /leagues/{id}."
+    },
+    {
+      "check": "OVERSIZE IMAGE TOAST (>8MB)",
+      "result": "PASS",
+      "detail": "9MB JPEG queued via post-file-input, Publish clicked. Red error sonner toast rendered top-right with exact text 'Image too large (max 8MB)'. Queued file remained in the preview strip (1 post-media-clear-* item persisted). Console shows the guard fires and no /api/files/upload request is attempted."
+    },
+    {
+      "check": "OVERSIZE VIDEO TOAST (>25MB)",
+      "result": "PASS",
+      "detail": "26MB MP4 queued, Publish clicked. Red error sonner toast rendered top-right with exact text 'Video too large (max 25MB)' (screenshot: /app/test_reports/iter44_video_toast.png). Queued file preserved in composer."
+    },
+    {
+      "check": "SUCCESS TOAST SPOT-CHECK (delete post)",
+      "result": "PASS",
+      "detail": "Created a text-only post, clicked feed-delete-btn-<postId>. Green success sonner toast rendered top-right with text 'Post removed' (screenshot: /app/test_reports/iter44_delete.png). Confirms the Toaster mount also unblocks every previously-silent toast.success across the app."
+    }
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Non-blocking: sonner v2.x removed the 'data-sonner-toaster' attribute from the outer <section>. Any existing E2E test/regression that queries document.querySelector('[data-sonner-toaster]') will return null even though the toaster is mounted. Prefer 'section[aria-label=\"Notifications alt+T\"]' or an inner '[data-sonner-toast]' selector going forward.",
+    "Non-blocking (still open from iteration_43): ClubhouseFeedComposer leaks URL.createObjectURL blobs on successful submit / unmount — revokeObjectURL is only called from removeAttachment. Add cleanup in a useEffect and after successful onPostSubmit."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend-only)", "frontend": "4/4 checks PASS" },
+  "test_credentials": "TEST_i51_3964d5c6cc@example.com / demo1234 (director, still valid). League id d297cf8b-7ea3-47ca-83e5-394f8881d1a1.",
+  "seed_data_creation": "None — reused iteration_43's director + league.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Toaster mount issue is RESOLVED. When asserting Toaster presence with sonner >= 2.x, do NOT rely on '[data-sonner-toaster]' — use section[aria-label='Notifications alt+T'] or query for '[data-sonner-toast]' after a toast fires. The post-file-input is class='hidden' (display:none); use state='attached' with wait_for_selector, and drive it by building an in-page File+DataTransfer and dispatching a 'change' event (avoids Cloudinary hitting invalid binary since the guard aborts pre-upload).",
+  "rca of the issue": "Original bug: <Toaster /> from sonner was never rendered in App.jsx, so every toast.success/error call was a visual no-op. Fix (verified): /app/frontend/src/App.jsx now imports Toaster from './components/ui/sonner' (line 10) and renders <Toaster richColors position='top-right' /> inside <LeagueAuthProvider> at line 122. Retest confirmed the sonner root section is present and both the oversize-guard error toasts ('Image too large (max 8MB)' / 'Video too large (max 25MB)') and a previously-silent success toast ('Post removed' on feed delete) now render globally."
+}

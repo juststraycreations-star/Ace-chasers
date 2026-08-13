@@ -7,6 +7,7 @@ import EmailVerificationBanner from './components/EmailVerificationBanner';
 import OnboardingGate from './components/OnboardingGate';
 import FirstRunWelcomeModal from './components/FirstRunWelcomeModal';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
+import { Toaster } from './components/ui/sonner';
 import { startBuildVersionWatcher } from './lib/buildVersion';
 // Login + SignUp stay eager — they are the first paint for logged-out
 // visitors so shipping them in the initial bundle saves a round-trip.
@@ -118,6 +119,7 @@ function App() {
       <AuthProvider>
         <LeagueAuthProvider>
           <AppRoutes />
+          <Toaster richColors position="top-right" />
         </LeagueAuthProvider>
       </AuthProvider>
     </Router>

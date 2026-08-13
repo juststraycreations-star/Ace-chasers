@@ -64,6 +64,26 @@ Enterprise-grade League Management platform:
 ## Deployment note
 - CI/CD should set `ACE_BUILD_ID=<git-sha>` **before both** `vite build` (frontend) **and** the backend container start, so client bundle and server report the same id. Any subsequent deploy with a different id will trigger the reload prompt for every open tab within 5 minutes.
 
+## Iteration 50 (Feb 2026) — ClubhouseFeedComposer swap + global Toaster mount
+
+### Item 1 · ClubhouseFeedComposer
+- New `/app/frontend/src/components/ClubhouseFeedComposer.jsx` — polished standalone composer surface using `lucide-react` icons, slate-50 section header, emerald primary CTA, and a horizontal multi-attachment thumbnail strip. Emits `onPostSubmit({ text, media })` where `media` is `Array<{ file, id, preview, isVideo }>`.
+- `ClubhouseTab.jsx` swap: old inline composer JSX + state (postImage/postVideo/etc) removed. New `submitPost({ text, media })` adapter maps the composer payload to the current backend contract — uploads first-of-kind image and first-of-kind video from the queued files (extra items dropped; captured in a code comment as a future backend-array enhancement).
+- Data-testids preserved for existing e2e tests: `new-post`, `post-input`, `post-image-btn`, `post-video-btn`, `post-submit`, `post-media-preview`. Per-thumb clear became `post-media-clear-<id>`.
+
+### Item 2 · Global `<Toaster />` mount (long-standing silent-toast bug fixed)
+- `App.jsx` now imports `Toaster` from `@/components/ui/sonner` and mounts `<Toaster richColors position="top-right" />` once inside `<LeagueAuthProvider>`.
+- **Root cause** flagged by testing_agent iteration_43: the sonner Toaster wrapper existed under `components/ui/sonner.jsx` but was never rendered anywhere in the app tree. Every `toast.success`/`toast.error` call across the entire app (post delete, mute, story upload, announcement, LF post, resolve, oversize guards) has been silent since bootstrap. Now they all render.
+
+### Testing
+- `test_iteration43.json` — 8/9 assertions on the composer PASS; the 1 flag (missing Toaster) is fixed here.
+- `test_iteration44.json` — targeted retest **4/4 PASS**, `retest_needed: false`, zero UI bugs.
+
+## Backlog (P3 nice-to-haves from iteration 43 code review)
+- `URL.revokeObjectURL` cleanup on successful submit + composer unmount to prevent blob URL leaks.
+- Prefer `crypto.randomUUID()` over deprecated `String.prototype.substr` in the composer's id generator.
+- Extend `/api/leagues/{id}/feed` to accept media arrays (multiple images/videos per post) so the composer no longer silently drops extras.
+
 ## Iteration 49 (Feb 2026) — Winner chip · Palette sweep · RoundCard extract · Bulk-print watermark
 
 ### Item 1 · Winner name stamped on completed rounds
