@@ -60,28 +60,29 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
     return data.path;
   };
 
-  // Bridges the new composer's `{ text, media[] }` payload to our
-  // current backend contract: one image + one video per post. If the
-  // user attaches multiple images or videos we take the first of each
-  // kind — extra items are dropped so the server doesn't reject the
-  // payload. A future backend enhancement could accept arrays.
+  // Bridges the new composer's `{ text, media[] }` payload to the
+  // backend's `media[]` contract (iteration 51). Uploads every queued
+  // file in order and posts a single feed entry with the full array.
   const submitPost = async ({ text, media }) => {
     const body = (text || "").trim();
-    const image = (media || []).find((m) => !m.isVideo);
-    const video = (media || []).find((m) => m.isVideo);
-    if (!body && !image && !video) return;
-    if (image && image.file.size > MAX_IMAGE_BYTES) {
-      toast.error("Image too large (max 8MB)");
-      throw new Error("image too large");
-    }
-    if (video && video.file.size > MAX_VIDEO_BYTES) {
-      toast.error("Video too large (max 25MB)");
-      throw new Error("video too large");
+    const list = media || [];
+    if (!body && list.length === 0) return;
+    for (const m of list) {
+      const cap = m.isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+      const label = m.isVideo ? "Video" : "Image";
+      const capMB = m.isVideo ? 25 : 8;
+      if (m.file.size > cap) {
+        toast.error(`${label} too large (max ${capMB}MB)`);
+        throw new Error(`${label} too large`);
+      }
     }
     try {
-      const image_path = image ? await uploadOne(image.file) : null;
-      const video_path = video ? await uploadOne(video.file) : null;
-      await api.post(`/leagues/${leagueId}/feed`, { body, image_path, video_path });
+      const uploaded = [];
+      for (const m of list) {
+        const path = await uploadOne(m.file);
+        uploaded.push({ kind: m.isVideo ? "video" : "image", path });
+      }
+      await api.post(`/leagues/${leagueId}/feed`, { body, media: uploaded });
       await load();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed to post");
@@ -326,27 +327,42 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
                       </div>
                     )}
                     <div className="mt-2 text-sm text-slate-800 whitespace-pre-wrap">{p.body}</div>
-                    {p.image_path && (
-                      <div className="mt-3" data-testid={`feed-post-image-${p.id}`}>
-                        <AuthImage
-                          path={p.image_path}
-                          className="max-h-96 rounded-lg border border-slate-200 cursor-zoom-in"
-                          onClick={() => setLightbox({ path: p.image_path, caption: p.author_name })}
-                          alt=""
-                        />
-                      </div>
-                    )}
-                    {p.video_path && (
-                      <div className="mt-3" data-testid={`feed-post-video-${p.id}`}>
-                        <video
-                          src={p.video_path.startsWith("http") ? p.video_path : `/api/files/${p.video_path}`}
-                          poster={p.video_poster || undefined}
-                          controls
-                          preload="metadata"
-                          className="max-h-96 w-full rounded-lg border border-slate-200 bg-black"
-                        />
-                      </div>
-                    )}
+                    {(() => {
+                      // Iteration 51: posts now carry an ordered `media[]`.
+                      // Fall back to legacy image_path / video_path for
+                      // posts created before the migration.
+                      const items = (p.media && p.media.length)
+                        ? p.media
+                        : [
+                            ...(p.image_path ? [{ kind: "image", path: p.image_path }] : []),
+                            ...(p.video_path ? [{ kind: "video", path: p.video_path, poster: p.video_poster }] : []),
+                          ];
+                      if (items.length === 0) return null;
+                      return (
+                        <div className="mt-3 grid gap-2" data-testid={`feed-post-media-${p.id}`}>
+                          {items.map((m, i) => m.kind === "image" ? (
+                            <AuthImage
+                              key={i}
+                              path={m.path}
+                              className="max-h-96 rounded-lg border border-slate-200 cursor-zoom-in"
+                              onClick={() => setLightbox({ path: m.path, caption: p.author_name })}
+                              alt=""
+                              data-testid={`feed-post-image-${p.id}-${i}`}
+                            />
+                          ) : (
+                            <video
+                              key={i}
+                              src={m.path.startsWith("http") ? m.path : `/api/files/${m.path}`}
+                              poster={m.poster || undefined}
+                              controls
+                              preload="metadata"
+                              className="max-h-96 w-full rounded-lg border border-slate-200 bg-black"
+                              data-testid={`feed-post-video-${p.id}-${i}`}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                   {(isDirector || p.author_id === currentUser?.user_id) && !p.hidden && (
                     <div className="flex items-center gap-1 shrink-0" data-testid={`feed-mod-panel-${p.id}`}>

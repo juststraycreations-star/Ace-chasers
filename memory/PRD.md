@@ -64,6 +64,16 @@ Enterprise-grade League Management platform:
 ## Deployment note
 - CI/CD should set `ACE_BUILD_ID=<git-sha>` **before both** `vite build` (frontend) **and** the backend container start, so client bundle and server report the same id. Any subsequent deploy with a different id will trigger the reload prompt for every open tab within 5 minutes.
 
+## Iteration 51 (Feb 2026) — Feed post `media[]` array (composer no longer drops extras)
+
+- **Backend**: `FeedPost` model + `FeedPostCreate` payload extended with `media: List[{kind: "image"|"video", path, poster?}]`. `POST /api/leagues/{id}/feed` now:
+  1. Accepts the new `media[]` array as the canonical form.
+  2. Folds any legacy `image_path`/`video_path`/`video_poster` payload into `media[]` at write time so pre-iteration-51 clients keep working.
+  3. Mirrors the first-of-kind media back onto the legacy single-item fields on the persisted doc so pre-iteration-51 renderers (mobile clients, share cards) still show media.
+- **Frontend composer adapter** (`ClubhouseTab.jsx`): uploads every queued file in order and posts a single feed entry with the full `media[]`. Oversize toasts (Image >8MB, Video >25MB) fire per-item, before any upload.
+- **Feed post render**: iterates `p.media[]` when present; falls back to `image_path` / `video_path` for legacy posts. Every attachment gets its own `feed-post-image-<id>-<i>` / `feed-post-video-<id>-<i>` testid.
+- **Testing**: `tests/test_iteration51.py` — 3/3 PASS (full round-trip with 2 images + 1 video; legacy image_path acceptance + normalization; empty body + empty media rejected 400). Full regression suite still green.
+
 ## Iteration 50 (Feb 2026) — ClubhouseFeedComposer swap + global Toaster mount
 
 ### Item 1 · ClubhouseFeedComposer

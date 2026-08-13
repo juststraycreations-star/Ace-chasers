@@ -9,10 +9,10 @@ change; `server.py` still only mounts the leagues router once.
 from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import Cookie, Header, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # All of these are defined in leagues_router.py — we reuse the same
 # router instance + helpers so we do not double-register or double-shim
@@ -148,14 +148,24 @@ async def list_stories(league_id: str, request: Request,
 
 
 # ============= LEAGUE FEED (member wall) =============
+class FeedMediaItem(BaseModel):
+    kind: Literal["image", "video"]
+    path: str
+    poster: Optional[str] = None
+
+
 class FeedPostCreate(BaseModel):
     body: str = ""
     title: Optional[str] = None
-    # Optional media attachments — storage paths returned by `/api/files/upload`.
-    # Members can post text-only, media-only, or a combination.
+    # Legacy single-item fields (kept for backward-compat). New callers
+    # should send `media` as an ordered list instead.
     image_path: Optional[str] = None
     video_path: Optional[str] = None
     video_poster: Optional[str] = None
+    # New in iteration 51: an arbitrary ordered list of attachments.
+    # Each item is `{ kind: "image"|"video", path, poster? }`. Payloads
+    # that mix `media` and legacy fields are normalized server-side.
+    media: List[FeedMediaItem] = Field(default_factory=list)
 
 
 @api_router.post("/leagues/{league_id}/feed")
@@ -165,14 +175,31 @@ async def create_feed_post(league_id: str, payload: FeedPostCreate, request: Req
     user = await get_current_user(request, session_token, authorization)
     await _require_member(league_id, user.user_id)
     body = (payload.body or "").strip()
-    has_media = bool(payload.image_path or payload.video_path)
+    # Normalize incoming media: prefer explicit `media[]`, but fold any
+    # legacy image_path/video_path into the front of the list so a client
+    # that still sends the old shape keeps working.
+    media: List[Dict[str, Any]] = []
+    if payload.image_path:
+        media.append({"kind": "image", "path": payload.image_path})
+    if payload.video_path:
+        media.append({"kind": "video", "path": payload.video_path,
+                      "poster": payload.video_poster})
+    for m in payload.media:
+        media.append(m.model_dump())
+    has_media = bool(media)
     if not body and not has_media:
         raise HTTPException(status_code=400, detail="Post must include text or media")
+    # Populate legacy single-item fields from the first-of-kind so old
+    # feed renderers (mobile clients, share-cards) still work.
+    first_image = next((m for m in media if m["kind"] == "image"), None)
+    first_video = next((m for m in media if m["kind"] == "video"), None)
     p = FeedPost(
         league_id=league_id, kind="post", title=payload.title, body=body,
         author_id=user.user_id, author_name=user.name, author_picture=user.picture,
-        image_path=payload.image_path, video_path=payload.video_path,
-        video_poster=payload.video_poster,
+        image_path=(first_image or {}).get("path"),
+        video_path=(first_video or {}).get("path"),
+        video_poster=(first_video or {}).get("poster"),
+        media=media,
     )
     await db.feed_posts.insert_one(p.model_dump())
     return p.model_dump()

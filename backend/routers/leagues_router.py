@@ -384,9 +384,15 @@ class FeedPost(BaseModel):
     # post text + image, text + video, or media alone. Videos additionally
     # ship an optional `video_poster` frame captured client-side for
     # preview thumbnails.
+    #
+    # Legacy single-item fields (image_path/video_path) are kept for
+    # backward-compat with feed posts created before iteration 51. New
+    # posts should populate the ordered `media` array instead; the two
+    # forms are hydrated together on read.
     image_path: Optional[str] = None
     video_path: Optional[str] = None
     video_poster: Optional[str] = None
+    media: List[Dict[str, Any]] = Field(default_factory=list)
     # `pinned` posts sort to the top of the feed. Used by the auto-schedule
     # publisher so newly-created rounds surface immediately in the clubhouse.
     pinned: bool = False
