@@ -3,9 +3,12 @@ import api from "@/lib/api";
 import AuthImage from "./AuthImage";
 import Lightbox from "./Lightbox";
 import { toast } from "sonner";
-import { PushPin, Warning, ImageSquare, Plus, Fire, TrendUp, Trash, CheckCircle, SpeakerX } from "@phosphor-icons/react";
+import { PushPin, Warning, ImageSquare, Plus, Fire, TrendUp, Trash, CheckCircle, SpeakerX, VideoCamera, X as CloseIcon } from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
 
 export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
   const [tab, setTab] = useState("feed"); // feed | lost-found
@@ -18,6 +21,14 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
   const lfImgRef = useRef(null);
   const [lfImage, setLfImage] = useState(null);
   const [newPost, setNewPost] = useState("");
+  // Composer media state — mirrors the main Feed.jsx UX (image OR video, not both).
+  const [postImage, setPostImage] = useState(null);        // File object
+  const [postImagePreview, setPostImagePreview] = useState(null);
+  const [postVideo, setPostVideo] = useState(null);
+  const [postVideoPreview, setPostVideoPreview] = useState(null);
+  const [postingMedia, setPostingMedia] = useState(false);
+  const postImageRef = useRef(null);
+  const postVideoRef = useRef(null);
   const [newAnn, setNewAnn] = useState({ title: "", body: "", urgent: false });
   const [showAnnForm, setShowAnnForm] = useState(false);
   const [lfForm, setLfForm] = useState({ title: "", description: "" });
@@ -50,13 +61,54 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
     finally { setUploading(false); if (storyInputRef.current) storyInputRef.current.value = ""; }
   };
 
+  const pickImage = (file) => {
+    if (!file) return;
+    if (file.size > MAX_IMAGE_BYTES) { toast.error("Image too large (max 8MB)"); return; }
+    setPostVideo(null); setPostVideoPreview(null);
+    setPostImage(file);
+    setPostImagePreview(URL.createObjectURL(file));
+  };
+
+  const pickVideo = (file) => {
+    if (!file) return;
+    if (file.size > MAX_VIDEO_BYTES) { toast.error("Video too large (max 25MB)"); return; }
+    setPostImage(null); setPostImagePreview(null);
+    setPostVideo(file);
+    setPostVideoPreview(URL.createObjectURL(file));
+  };
+
+  const clearComposerMedia = () => {
+    setPostImage(null); setPostImagePreview(null);
+    setPostVideo(null); setPostVideoPreview(null);
+    if (postImageRef.current) postImageRef.current.value = "";
+    if (postVideoRef.current) postVideoRef.current.value = "";
+  };
+
+  const uploadOne = async (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const { data } = await api.post("/files/upload", fd, { headers: { "Content-Type": "multipart/form-data" }});
+    return data.path;
+  };
+
   const submitPost = async () => {
-    if (!newPost.trim()) return;
+    const body = newPost.trim();
+    if (!body && !postImage && !postVideo) return;
+    setPostingMedia(true);
     try {
-      await api.post(`/leagues/${leagueId}/feed`, { body: newPost });
+      let image_path = null;
+      let video_path = null;
+      if (postImage) image_path = await uploadOne(postImage);
+      if (postVideo) video_path = await uploadOne(postVideo);
+      await api.post(`/leagues/${leagueId}/feed`, { body, image_path, video_path });
       setNewPost("");
+      clearComposerMedia();
       await load();
-    } catch { toast.error("Failed to post"); }
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to post");
+    } finally {
+      setPostingMedia(false);
+    }
   };
 
   const submitAnnouncement = async () => {
@@ -229,11 +281,88 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
             </div>
           )}
 
-          {/* New post */}
-          <div className="card-surface p-6" data-testid="new-post">
-            <Textarea data-testid="post-input" placeholder="Share a thought with the league…" value={newPost} onChange={(e) => setNewPost(e.target.value)} className="bg-[#2a5f3d] border-white/10 min-h-[70px]" />
-            <div className="flex justify-end mt-2">
-              <button data-testid="post-submit" onClick={submitPost} className="btn-primary text-xs">Post</button>
+          {/* New post — composer with text + image + video attachments (1:1 with main Feed) */}
+          <div
+            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+            data-testid="new-post"
+          >
+            <Textarea
+              data-testid="post-input"
+              placeholder="Share a thought with the league…"
+              value={newPost}
+              onChange={(e) => setNewPost(e.target.value)}
+              className="bg-white text-slate-900 placeholder:text-slate-400 border-slate-200 focus:border-emerald-500 min-h-[70px]"
+            />
+            {(postImagePreview || postVideoPreview) && (
+              <div className="relative mt-3 inline-block" data-testid="post-media-preview">
+                {postImagePreview && (
+                  <img
+                    src={postImagePreview}
+                    alt="preview"
+                    className="max-h-56 rounded-lg border border-slate-200"
+                  />
+                )}
+                {postVideoPreview && (
+                  <video
+                    src={postVideoPreview}
+                    controls
+                    className="max-h-56 rounded-lg border border-slate-200"
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={clearComposerMedia}
+                  data-testid="post-media-clear"
+                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-slate-900/80 text-white flex items-center justify-center hover:bg-slate-900"
+                  aria-label="Remove attachment"
+                >
+                  <CloseIcon size={12} weight="bold" />
+                </button>
+              </div>
+            )}
+            <div className="flex items-center justify-between mt-3">
+              <div className="flex items-center gap-2">
+                <label
+                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 cursor-pointer"
+                  data-testid="post-image-btn"
+                  title="Attach an image (max 8MB)"
+                >
+                  <ImageSquare size={14} weight="duotone" className="text-emerald-600" />
+                  Photo
+                  <input
+                    ref={postImageRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => pickImage(e.target.files?.[0])}
+                    data-testid="post-image-input"
+                  />
+                </label>
+                <label
+                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 cursor-pointer"
+                  data-testid="post-video-btn"
+                  title="Attach a video (max 25MB)"
+                >
+                  <VideoCamera size={14} weight="duotone" className="text-emerald-600" />
+                  Video
+                  <input
+                    ref={postVideoRef}
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={(e) => pickVideo(e.target.files?.[0])}
+                    data-testid="post-video-input"
+                  />
+                </label>
+              </div>
+              <button
+                data-testid="post-submit"
+                onClick={submitPost}
+                disabled={postingMedia}
+                className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-4 py-2 shadow-sm transition-colors disabled:opacity-50"
+              >
+                {postingMedia ? "Posting…" : "Post"}
+              </button>
             </div>
           </div>
 
@@ -300,7 +429,28 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
                         {p.title}
                       </div>
                     )}
-                    <div className="mt-2 text-sm text-zinc-200 whitespace-pre-wrap">{p.body}</div>
+                    <div className="mt-2 text-sm text-slate-800 whitespace-pre-wrap">{p.body}</div>
+                    {p.image_path && (
+                      <div className="mt-3" data-testid={`feed-post-image-${p.id}`}>
+                        <AuthImage
+                          path={p.image_path}
+                          className="max-h-96 rounded-lg border border-slate-200 cursor-zoom-in"
+                          onClick={() => setLightbox({ path: p.image_path, caption: p.author_name })}
+                          alt=""
+                        />
+                      </div>
+                    )}
+                    {p.video_path && (
+                      <div className="mt-3" data-testid={`feed-post-video-${p.id}`}>
+                        <video
+                          src={p.video_path.startsWith("http") ? p.video_path : `/api/files/${p.video_path}`}
+                          poster={p.video_poster || undefined}
+                          controls
+                          preload="metadata"
+                          className="max-h-96 w-full rounded-lg border border-slate-200 bg-black"
+                        />
+                      </div>
+                    )}
                   </div>
                   {(isDirector || p.author_id === currentUser?.user_id) && !p.hidden && (
                     <div className="flex items-center gap-1 shrink-0" data-testid={`feed-mod-panel-${p.id}`}>

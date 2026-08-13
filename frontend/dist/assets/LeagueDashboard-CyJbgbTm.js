@@ -1,4 +1,4 @@
-import{x as e,T as f,U as y,V as w,W as N,X as v,Y as k,y as C,r as x,Z as S,_ as j,$ as R,a0 as $,S as u}from"./vendor-CKzsa52E.js";import{d as z,b as h}from"./index-wnwR7ja9.js";import{A as P}from"./AppHeader-CherBMeA.js";import{L as A}from"./Skeletons-DuHevzQT.js";import"./vendor-firebase-Dh-LV4yY.js";function D({variant:a="default"}){const r=()=>{const i=encodeURIComponent("Ace Chasers · Bug report"),c=typeof window<"u"?window.location.href:"",n=typeof navigator<"u"?navigator.userAgent:"",o=encodeURIComponent(`Describe the bug:
+import{x as e,T as f,U as y,V as w,W as N,X as v,Y as k,y as C,r as x,Z as S,_ as j,$ as R,a0 as $,S as u}from"./vendor-CKzsa52E.js";import{d as z,b as h}from"./index-Cb3U2yP3.js";import{A as P}from"./AppHeader-BAaywSzT.js";import{L as A}from"./Skeletons-DuHevzQT.js";import"./vendor-firebase-Dh-LV4yY.js";function D({variant:a="default"}){const r=()=>{const i=encodeURIComponent("Ace Chasers · Bug report"),c=typeof window<"u"?window.location.href:"",n=typeof navigator<"u"?navigator.userAgent:"",o=encodeURIComponent(`Describe the bug:
 
 
 Steps to reproduce:

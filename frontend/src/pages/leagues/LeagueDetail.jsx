@@ -21,7 +21,11 @@ export default function LeagueDetail() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const initialTab = searchParams.get("tab") || "rounds";
+  // Default landing tab is now the Clubhouse feed (matches the main social
+  // feed UX), so a member opening their league page lands directly on the
+  // conversation. `?tab=rounds` (or any other key) still short-circuits back
+  // to the original layout when needed.
+  const initialTab = searchParams.get("tab") || "clubhouse";
   const [league, setLeague] = useState(null);
   const [rounds, setRounds] = useState([]);
   const [members, setMembers] = useState([]);

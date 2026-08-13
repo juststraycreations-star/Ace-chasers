@@ -379,6 +379,14 @@ class FeedPost(BaseModel):
     author_id: str
     author_name: str
     author_picture: Optional[str] = None
+    # Optional media attached to a member post. Both are storage paths
+    # returned by `/api/files/upload`. Set independently so a member can
+    # post text + image, text + video, or media alone. Videos additionally
+    # ship an optional `video_poster` frame captured client-side for
+    # preview thumbnails.
+    image_path: Optional[str] = None
+    video_path: Optional[str] = None
+    video_poster: Optional[str] = None
     # `pinned` posts sort to the top of the feed. Used by the auto-schedule
     # publisher so newly-created rounds surface immediately in the clubhouse.
     pinned: bool = False

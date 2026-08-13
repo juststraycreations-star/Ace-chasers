@@ -149,8 +149,13 @@ async def list_stories(league_id: str, request: Request,
 
 # ============= LEAGUE FEED (member wall) =============
 class FeedPostCreate(BaseModel):
-    body: str
+    body: str = ""
     title: Optional[str] = None
+    # Optional media attachments — storage paths returned by `/api/files/upload`.
+    # Members can post text-only, media-only, or a combination.
+    image_path: Optional[str] = None
+    video_path: Optional[str] = None
+    video_poster: Optional[str] = None
 
 
 @api_router.post("/leagues/{league_id}/feed")
@@ -159,8 +164,16 @@ async def create_feed_post(league_id: str, payload: FeedPostCreate, request: Req
                              authorization: Optional[str] = Header(None)):
     user = await get_current_user(request, session_token, authorization)
     await _require_member(league_id, user.user_id)
-    p = FeedPost(league_id=league_id, kind="post", title=payload.title, body=payload.body,
-                  author_id=user.user_id, author_name=user.name, author_picture=user.picture)
+    body = (payload.body or "").strip()
+    has_media = bool(payload.image_path or payload.video_path)
+    if not body and not has_media:
+        raise HTTPException(status_code=400, detail="Post must include text or media")
+    p = FeedPost(
+        league_id=league_id, kind="post", title=payload.title, body=body,
+        author_id=user.user_id, author_name=user.name, author_picture=user.picture,
+        image_path=payload.image_path, video_path=payload.video_path,
+        video_poster=payload.video_poster,
+    )
     await db.feed_posts.insert_one(p.model_dump())
     return p.model_dump()
 

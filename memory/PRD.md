@@ -64,6 +64,21 @@ Enterprise-grade League Management platform:
 ## Deployment note
 - CI/CD should set `ACE_BUILD_ID=<git-sha>` **before both** `vite build` (frontend) **and** the backend container start, so client bundle and server report the same id. Any subsequent deploy with a different id will trigger the reload prompt for every open tab within 5 minutes.
 
+## Iteration 48 (Feb 2026) — Clubhouse feed as default landing + multimedia parity
+
+- **Default landing tab**: `LeagueDetail.jsx` `initialTab` default flipped from `"rounds"` to `"clubhouse"`. `?tab=<key>` URL param still overrides — `?tab=rounds` lands on Rounds as before.
+- **Composer multimedia (1:1 with main Feed)**: `ClubhouseTab.jsx` composer now supports text-only, image-only (max 8MB, `image/*`), video-only (max 25MB, `video/*`), or text+media combos. Two testids surface each upload: `post-image-btn` + `post-video-btn`. Media items are mutually exclusive per post — selecting one clears the other. Live preview renders inside `post-media-preview` with `post-media-clear` (X button) to remove.
+- **Backend model + endpoint**: `FeedPost` model in `leagues_router.py` gained `image_path`, `video_path`, `video_poster` fields. `POST /api/leagues/{id}/feed` (in `leagues_clubhouse_router.py`) accepts the new payload and validates that body-or-media is present (400 otherwise). Uploads flow through the existing `/api/files/upload` (Cloudinary-backed).
+- **Feed rendering**: each post now emits `feed-post-image-{id}` and/or `feed-post-video-{id}` when media is attached. Images open in the existing `Lightbox`; videos render an HTML5 `<video controls>` element with the optional `video_poster` frame.
+- **Moderation shortcuts preserved**: director sees `feed-delete-btn-{postId}` on every post and `feed-mute-btn-{postId}` on posts by other members (untouched by this pass, verified in the test report).
+- **Testing** (`/app/test_reports/iteration_41.json`): 10/10 pytest on the new `POST /api/leagues/{id}/feed` contract, 13/13 Playwright specs on default landing, tab override, composer with image + video, media mutual exclusion, media rendering in feed, and moderation gates. Zero issues found.
+
+## Backlog (P3 nice-to-haves surfaced by iteration 41 code review)
+- `<AuthVideo>` component to stream local-path videos when Cloudinary is disabled (today Cloudinary is active so raw https URLs work).
+- Pause the 10s Clubhouse poll when `document.hidden`.
+- Add `max_length=2000` on FeedPostCreate.body.
+- Timeout + error toast on stalled uploads in the composer.
+
 ## Iteration 47 (Feb 2026) — Tournament Bulk PDF Compiler
 
 - **New `BulkScorecardPrintOverlay.jsx`** — director-only "Print All Tournament Scorecards" flow. Groups every scorecard on the round by its parent `card_id` (orphans bucketed under `__solo__`), renders one read-only green `<ScorecardGrid />` per group with a physical page-break between each (via a `.ac-bulk-card-group` class + `@media print { page-break-after: always }`), and auto-fires `window.print()` ~350ms after mount. Uses landscape letter for wide scorecards.
