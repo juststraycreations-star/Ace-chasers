@@ -31,6 +31,8 @@ const LeagueDashboard = lazy(() => import('./pages/leagues/LeagueDashboard'));
 const CreateLeague = lazy(() => import('./pages/leagues/CreateLeague'));
 const LeagueDetail = lazy(() => import('./pages/leagues/LeagueDetail'));
 const RoundScorecard = lazy(() => import('./pages/leagues/RoundScorecard'));
+const ThrowTracker = lazy(() => import('./pages/ThrowTracker'));
+const LifetimeVault = lazy(() => import('./pages/LifetimeVault'));
 const RoundCheckin = lazy(() => import('./pages/RoundCheckin'));
 const LeaguePlayerProfile = lazy(() => import('./pages/leagues/LeaguePlayerProfile'));
 const Privacy = lazy(() => import('./pages/legal/Privacy'));
@@ -102,6 +104,8 @@ function AppRoutes() {
               <Route path="/leagues/:leagueId" element={<LeagueDetail />} />
               <Route path="/leagues/:leagueId/players/:userId" element={<LeaguePlayerProfile />} />
               <Route path="/rounds/:roundId" element={<RoundScorecard />} />
+              <Route path="/throws" element={<ThrowTracker />} />
+              <Route path="/vault" element={<LifetimeVault />} />
               <Route path="/rounds/:roundId/checkin" element={<RoundCheckin />} />
               <Route path="*" element={<Navigate to="/feed" replace />} />
             </>

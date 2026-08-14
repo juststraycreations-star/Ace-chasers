@@ -297,3 +297,34 @@ Enterprise-grade League Management platform:
 - iteration39 → 1/1 pass (E2E: Match Play seed → active → both scorecards → auto-advance resolution + winner persisted; Phase-4 endpoints all reachable)
 - iteration38 → 5/5 pass alongside iteration39 (6/6 combined)
 - iteration36 + iteration37 individually green (Firebase Identity rate limits IP-wide bursts occasionally, unrelated to code)
+
+---
+
+## Iteration 53 — Throw Tracker offline-queue hardening + onboarding gate polish (2026-02-14)
+
+### Fixed (P0)
+- `ThrowTracker.jsx › flushOffline()` now `await load()` after ≥1 successful drain, so history refreshes without a page reload (matches Iteration 45 acceptance spec).
+
+### Fixed (P1)
+- `OnboardingGate.jsx` — the optional "Add a profile photo" step is now gated to `/feed` and `/profile` routes only. The required name step still runs everywhere. Unblocks click targets on `/throws`, `/vault`, and other feature pages.
+
+### Hardened (P2 — Offline sync)
+- Every queued throw carries a stable client-generated `Idempotency-Key`.
+- Retry policy: exponential backoff per item (5s → 10s → 20s → … cap 5 min), poison-pill drop on 4xx server rejects, and drop after 12 attempts.
+- Auto-drain drivers: window `online` event + 15 s heartbeat interval + explicit "Sync now" tap.
+- Legacy queue entries are normalized on read (no data loss for users who already had un-synced throws).
+- Backend `POST /api/throws` accepts `Idempotency-Key` header; duplicate replays return the original doc and skip re-insertion.
+
+### Files touched
+- `/app/backend/routers/throws_router.py` — added Idempotency-Key path.
+- `/app/frontend/src/pages/ThrowTracker.jsx` — full rewrite of offline queue.
+- `/app/frontend/src/components/OnboardingGate.jsx` — route-scoped photo step.
+
+### Tests
+- `tests/test_iteration53.py` — 3/3 pass (idempotent replay, no-key still creates two rows, key scoped per user).
+- `tests/test_iteration52.py` — 3/3 still green (regression).
+
+### Backlog (unchanged)
+- P2: Division-Scoped Share Cards (one Leaderboard PNG per division).
+- P2: Auto-Advance Live Toast on `bracket_advance` WS event.
+- P2: Vault Share Sheets polish (richer card previews when sharing from Vault to Clubhouse).

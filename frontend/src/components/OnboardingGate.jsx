@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../lib/api';
 import { compressImage } from '../lib/compressImage';
@@ -28,6 +29,16 @@ export default function OnboardingGate() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const authReady = useAuthStore((s) => s.authReady);
   const patchProfile = useAuthStore((s) => s.patchProfile);
+  const { pathname } = useLocation();
+
+  // Photo step is optional and pointer-blocking, so it's restricted to routes
+  // where a profile photo is directly relevant (Clubhouse feed + Profile).
+  // The required name step still runs everywhere so we never have an
+  // authenticated user with a blank display name.
+  const PHOTO_STEP_ROUTES = ['/feed', '/profile'];
+  const photoStepRouteAllowed = PHOTO_STEP_ROUTES.some(
+    (p) => pathname === p || pathname.startsWith(p + '/'),
+  );
 
   const [step, setStep] = useState('name'); // 'name' | 'photo'
   const [name, setName] = useState('');
@@ -56,7 +67,8 @@ export default function OnboardingGate() {
   const hasName = !!(profile?.name && profile.name.trim());
   const needsName = authReady && isAuthenticated && profile && !hasName;
   const needsPhoto =
-    authReady && isAuthenticated && profile && hasName && !profile.profilePictureUrl && !photoStepDone;
+    authReady && isAuthenticated && profile && hasName && !profile.profilePictureUrl &&
+    !photoStepDone && photoStepRouteAllowed;
 
   // Drive the current step from the underlying state.
   useEffect(() => {

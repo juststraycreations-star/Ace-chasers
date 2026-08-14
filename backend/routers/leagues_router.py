@@ -1186,3 +1186,5 @@ from . import leagues_rounds_router  # noqa: E402,F401
 from . import leagues_extensions_router  # noqa: E402,F401
 from . import leagues_advanced_router  # noqa: E402,F401
 from . import leagues_bracket_router  # noqa: E402,F401
+from . import throws_router  # noqa: E402,F401
+from . import vault_router  # noqa: E402,F401

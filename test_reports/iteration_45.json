@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 52 — Distance Throw Tracker (/throws) + Lifetime Vault (/vault). Backend pytest 3/3 PASS on test_iteration52.py (haversine within 1%, 2000ft sanity cap, vault summary shape). Frontend: auth gate, throw tracker geolocation flow (299.1 ft logged for stubbed ~300 ft coords), offline queue (badge appears when /api/throws aborted, badge count drops to 0 after Sync now), and Lifetime Vault empty state all verified end-to-end against the preview URL as a fresh Firebase user. One minor UX bug found in the offline sync flow — see frontend_issues.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ThrowTracker.jsx › flushOffline",
+        "issue": "After clicking the 'Sync now' link on the offline-badge, the offline queue is flushed and the badge disappears (count → 0) but the history list is NOT refreshed — the previously-offline throw only appears on the next page reload (useEffect calls flushOffline → load on mount). The request spec explicitly says 'count drops to 0 and history refreshes with the previously-offline throw'. Fix: call `await load()` inside flushOffline() when `ok > 0`, e.g. `if (ok) { toast.success(...); await load(); }`.",
+        "selector": "[data-testid=\"offline-badge\"] button",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Post-signup onboarding modal",
+        "issues": ["The 'Add a profile photo' onboarding modal appears immediately after signup and persists across route changes (/throws, /vault) until dismissed — it blocks pointer events on the underlying page. Not a Iteration-52 regression (pre-existing modal), but worth noting because it caused the Throw Tracker start button click to be intercepted the first run. Consider making the modal per-route dismissible or non-blocking."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration52.py",
+    "/app/test_reports/pytest/iteration_45.xml"
+  ],
+  "action_items": [
+    "In /app/frontend/src/pages/ThrowTracker.jsx › flushOffline(), call `await load()` after a successful sync so history refreshes with the previously-offline throw (spec requirement).",
+    "OPTIONAL: gate the 'Add a profile photo' onboarding modal to /feed and /profile only — right now it can spawn over /throws and /vault and block interactions."
+  ],
+  "critical_code_review_comments": [
+    "throws_router.py haversine — good: server re-computes and stores its own value, ignoring the client_distance_ft claim. 2000ft cap and coordinate range check both enforced.",
+    "vault_router.py — good: excludes _id, groups by (course::hole) so hole 3 at different courses don't mix, tolerates missing par via fallback of 3. `total > 0` filter cleanly hides in-progress cards.",
+    "ThrowTracker.jsx — offline queue write/read is wrapped in try/catch for quota; good. Minor: flushOffline should trigger load() after successful drain (see action item).",
+    "LifetimeVault.jsx — clean. Uses Web Share API with clipboard fallback and Sonner toast; year/month sort descending as expected."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "100% (3/3 pytest)", "frontend": "~95% (6/7 acceptance items fully verified; vault-with-data path not exercised end-to-end but backend contract proven by pytest)" },
+  "test_credentials": "Fresh Firebase signup at /signup with data-testid selectors: signup-name-input, signup-email-input, signup-age-input, signup-password-input, signup-confirm-password-input, signup-submit-btn. Sample email format `qa-20260113-<8rand>@example.com` / demo1234 works (Firebase mode is active — FIREBASE_SERVICE_ACCOUNT_JSON is populated).",
+  "seed_data_creation": "None on backend (only ephemeral Firebase test users + one throw doc per signup; no cleanup performed — collections `throws` may retain TEST_i52 user throws).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 52 acceptance suite: /throws + /vault. Backend pytest lives at /app/backend/tests/test_iteration52.py (still 3/3 green). If retesting the offline-sync fix, use `page.route('**/api/throws', r => r.abort())` after auth is set, complete a throw (expect offline-badge count=1), unroute, click the 'Sync now' button inside the badge, then assert `[data-testid=\"throw-history\"] li` count increased by 1 WITHOUT a page reload. Firebase Identity Toolkit sometimes rate-limits — pytest signup has a 6-retry/15s backoff already. Remember to dismiss the 'Add a profile photo' onboarding modal (button text 'Skip for now') that pops after signup, otherwise it swallows the first click on /throws.",
+  "rca of the issue": "flushOffline() in ThrowTracker.jsx exits after writing the survivors array and emitting a toast — it never re-fetches /api/throws. On page mount the useEffect chains flushOffline → load, which is why history looks correct on reload but not on the manual 'Sync now' tap. One-line fix: add `await load();` inside the `if (ok)` branch of flushOffline."
+}
