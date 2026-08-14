@@ -1,18 +1,33 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
-import { Trophy, UsersThree } from "@phosphor-icons/react";
+import { Trophy, UsersThree, ShareNetwork } from "@phosphor-icons/react";
+import { toast } from "sonner";
+import { renderDivisionCards, downloadBlob } from "@/lib/shareCard";
 
 /**
- * FormatLeaderboardPanel — format-aware leaderboard shown on active
- * rounds. Consumes `GET /api/rounds/{id}/leaderboard` which returns:
- *   { format, mode: "singles" | "best_disc" | "team_sum", rows: [...] }
+ * FormatLeaderboardPanel — format-aware leaderboard shown on active and
+ * completed rounds. Consumes `GET /api/rounds/{id}/leaderboard`.
  *
- * In "singles" mode each row is one player. In "best_disc" / "team_sum"
- * modes each row is a card/team with the aggregated total and, for
- * best-disc, the per-hole combined scores.
+ * Multi-division share (Iteration 54):
+ *   For singles-format rounds where members span 2+ divisions, a
+ *   director-only "Division cards" button renders one 1080×1350 PNG per
+ *   division and triggers a download per card. Powered by
+ *   `renderDivisionCards` in /lib/shareCard.js.
+ *
+ *   Team formats (best-disc / team-sum) don't have per-player divisions,
+ *   so the button is hidden in those modes to keep the UI honest.
  */
-export default function FormatLeaderboardPanel({ roundId, roundStatus }) {
+export default function FormatLeaderboardPanel({
+  roundId,
+  roundStatus,
+  // Optional context — enables the multi-division share button when set.
+  isDirector = false,
+  leagueName = "",
+  roundName = "",
+  acePool = 0,
+}) {
   const [state, setState] = useState({ loading: true, data: null });
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,6 +52,59 @@ export default function FormatLeaderboardPanel({ roundId, roundStatus }) {
     };
   }, [roundId, roundStatus]);
 
+  const divisionGroups = useMemo(() => {
+    if (state.data?.mode !== "singles") return [];
+    const rows = state.data?.rows || [];
+    const map = new Map();
+    for (const r of rows) {
+      // Skip rows without a real score — projected cards shouldn't
+      // pollute the shareable graphic.
+      if (!r.total || r.total <= 0) continue;
+      const key = r.division || "Open";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push({
+        name: r.name,
+        total: r.total,
+        plusMinus: r.plus_minus || 0,
+      });
+    }
+    return Array.from(map.entries())
+      .map(([divisionLabel, leaders]) => ({
+        divisionLabel,
+        leaders: leaders.slice(0, 5),
+      }))
+      .sort((a, b) => a.divisionLabel.localeCompare(b.divisionLabel));
+  }, [state.data]);
+
+  const canShareDivisions =
+    isDirector && divisionGroups.length > 1;
+
+  const downloadDivisionCards = async () => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      const cards = await renderDivisionCards({
+        roundName,
+        leagueName,
+        divisions: divisionGroups,
+        acePool,
+      });
+      let count = 0;
+      const safeR = (roundName || "round").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+      for (const { divisionLabel, blob } of cards) {
+        if (!blob) continue;
+        const safeD = divisionLabel.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+        downloadBlob(blob, `ace-chasers-${safeR}-${safeD}.png`);
+        count += 1;
+      }
+      toast.success(`Downloaded ${count} division card${count === 1 ? "" : "s"}`);
+    } catch {
+      toast.error("Division cards failed");
+    } finally {
+      setSharing(false);
+    }
+  };
+
   const { loading, data } = state;
   if (loading) return null;
   if (!data || !data.rows || data.rows.length === 0) return null;
@@ -55,12 +123,25 @@ export default function FormatLeaderboardPanel({ roundId, roundStatus }) {
         <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center">
           {isTeam ? <UsersThree size={18} weight="duotone" /> : <Trophy size={18} weight="duotone" />}
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <div className="font-mono-data text-[10px] uppercase tracking-widest text-emerald-700">
             {data.format} · leaderboard
           </div>
           <div className="font-semibold text-sm text-slate-900">{modeLabel}</div>
         </div>
+        {canShareDivisions && (
+          <button
+            type="button"
+            onClick={downloadDivisionCards}
+            disabled={sharing}
+            data-testid="leaderboard-share-divisions-btn"
+            title={`One leaderboard PNG per division · ${divisionGroups.length} active`}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-full px-3 py-1.5 disabled:opacity-40 shadow-sm"
+          >
+            <ShareNetwork size={12} weight="duotone" />
+            {sharing ? "…" : `Division cards · ${divisionGroups.length}`}
+          </button>
+        )}
       </div>
       <ol className="space-y-1.5">
         {data.rows.slice(0, 8).map((row, i) => {
@@ -80,6 +161,14 @@ export default function FormatLeaderboardPanel({ roundId, roundStatus }) {
                   {i + 1}
                 </span>
                 <span className="truncate text-slate-900">{name}</span>
+                {row.division && !isTeam && (
+                  <span
+                    data-testid={`leaderboard-row-${i + 1}-division`}
+                    className="hidden sm:inline-block font-mono-data text-[9px] uppercase tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5"
+                  >
+                    {row.division}
+                  </span>
+                )}
               </div>
               <div className="text-right shrink-0 font-mono-data">
                 <span className="text-slate-900 font-semibold">{total}</span>

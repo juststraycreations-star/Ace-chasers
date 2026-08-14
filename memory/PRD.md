@@ -328,3 +328,26 @@ Enterprise-grade League Management platform:
 - P2: Division-Scoped Share Cards (one Leaderboard PNG per division).
 - P2: Auto-Advance Live Toast on `bracket_advance` WS event.
 - P2: Vault Share Sheets polish (richer card previews when sharing from Vault to Clubhouse).
+
+---
+
+## Iteration 54 — Division Share Cards on Completed Rounds (2026-02-14)
+
+### Added
+- `FormatLeaderboardPanel` — new director-only "Division cards · N" button that renders one 1080×1350 leaderboard PNG per division and triggers a download per card. Visible only when the round is Singles-format AND members span 2+ divisions. Works on both active and completed rounds.
+- Each row on `FormatLeaderboardPanel` now shows a small division pill (Open/MPO/etc.) so managers can eyeball the grouping before generating the cards.
+
+### Backend
+- `GET /api/rounds/{id}/leaderboard` now returns `division` (defaults to `"Open"`) on every singles-mode row so the frontend can group and render division-specific graphics without a second round-trip.
+
+### Files touched
+- `/app/backend/routers/leagues_advanced_router.py` — division field on singles rows.
+- `/app/frontend/src/components/FormatLeaderboardPanel.jsx` — full rewrite with share button + division pills.
+- `/app/frontend/src/pages/leagues/RoundScorecard.jsx` — passes `isDirector`, `leagueName`, `roundName`, `acePool` to the panel.
+
+### Tests
+- `tests/test_iteration54.py` — 2/2 pass (division default `Open`, custom division echoes through leaderboard).
+
+### Backlog (unchanged)
+- P2: Auto-Advance Live Toast on `bracket_advance` WS event.
+- P2: Vault Share Sheets polish (richer card previews when sharing from Vault to Clubhouse).

@@ -522,7 +522,14 @@ export default function RoundScorecard() {
                     isDirector={isDirector}
                   />
                 )}
-                <FormatLeaderboardPanel roundId={roundId} roundStatus={roundStatus} />
+                <FormatLeaderboardPanel
+                  roundId={roundId}
+                  roundStatus={roundStatus}
+                  isDirector={isDirector}
+                  leagueName={league?.name || ""}
+                  roundName={round?.name || ""}
+                  acePool={league?.ace_pool || 0}
+                />
               </div>
             )}
           </section>
