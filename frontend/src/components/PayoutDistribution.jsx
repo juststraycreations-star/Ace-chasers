@@ -1,18 +1,21 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import VictoryCard from "./VictoryCard";
-import { Trophy, Coins, Sparkle, MoneyWavy } from "@phosphor-icons/react";
+import { Trophy, Coins, Sparkle, MoneyWavy, ShareNetwork } from "@phosphor-icons/react";
+import { toast } from "sonner";
+import { renderDivisionPayoutCards, downloadBlob } from "@/lib/shareCard";
 
 export default function PayoutDistribution({ roundId, leagueName, isDirector, onClose }) {
   const [data, setData] = useState(null);
   const [victoryFor, setVictoryFor] = useState(null); // {name, division, total, plus_minus}
   const [finalizing, setFinalizing] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const load = async () => {
     try {
       const { data } = await api.get(`/rounds/${roundId}/payout`);
       setData(data);
-    } catch {}
+    } catch { /* payout endpoint optional — panel just stays empty */ }
   };
   useEffect(() => { load(); }, [roundId]);
 
@@ -25,7 +28,59 @@ export default function PayoutDistribution({ roundId, leagueName, isDirector, on
     } finally { setFinalizing(false); }
   };
 
+  const downloadPayoutCards = async () => {
+    if (sharing || !data) return;
+    setSharing(true);
+    try {
+      // Curve mirrors the server-side 50/30/20 top-3 payout distribution
+      // in leagues_rounds_router.get_payout.
+      const curve = [0.5, 0.3, 0.2];
+      const divisions = Object.entries(data.divisions || {})
+        .map(([divisionLabel, block]) => ({
+          divisionLabel,
+          poolTotal: block.pool || 0,
+          players: (block.players || []).map((p) => ({
+            name: p.name,
+            total: p.total || 0,
+            plusMinus: p.plus_minus || 0,
+            payout: p.payout || 0,
+          })),
+        }))
+        // Skip empty divisions and divisions with zero pool — the card
+        // would be all $0.00 and nobody wants to post that.
+        .filter((d) => d.players.length > 0 && d.poolTotal > 0);
+      if (divisions.length === 0) {
+        toast.error("No payouts to share yet");
+        return;
+      }
+      const cards = await renderDivisionPayoutCards({
+        roundName: data.round_name,
+        leagueName,
+        divisions,
+        curve,
+      });
+      let count = 0;
+      const safeR = (data.round_name || "round").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+      for (const { divisionLabel, blob } of cards) {
+        if (!blob) continue;
+        const safeD = divisionLabel.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+        downloadBlob(blob, `ace-chasers-${safeR}-${safeD}-payouts.png`);
+        count += 1;
+      }
+      toast.success(`Downloaded ${count} payout card${count === 1 ? "" : "s"}`);
+    } catch {
+      toast.error("Payout cards failed");
+    } finally {
+      setSharing(false);
+    }
+  };
+
   if (!data) return null;
+
+  const divisionsWithPool = Object.values(data.divisions || {}).filter(
+    (block) => (block.players || []).length > 0 && (block.pool || 0) > 0
+  );
+  const canSharePayouts = divisionsWithPool.length > 0;
 
   return (
     <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center p-4 overflow-y-auto" onClick={onClose} data-testid="payout-distribution-modal">
@@ -113,13 +168,28 @@ export default function PayoutDistribution({ roundId, leagueName, isDirector, on
           ))
         )}
 
-        {isDirector && data.pool_available > 0 && (
-          <div className="flex justify-end pt-2">
-            <button data-testid="payout-finalize-btn" onClick={finalize} disabled={finalizing} className="btn-primary flex items-center gap-2">
-              <Coins size={14} weight="fill" /> {finalizing ? "Finalizing…" : "Finalize Payouts"}
-            </button>
+        {(isDirector && data.pool_available > 0) || canSharePayouts ? (
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
+            {canSharePayouts && (
+              <button
+                type="button"
+                onClick={downloadPayoutCards}
+                disabled={sharing}
+                data-testid="payout-share-cards-btn"
+                title={`One projected-payouts PNG per division · ${divisionsWithPool.length} to share`}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-full px-3 py-2 disabled:opacity-40 shadow-sm"
+              >
+                <ShareNetwork size={14} weight="duotone" />
+                {sharing ? "…" : `Payout cards · ${divisionsWithPool.length}`}
+              </button>
+            )}
+            {isDirector && data.pool_available > 0 && (
+              <button data-testid="payout-finalize-btn" onClick={finalize} disabled={finalizing} className="btn-primary flex items-center gap-2">
+                <Coins size={14} weight="fill" /> {finalizing ? "Finalizing…" : "Finalize Payouts"}
+              </button>
+            )}
           </div>
-        )}
+        ) : null}
       </div>
 
       {victoryFor && (

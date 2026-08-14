@@ -246,6 +246,114 @@ function renderLeaderboardTemplate(ctx, { roundName, leagueName, leaders, acePoo
   paintFooter(ctx, acePool);
 }
 
+// ═════════════════════════════════════════════════════════════════
+// Template C — Division Payouts
+// ═════════════════════════════════════════════════════════════════
+function renderPayoutTemplate(ctx, {
+  roundName, leagueName, divisionLabel, poolTotal = 0, players = [], curve = [0.5, 0.3, 0.2],
+}) {
+  paintBackground(ctx);
+  paintWatermark(ctx);
+  const sublabel = divisionLabel
+    ? `${divisionLabel.toUpperCase()} · PAYOUTS`
+    : "PROJECTED PAYOUTS";
+  paintBrandHeader(ctx, sublabel);
+
+  ctx.fillStyle = "#dfe7dd";
+  ctx.font = "500 28px system-ui, -apple-system, sans-serif";
+  ctx.textAlign = "left";
+  const leagueLines = wrap(ctx, leagueName || "League", W - 120).slice(0, 1);
+  let y = 200;
+  leagueLines.forEach((l) => { ctx.fillText(l, 60, y); y += 36; });
+
+  ctx.fillStyle = CREAM;
+  ctx.font = "700 52px system-ui, -apple-system, sans-serif";
+  const title = String(roundName || "Round").slice(0, 28);
+  ctx.fillText(title, 60, y + 40);
+
+  // Division pill + pool subtitle
+  if (divisionLabel) {
+    const pillY = y + 60;
+    ctx.fillStyle = GOLD;
+    const pillW = ctx.measureText(divisionLabel).width + 40;
+    ctx.beginPath();
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(60, pillY, pillW, 40, 20);
+    } else {
+      ctx.rect(60, pillY, pillW, 40);
+    }
+    ctx.fill();
+    ctx.fillStyle = GREEN;
+    ctx.font = "700 22px monospace";
+    ctx.textBaseline = "middle";
+    ctx.fillText(divisionLabel.toUpperCase(), 80, pillY + 20);
+    ctx.textBaseline = "alphabetic";
+
+    ctx.fillStyle = "#a3d1a3";
+    ctx.font = "500 26px monospace";
+    ctx.fillText(
+      `DIVISION POOL  $${Number(poolTotal || 0).toFixed(2)}`,
+      pillW + 90, pillY + 28
+    );
+  }
+
+  const rows = players.slice(0, 5);
+  const rowsY = y + (divisionLabel ? 160 : 100);
+  const rowH = 140;
+
+  rows.forEach((row, i) => {
+    const rY = rowsY + i * rowH;
+    // row background
+    ctx.fillStyle = i === 0 ? "rgba(245,197,66,0.12)" : "rgba(255,255,255,0.04)";
+    ctx.strokeStyle = i === 0 ? GOLD : "rgba(255,255,255,0.12)";
+    ctx.lineWidth = 2;
+    ctx.fillRect(60, rY, W - 120, rowH - 20);
+    ctx.strokeRect(60, rY, W - 120, rowH - 20);
+
+    // rank badge
+    ctx.fillStyle = RANK_COLORS[i] || "#94a3b8";
+    ctx.beginPath();
+    ctx.arc(130, rY + (rowH - 20) / 2, 36, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = GREEN;
+    ctx.font = "700 34px system-ui, -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(i + 1), 130, rY + (rowH - 20) / 2 + 2);
+
+    // name + score subtitle
+    ctx.fillStyle = CREAM;
+    ctx.font = "600 38px system-ui, -apple-system, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText((row.name || "Player").slice(0, 22), 200, rY + (rowH - 20) / 2 - 4);
+
+    if (row.total || row.plusMinus != null) {
+      ctx.fillStyle = "#a3d1a3";
+      ctx.font = "500 22px monospace";
+      const pm = row.plusMinus || 0;
+      const pmLabel = pm > 0 ? `+${pm}` : pm < 0 ? `${pm}` : "E";
+      ctx.fillText(`${row.total || 0} · ${pmLabel}`, 200, rY + (rowH - 20) / 2 + 28);
+    }
+
+    // cash payout
+    ctx.fillStyle = GOLD;
+    ctx.font = "700 44px monospace";
+    ctx.textAlign = "right";
+    const cash = Number(row.payout || 0);
+    ctx.fillText(`$${cash.toFixed(2)}`, W - 90, rY + (rowH - 20) / 2 - 4);
+
+    // pct of division pool
+    ctx.fillStyle = "#cfd8ce";
+    ctx.font = "500 20px monospace";
+    const pct = curve[i] != null ? Math.round(curve[i] * 100) : 0;
+    ctx.fillText(`${pct}% of pool`, W - 90, rY + (rowH - 20) / 2 + 26);
+  });
+
+  ctx.textBaseline = "alphabetic";
+  paintFooter(ctx, 0);
+}
+
 export async function renderShareCard({
   roundName,
   leagueName,
@@ -253,8 +361,12 @@ export async function renderShareCard({
   payouts = [],
   acePool = 0,
   pool = 0,
-  template = "winner", // "winner" | "leaderboard"
+  template = "winner", // "winner" | "leaderboard" | "payout"
   divisionLabel = null,
+  // Payout template-specific props
+  poolTotal = 0,
+  players = [],
+  curve = [0.5, 0.3, 0.2],
 }) {
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -263,6 +375,8 @@ export async function renderShareCard({
 
   if (template === "leaderboard") {
     renderLeaderboardTemplate(ctx, { roundName, leagueName, leaders, acePool, divisionLabel });
+  } else if (template === "payout") {
+    renderPayoutTemplate(ctx, { roundName, leagueName, divisionLabel, poolTotal, players, curve });
   } else {
     renderWinnerTemplate(ctx, { roundName, leagueName, leaders, payouts, pool, acePool });
   }
@@ -305,6 +419,37 @@ export async function renderDivisionCards({
       acePool,
       template: "leaderboard",
       divisionLabel: d.divisionLabel,
+    });
+    out.push({ divisionLabel: d.divisionLabel, blob });
+  }
+  return out;
+}
+
+/**
+ * renderDivisionPayoutCards — emit one Projected-Payouts PNG per division.
+ *
+ * `divisions` is an array of
+ *   `{ divisionLabel, poolTotal, players: [{ name, total, plusMinus, payout }...] }`.
+ * `players` should already be sorted by finishing place ascending (1st → nth).
+ * `curve` is the payout distribution used (default 50/30/20 top-3) and drives
+ * the "N% of pool" subtitle under each cash amount.
+ */
+export async function renderDivisionPayoutCards({
+  roundName,
+  leagueName,
+  divisions = [],
+  curve = [0.5, 0.3, 0.2],
+}) {
+  const out = [];
+  for (const d of divisions) {
+    const blob = await renderShareCard({
+      roundName,
+      leagueName,
+      template: "payout",
+      divisionLabel: d.divisionLabel,
+      poolTotal: d.poolTotal || 0,
+      players: d.players || [],
+      curve,
     });
     out.push({ divisionLabel: d.divisionLabel, blob });
   }

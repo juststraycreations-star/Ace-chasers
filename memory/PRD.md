@@ -351,3 +351,32 @@ Enterprise-grade League Management platform:
 ### Backlog (unchanged)
 - P2: Auto-Advance Live Toast on `bracket_advance` WS event.
 - P2: Vault Share Sheets polish (richer card previews when sharing from Vault to Clubhouse).
+
+---
+
+## Iteration 55 — Division Payout Cards (2026-02-14)
+
+### Added
+- **Payout share-card template** in `/lib/shareCard.js` — new 1080×1350 template that renders the top-5 projected payouts for a division with rank badge, name, score/plus-minus subtitle, cash amount, and "N% of pool" subtitle. Gold accent on 1st place.
+- **`renderDivisionPayoutCards`** batch renderer — emits one PNG per division. Skips empty divisions and divisions with a $0 pool.
+- **"Payout cards · N" button** inside `PayoutDistribution` modal (next to Finalize). Downloads one PNG per division whenever there's a non-zero pool.
+
+### Payout distribution math (verified)
+- Pool distributed proportional to # players per division.
+- Within a division: 50/30/20 top-3 curve, with any leftover slice folded into 1st place when a division has fewer than 3 players. Solo player takes the whole division pool.
+- All the client-side share card copy — cash amounts and pool percentages — mirrors what the server returns from `GET /rounds/{id}/payout`, so what the manager sees on the card is exactly what the ledger will post at Finalize.
+
+### Files touched
+- `/app/frontend/src/lib/shareCard.js` — new `renderPayoutTemplate` + `renderDivisionPayoutCards`; `renderShareCard` dispatch now supports `template: "payout"`.
+- `/app/frontend/src/components/PayoutDistribution.jsx` — Payout cards button + safe-empty-catch cleanup.
+
+### Tests
+- `tests/test_iteration55.py` — 3/3 pass:
+  - Pool distributes proportionally across 2 divisions (75/25 with 3+1 players).
+  - 2-player division folds 3rd slice into 1st place (70/30).
+  - Solo-player division takes 100% of pool.
+- Full new-modules sweep (52/53/54/55): 11/11 pass.
+
+### Backlog (unchanged)
+- P2: Auto-Advance Live Toast on `bracket_advance` WS event.
+- P2: Vault Share Sheets polish (richer card previews when sharing from Vault to Clubhouse).
