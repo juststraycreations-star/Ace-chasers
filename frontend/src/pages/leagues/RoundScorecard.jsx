@@ -187,28 +187,45 @@ export default function RoundScorecard() {
       const { data: finRes } = await api.post(`/scorecards/${certifyForScorecardId}/finalize`, {
         certified: true,
       });
-      toast.success("Scorecard finalized · logged to Proof of Score");
-      setCertifyForScorecardId(null);
-      setCertifyChecked(false);
-      await load();
-      // Match-Play tie detection — director must resolve manually.
-      const adv = finRes?.bracket_advance;
-      if (adv?.tied && league?.is_director) {
-        setPendingTieBreak(adv);
-      } else if (adv?.resolved) {
-        const winName = adv.winner_name || "Winner";
-        toast.success(
-          adv.is_final
-            ? `🏆 ${winName} · Bracket Champion!`
-            : `${winName} advances to ${adv.next_tier_label || "the next tier"}`
-        );
-        if (adv.is_final) fireChampionConfetti();
+      // Server confirmed the write + WS broadcast. Clear the certify modal
+      // state and redirect the user to the League Feed to break any UI-freeze
+      // loop the local scorecard/refresh path could get stuck in.
+      try {
+        toast.success("Scorecard finalized · logged to Proof of Score");
+        setCertifyForScorecardId(null);
+        setCertifyChecked(false);
+        setCertifying(false);
+        // Match-Play tie detection — director must resolve manually, so we
+        // stay on this page instead of redirecting.
+        const adv = finRes?.bracket_advance;
+        if (adv?.tied && league?.is_director) {
+          setPendingTieBreak(adv);
+          return;
+        }
+        if (adv?.resolved) {
+          const winName = adv.winner_name || "Winner";
+          toast.success(
+            adv.is_final
+              ? `🏆 ${winName} · Bracket Champion!`
+              : `${winName} advances to ${adv.next_tier_label || "the next tier"}`
+          );
+          if (adv.is_final) fireChampionConfetti();
+        }
+        if (round?.league_id) {
+          navigate(`/leagues/${round.league_id}?tab=clubhouse`, { replace: true });
+        } else {
+          navigate("/feed", { replace: true });
+        }
+      } catch (stateErr) {
+        // State-reset shouldn't throw, but if it does we still redirect so
+        // the user isn't trapped on a half-updated scorecard view.
+        console.warn("finalize post-success reset failed", stateErr);
+        navigate("/feed", { replace: true });
       }
     } catch (e) {
       toast.error(
         e?.response?.data?.detail || "Finalize failed. Certification required."
       );
-    } finally {
       setCertifying(false);
     }
   };

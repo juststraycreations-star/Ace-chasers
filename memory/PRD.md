@@ -380,3 +380,34 @@ Enterprise-grade League Management platform:
 ### Backlog (unchanged)
 - P2: Auto-Advance Live Toast on `bracket_advance` WS event.
 - P2: Vault Share Sheets polish (richer card previews when sharing from Vault to Clubhouse).
+
+---
+
+## Iteration 56 — Finalize UI Freeze + Throw Tracker Nav CTA (2026-02-15)
+
+### BUG 1 — Scorecard finalize freeze (fixed)
+- `RoundScorecard.finalizeScorecard()` now, on server confirmation:
+  - Clears certify-modal state (`certifyForScorecardId`, `certifyChecked`, `certifying`) inside a defensive try/catch.
+  - Fires the success toast.
+  - Redirects the user to `/leagues/{league_id}?tab=clubhouse` (the primary League Feed view) via `navigate(..., { replace: true })` so any local scorecard-refresh path can't trap the UI.
+- **Kept intact**: Match-Play tie-break flow (director stays on the page when `bracket_advance.tied === true`), Match-Play champion confetti + advance toast, and the offline score queue in `/lib/offlineQueue.js` (unchanged — the redirect happens after the write is confirmed, not before, so no in-flight scores are lost).
+
+### BUG 2 — Throw Tracker missing from nav (fixed)
+- Added `/throws · Throw Tracker` to `NAV_ITEMS` in `Navigation.jsx` so it shows in both desktop and Chasers Hub mobile drawer.
+- Added a **large touch-friendly outline CTA** at the top of the mobile Chasers Hub dropdown: `text-emerald-600` / `border-emerald-600` on white with `py-4`, rounded-xl, active:bg-emerald-50 for pressed feedback. `data-testid="nav-throws-cta-mobile"`.
+- Registered `/throws` in `ROUTE_PREFETCHERS` so hover/touchstart warms the chunk.
+
+### Files touched
+- `/app/frontend/src/pages/leagues/RoundScorecard.jsx` — `finalizeScorecard` rewrite.
+- `/app/frontend/src/components/Navigation.jsx` — NAV_ITEMS + mobile CTA + prefetcher.
+
+### Testing
+- Lint clean on both changed files.
+- Backend unchanged — no new API contract.
+- Offline queue in `/lib/offlineQueue.js` untouched; existing 3-test idempotency sweep still applies.
+
+### Backlog (unchanged)
+- P2: Auto-Advance Live Toast on `bracket_advance` WS event (broadcast side).
+- P2: Vault Share Sheets polish.
+- P2: Combined Post Bundle (Winner + Leaderboard + Payouts zip).
+- P2: Payout Curve Presets at league level.

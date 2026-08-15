@@ -26,6 +26,7 @@ const ROUTE_PREFETCHERS = {
   '/daily-plastic': () => import('../pages/DailyPlastic'),
   '/messages': () => import('../pages/Messages'),
   '/profile': () => import('../pages/Profile'),
+  '/throws': () => import('../pages/ThrowTracker'),
 };
 const prefetched = new Set();
 const prefetchRoute = (to) => {
@@ -42,6 +43,7 @@ const NAV_ITEMS = [
   { to: '/bagcheck', label: 'Bag Check', testid: 'nav-bagcheck' },
   { to: '/courses', label: 'Courses', testid: 'nav-courses' },
   { to: '/leagues', label: 'Leagues', testid: 'nav-leagues' },
+  { to: '/throws', label: 'Throw Tracker', testid: 'nav-throws' },
   { to: '/discovery', label: 'Discovery', testid: 'nav-discovery' },
   { to: '/daily-plastic', label: '📰 Daily Plastic', testid: 'nav-daily-plastic' },
   { to: '/messages', label: 'Messages', testid: 'nav-messages' },
@@ -201,6 +203,15 @@ export default function Navigation() {
           data-testid="nav-mobile-panel"
         >
           <div className="max-w-6xl mx-auto px-4 py-3 space-y-1">
+            <Link
+              to="/throws"
+              data-testid="nav-throws-cta-mobile"
+              onClick={() => setMobileOpen(false)}
+              onTouchStart={() => prefetchRoute('/throws')}
+              className="block w-full text-center py-4 px-4 mb-2 rounded-xl font-bold text-base bg-white text-emerald-600 border-2 border-emerald-600 active:bg-emerald-50 transition-colors shadow-sm"
+            >
+              Throw Tracker
+            </Link>
             {NAV_ITEMS.map((item) => (
               <Link
                 key={item.to}
