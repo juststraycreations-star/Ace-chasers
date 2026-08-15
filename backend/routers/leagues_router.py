@@ -1204,9 +1204,40 @@ async def delete_league(league_id: str, payload: LeagueDeletePayload, request: R
     else:
         counts["ctp_entries"] = 0
 
+    # Shadow audit — write BEFORE deleting the league doc so an
+    # interrupted request still leaves a paper trail. `retention_locked`
+    # flags the row for the future undo-window path.
+    deleted_at = now_iso()
+    audit_id = str(uuid.uuid4())
+    restorable_until = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+    audit_doc = {
+        "id": audit_id,
+        "league_id": league_id,
+        "league": lg,  # clone of the league config at time of delete
+        "deleted_at": deleted_at,
+        "deletedAt": deleted_at,   # camelCase alias for the client
+        "actor_id": user.user_id,
+        "actorId": user.user_id,   # camelCase alias
+        "per_collection_counts": counts,
+        "perCollectionCounts": counts,  # camelCase alias
+        "retention_locked": True,
+        "restorable_until": restorable_until,
+        "restore_state": "pending",  # "pending" | "restored" | "expired"
+    }
+    await db.deleted_leagues.insert_one(audit_doc)
+
     # Finally, remove the league document itself.
     res = await db.leagues.delete_one({"id": league_id})
     counts["leagues"] = int(res.deleted_count)
+    # Persist the final leagues count into the audit trail (was 0 when we
+    # first wrote the doc a few lines up).
+    await db.deleted_leagues.update_one(
+        {"id": audit_id},
+        {"$set": {
+            "per_collection_counts": counts,
+            "perCollectionCounts": counts,
+        }},
+    )
 
     total_docs = sum(counts.values())
     return {
@@ -1215,7 +1246,30 @@ async def delete_league(league_id: str, payload: LeagueDeletePayload, request: R
         "league_name": lg.get("name"),
         "deleted_counts": counts,
         "total_docs_removed": total_docs,
+        "audit_id": audit_id,
+        "deletedAt": deleted_at,
+        "restorable_until": restorable_until,
     }
+
+
+@api_router.get("/deleted-leagues")
+async def list_deleted_leagues(request: Request,
+                                 session_token: Optional[str] = Cookie(None),
+                                 authorization: Optional[str] = Header(None),
+                                 limit: int = 25):
+    """List the caller's own deleted-league audit rows.
+
+    Retention-locked docs are the only ones surfaced here so an admin
+    can trace what they destroyed and (in a future iteration) restore
+    within the retention window.
+    """
+    user = await get_current_user(request, session_token, authorization)
+    cursor = db.deleted_leagues.find(
+        {"actor_id": user.user_id, "retention_locked": True},
+        {"_id": 0},
+    ).sort("deleted_at", -1).limit(max(1, min(limit, 100)))
+    rows = await cursor.to_list(limit)
+    return {"rows": rows, "count": len(rows)}
 
 
 # ============= PAYOUT CURVE PRESET =============

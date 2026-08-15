@@ -553,3 +553,61 @@ Enterprise-grade League Management platform:
 
 ### Files touched
 - `/app/frontend/src/components/DeleteLeaguePanel.jsx` — full rewrite for polish only. No backend, no store, no test changes. Iteration 59's 4/4 pytest sweep still applies unchanged.
+
+---
+
+## Iteration 61 — Delete League shadow / audit trail (2026-02-15)
+
+### New collection
+- **`deleted_leagues`** — every league destroy writes a shadow row here BEFORE the cascade sweep runs, so an interrupted request still leaves a paper trail.
+
+### Shadow document shape
+```
+{
+  id: "<uuid>",                     // audit id
+  league_id: "<original league id>",
+  league: { ...full league snapshot at delete time... },
+  deleted_at / deletedAt: "<ISO>",
+  actor_id / actorId: "<firebase uid>",
+  per_collection_counts / perCollectionCounts: {
+    league_members: N, rounds: N, scorecards: N, seasons: N,
+    brackets: N, ledger: N, announcements: N, lost_found: N,
+    stories: N, feed_posts: N, ctp_entries: N, leagues: 1
+  },
+  retention_locked: true,
+  restorable_until: "<ISO · +30 days>",
+  restore_state: "pending" | "restored" | "expired"
+}
+```
+Both camelCase (client-friendly) and snake_case aliases persisted so future JSON consumers don't need a mapping layer.
+
+### New endpoint
+- **`GET /api/deleted-leagues?limit=25`** — returns the caller's own retention-locked shadow rows, sorted newest-first. Scoped to `actor_id` on the server so a director can only see their own destroys.
+
+### Retention lock
+- `retention_locked: true` + `restorable_until` (~30 days out) — flags the row for the future "Undo Window" iteration. A cron/expiry job (out-of-scope this pass) would flip `retention_locked` to `false` and `restore_state` to `"expired"` once the window closes.
+
+### Indexes (in `db.py::ensure_indexes`)
+- `deleted_leagues.league_id`
+- `deleted_leagues.actor_id`
+- `deleted_leagues (actor_id, deleted_at DESC)` — powers the listing endpoint
+- `deleted_leagues.retention_locked`
+
+### Response upgrade
+- `DELETE /api/leagues/{id}` now also returns `audit_id`, `deletedAt`, and `restorable_until` alongside the existing cascade counts.
+
+### Files touched
+- `/app/backend/routers/leagues_router.py` — shadow-write + `GET /deleted-leagues` handler.
+- `/app/backend/db.py` — added 4 indexes on `deleted_leagues`.
+
+### Tests
+- `tests/test_iteration61.py` — 3/3 pass:
+  1. Shadow row is written with full league snapshot, deletedAt, actorId, and per-collection counts (both cases). Retention lock true. Restore window 25–31 days out. `restore_state: "pending"`.
+  2. `GET /deleted-leagues` is actor-scoped — director A cannot see director B's rows.
+  3. Shadow row persists after the league doc is gone (audit decouples from live data).
+- Combined delete-league sweep (59 + 61): 7/7 green.
+
+### Backlog (unchanged)
+- P2: Wire the Undo Window UI (frontend) on top of the existing shadow — 30-second "Undo" toast that restores docs from the shadow copy when tapped.
+- P2: Cron/expiry job to demote `retention_locked` after `restorable_until` passes.
+- P2: Round Detail Header + Active Players grid over the Iteration 58 `roundStore`.
