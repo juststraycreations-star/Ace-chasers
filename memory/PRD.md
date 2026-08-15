@@ -411,3 +411,57 @@ Enterprise-grade League Management platform:
 - P2: Vault Share Sheets polish.
 - P2: Combined Post Bundle (Winner + Leaderboard + Payouts zip).
 - P2: Payout Curve Presets at league level.
+
+---
+
+## Iteration 57 — Auto-Advance Toast + Payout Curve Presets + Combined Post Bundle (2026-02-15)
+
+### Auto-Advance Toast (Bracket)
+- `BracketView` already subscribed to the `/api/ws/leagues/{id}` channel; upgraded the `bracket_advance` and `bracket_advance` (final) toasts with:
+  - Emerald-600 background + white text via Sonner `className` overrides (`!bg-emerald-600 !text-white !border-emerald-700`).
+  - `data-testid="bracket-advance-toast"` for QA.
+- `bracket_tie` toast tagged with `data-testid="bracket-tie-toast"` (styling unchanged — amber warning stays).
+
+### Payout Curve Presets
+- **Backend model**: `League.payout_curve: List[float]` (default `[0.5, 0.3, 0.2]`).
+- **New endpoint**: `PATCH /api/leagues/{id}/payout-curve` — director-only. Validates non-negative shares that sum to 1.0 ± 0.02.
+- **`GET /rounds/{id}/payout`** now reads the league's stored curve (defaults to 50/30/20) and echoes it in the response as `payout_curve` so the client can drive share-card copy without a second call.
+- **Frontend**: `PayoutDistribution` gets a mobile-padded curve panel (`bg-slate-50`, emerald-600 outline pills) with presets `50/30/20`, `60/25/15`, and `Custom`. Custom accepts `60/25/15`, `60,25,15`, or decimals; auto-normalizes if shares are entered as percents.
+
+### Combined Post Bundle
+- Added `jszip` (frontend dependency).
+- **New director-only "Post bundle · zip" button** in `PayoutDistribution` (`data-testid="payout-bundle-btn"`) that renders Winner + Leaderboard + Payout PNGs for every division, structured into per-division subfolders inside a single `.zip`:
+  ```
+  ace-chasers-{round}-bundle.zip
+    ├── open/
+    │    ├── leaderboard.png
+    │    ├── winner.png
+    │    └── payouts.png
+    ├── mpo/
+    │    ├── leaderboard.png
+    │    └── ...
+  ```
+- Note: **The zip is assembled client-side** using JSZip + the existing Canvas share-card renderers. This is a deliberate deviation from the "backend worker" phrasing in the request — server-side canvas rasterization would require Puppeteer/Playwright or a headless renderer image, which isn't warranted for a graphic already generated on the client. The UX is identical (single tap → single `.zip` download).
+
+### Files touched
+- Backend:
+  - `/app/backend/routers/leagues_router.py` — `League.payout_curve` field + `PATCH /leagues/{id}/payout-curve` endpoint.
+  - `/app/backend/routers/leagues_rounds_router.py` — `get_payout` reads `league.payout_curve`; response includes `payout_curve`.
+- Frontend:
+  - `/app/frontend/src/components/BracketView.jsx` — emerald-accent toasts.
+  - `/app/frontend/src/components/PayoutDistribution.jsx` — full rewrite with curve panel + Post bundle button.
+  - `/app/frontend/src/pages/leagues/RoundScorecard.jsx` — passes `leagueId` to `PayoutDistribution`.
+  - `/app/frontend/package.json` — `jszip` added.
+
+### Tests
+- `tests/test_iteration57.py` — 5/5 pass:
+  - Default curve is 50/30/20.
+  - PATCH to 60/25/15 shifts payouts on $100 pool to $60/$25/$15.
+  - Rejects sum-drift > 2%.
+  - Rejects non-director (403).
+  - Custom 4-slot curve (40/30/20/10) honoured with 4 players.
+- Full new-modules sweep (52 + 53 + 54 + 55 + 57): 16/16 pass.
+
+### Backlog (unchanged)
+- P3 (deferred): Backend-side rasterization for the Post Bundle (would need Playwright/Puppeteer worker; current client-side JSZip flow ships the same UX).
+- P2: Vault Share Sheets polish (richer previews when sharing from Vault to Clubhouse).

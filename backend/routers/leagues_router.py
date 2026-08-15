@@ -202,6 +202,10 @@ class League(BaseModel):
     entry_fee: float = 0.0  # per-round entry fee
     divisions: List[str] = Field(default_factory=lambda: ["Open"])
     payout_split: Dict[str, float] = Field(default_factory=lambda: {"pool": 0.7, "ace": 0.2, "club": 0.1})
+    # Per-place payout distribution curve used by get_payout. Fractions must
+    # sum to 1.0. Defaults to a top-3 50/30/20 split; managers can switch
+    # to 60/25/15 or a custom curve via PATCH /leagues/{id}/payout-curve.
+    payout_curve: List[float] = Field(default_factory=lambda: [0.5, 0.3, 0.2])
     director_id: str  # user_id
     created_at: str = Field(default_factory=now_iso)
 
@@ -1151,6 +1155,38 @@ async def set_division(member_id: str, payload: DivisionPayload, request: Reques
         raise HTTPException(status_code=403, detail="Not allowed")
     await db.league_members.update_one({"id": member_id}, {"$set": {"division": payload.division}})
     return {"ok": True, "division": payload.division}
+
+
+# ============= PAYOUT CURVE PRESET =============
+class PayoutCurvePayload(BaseModel):
+    # Fractions must sum to ~1.0. Preset picks like 50/30/20 = [0.5,0.3,0.2]
+    # or 60/25/15 = [0.6,0.25,0.15] are the two blessed presets; managers
+    # can also POST a custom shape (any length ≥ 1).
+    payout_curve: List[float]
+
+@api_router.patch("/leagues/{league_id}/payout-curve")
+async def set_payout_curve(league_id: str, payload: PayoutCurvePayload, request: Request,
+                             session_token: Optional[str] = Cookie(None),
+                             authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    caller = await _require_member(league_id, user.user_id)
+    if caller.get("role") != "director":
+        raise HTTPException(status_code=403, detail="Only director can change the payout curve")
+    curve = payload.payout_curve
+    if not curve:
+        raise HTTPException(status_code=400, detail="Payout curve cannot be empty")
+    if any(s < 0 for s in curve):
+        raise HTTPException(status_code=400, detail="Payout shares cannot be negative")
+    total = sum(curve)
+    # Allow a small rounding drift (e.g. 0.6+0.25+0.15 = 1.0 exactly, but
+    # a hand-typed custom split like 0.5+0.3+0.199 should still land).
+    if abs(total - 1.0) > 0.02:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Payout shares must sum to 1.0 (±0.02); got {total:.3f}",
+        )
+    await db.leagues.update_one({"id": league_id}, {"$set": {"payout_curve": curve}})
+    return {"ok": True, "payout_curve": curve}
 
 
 # ============= DIRECTOR NOTES =============

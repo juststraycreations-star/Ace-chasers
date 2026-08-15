@@ -1174,6 +1174,7 @@ export default function RoundScorecard() {
         {showPayout && (
           <PayoutDistribution
             roundId={roundId}
+            leagueId={round?.league_id}
             leagueName={league?.name}
             isDirector={isDirector}
             onClose={() => setShowPayout(false)}

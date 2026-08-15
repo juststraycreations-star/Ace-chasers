@@ -826,14 +826,19 @@ async def get_payout(round_id: str, request: Request,
             "net": s.get("total", 0) - s.get("handicap_at_round", 0),
         })
 
-    # Distribute pool across divisions proportional to # players, then payout curve within each division
-    # Curve: 50/30/20 top-3 payouts; if fewer players, only top gets everything.
+    # Distribute pool across divisions proportional to # players, then payout curve within each division.
+    # Curve source of truth: league.payout_curve (defaults to 50/30/20 top-3).
+    # If fewer players than curve slots, we truncate; any remaining
+    # fraction is folded into 1st place so the pool is fully paid out.
     payouts = {}
+    league_curve = list(lg.get("payout_curve") or [0.5, 0.3, 0.2])
+    if not league_curve:
+        league_curve = [0.5, 0.3, 0.2]
     total_players = sum(len(v) for v in divisions_out.values()) or 1
     for div, players in divisions_out.items():
         players.sort(key=lambda p: (p["net"], p["total"]))
         div_pool = round(pool_available * (len(players) / total_players), 2)
-        curve = [0.5, 0.3, 0.2][: min(3, len(players))]
+        curve = league_curve[: min(len(league_curve), len(players))]
         remaining = 1 - sum(curve)
         if remaining > 0 and curve:
             curve[0] += remaining
@@ -857,6 +862,7 @@ async def get_payout(round_id: str, request: Request,
         "pool_available": round(pool_available, 2),
         "divisions": payouts,
         "payout_split": lg.get("payout_split", {"pool": 0.7, "ace": 0.2, "club": 0.1}),
+        "payout_curve": league_curve,
     }
 
 

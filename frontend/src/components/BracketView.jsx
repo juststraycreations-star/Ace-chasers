@@ -45,12 +45,20 @@ export default function BracketView({ leagueId, leagueName, members, isDirector,
         toast.success(`🏆 ${win} · Bracket Champion!`, {
           description: "Final match resolved — season crown claimed.",
           duration: 8000,
+          className:
+            "!bg-emerald-600 !text-white !border-emerald-700 !shadow-lg shadow-emerald-500/30",
+          descriptionClassName: "!text-emerald-50",
+          "data-testid": "bracket-advance-toast",
         });
         fireChampionConfetti();
       } else {
         toast.success(`${win} advances`, {
           description: `Winner promoted to ${msg.next_tier_label || "the next tier"}`,
           duration: 5000,
+          className:
+            "!bg-emerald-600 !text-white !border-emerald-700 !shadow-md shadow-emerald-500/25",
+          descriptionClassName: "!text-emerald-50",
+          "data-testid": "bracket-advance-toast",
         });
       }
       // Live-refresh the bracket render so viewers see the pin move.
@@ -59,6 +67,7 @@ export default function BracketView({ leagueId, leagueName, members, isDirector,
       toast.warning("Match Play tie · director override required", {
         description: "Both finalists tied — sudden-death playoff needed.",
         duration: 6000,
+        "data-testid": "bracket-tie-toast",
       });
     }
   }, format === "Match Play");
