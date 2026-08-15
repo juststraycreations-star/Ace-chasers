@@ -465,3 +465,34 @@ Enterprise-grade League Management platform:
 ### Backlog (unchanged)
 - P3 (deferred): Backend-side rasterization for the Post Bundle (would need Playwright/Puppeteer worker; current client-side JSZip flow ships the same UX).
 - P2: Vault Share Sheets polish (richer previews when sharing from Vault to Clubhouse).
+
+---
+
+## Iteration 58 — Round Detail Management state layer (2026-02-15)
+
+### Added
+- **`/app/frontend/src/store/roundStore.js`** — Zustand store for the Round Detail Management feature. Exports:
+  - `useRoundStore` (Zustand hook)
+  - `ROUND_STATUS` / `ROUND_STATUS_VALUES` — strict enum `['Registered', 'Active Scoring', 'Card Pending', 'Finalized']`
+  - `MOCK_CURRENT_ROUND` / `MOCK_ACTIVE_PLAYERS` — dashboard-ready mock fixture
+  - Pure mappers: `mapGameType()`, `deriveLayout()`, `deriveRoundStatus()`
+
+### State shape
+- `currentRound: { roundId, courseName, location, layout, gameType, totalPlayersCount }`
+- `activePlayers: [{ playerId, fullName, division, currentScore, currentHole, roundStatus }]`
+- `lastHydratedAt` (ISO timestamp — set on every successful hydrate)
+
+### Actions
+- `setCurrentRound(round)`, `setActivePlayers(players)`, `clear()`, `loadMock()`
+- `updatePlayerStatus(playerId, newStatus)` — immutable mutation, throws on unknown enum value, returns the updated player object
+- `hydrateFromBackend({ round, members, scorecards })` — maps existing backend shapes onto this store without touching the server documents. Safe to call repeatedly.
+
+### Backend compatibility
+- Reads `rounds.{id,course_location,holes,par_per_hole,format}`, `league_members.{id,name,division}`, and `scorecards.{member_id,plus_minus,scores,player_certified,finalized}` as-is. No new backend endpoints or schema fields added.
+
+### Verification
+- Node smoke tests (7/7 pass) covering enum contract, all four `deriveRoundStatus` branches, `mapGameType`/`deriveLayout` output, mock hydration, `updatePlayerStatus` immutability + invalid-status throw, and `hydrateFromBackend` mapping for a Match-Play 9-hole round.
+- Lint clean. No UI components introduced.
+
+### Backlog (unchanged)
+- P2: Vault Share Sheets polish; Curve Sanity Warnings; Bundle Preview lightbox; Payout Curve History.
