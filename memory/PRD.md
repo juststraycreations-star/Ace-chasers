@@ -528,3 +528,28 @@ Enterprise-grade League Management platform:
 ### Backlog (unchanged)
 - P2: Round Detail Header + Active Players grid (UI over roundStore from Iteration 58).
 - P2: Vault Share Sheets polish; Curve Sanity Warnings; Bundle Preview lightbox; Payout Curve History.
+
+---
+
+## Iteration 60 — Delete League modal polish (2026-02-15)
+
+### Styling upgrade
+- **Modal container**: `bg-white rounded-xl shadow-2xl border border-gray-100`. Overlay uses `bg-slate-900/50 backdrop-blur-sm` for a crisp, brand-neutral scrim (no dark blackout).
+- **Destructive callout**: `bg-red-50 text-red-700 border border-red-100` — red palette is now scoped exclusively to the "cannot be undone" block so the rest of the modal stays clean.
+- **Header icon**: red-tinted circular badge (`bg-red-50 text-red-700 w-10 h-10 rounded-full`) instead of a naked warning glyph.
+
+### Button state machine
+- **Disabled** (input doesn't match): `bg-gray-100 text-gray-400 cursor-not-allowed`
+- **Active** (millisecond input matches): `bg-red-600 hover:bg-red-700 text-white transition-colors cursor-pointer`
+- **Loading** (API in flight): `bg-red-600 text-white opacity-70 cursor-wait` with an animated `<CircleNotch className="animate-spin">` replacing the label text; `aria-busy` set, `disabled` set — no double-submits possible.
+- Button width is pinned to `min-w-[168px]` so the label→spinner swap doesn't shift the layout.
+
+### Success banner
+- On successful deletion, toast fires with `position: "top-center"` and exact copy: `"League successfully permanently removed from database."` (`data-testid="delete-league-success-toast"`). Redirect to `/leagues` happens on the next tick, so the banner is visible above the fresh League List.
+
+### Accessibility
+- Modal now sets `role="dialog"`, `aria-modal="true"`, and `aria-labelledby` pointing at the H2 title.
+- Confirmation input is disabled during API flight so screen readers announce the busy state along with the button's `aria-busy`.
+
+### Files touched
+- `/app/frontend/src/components/DeleteLeaguePanel.jsx` — full rewrite for polish only. No backend, no store, no test changes. Iteration 59's 4/4 pytest sweep still applies unchanged.
