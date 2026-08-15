@@ -6,6 +6,7 @@ import StandingsTab from "@/components/StandingsTab";
 import LedgerTab from "@/components/LedgerTab";
 import ClubhouseTab from "@/components/ClubhouseTab";
 import ComplianceTab from "@/components/ComplianceTab";
+import DeleteLeaguePanel from "@/components/DeleteLeaguePanel";
 import ManagerDMPanel from "@/components/ManagerDMPanel";
 import RoundQRPanel from "@/components/RoundQRPanel";
 import RoundCard from "@/components/RoundCard";
@@ -378,7 +379,16 @@ export default function LeagueDetail() {
         )}
         {tab === "ledger" && <LedgerTab leagueId={leagueId} isDirector={league.is_director} />}
         {tab === "clubhouse" && <ClubhouseTab leagueId={leagueId} isDirector={league.is_director} currentUser={user} />}
-        {tab === "compliance" && <ComplianceTab leagueId={leagueId} isDirector={league.is_director} />}
+        {tab === "compliance" && (
+          <>
+            <ComplianceTab leagueId={leagueId} isDirector={league.is_director} />
+            <DeleteLeaguePanel
+              leagueId={leagueId}
+              leagueName={league.name}
+              isDirector={league.is_director}
+            />
+          </>
+        )}
 
         {/* Fair Play Agreement modal — covers Announcements-only viewers and
             every other private league surface. Renders once per league until

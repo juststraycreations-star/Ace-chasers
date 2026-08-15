@@ -1157,6 +1157,67 @@ async def set_division(member_id: str, payload: DivisionPayload, request: Reques
     return {"ok": True, "division": payload.division}
 
 
+# ============= LEAGUE DELETE (director-only, cascade) =============
+class LeagueDeletePayload(BaseModel):
+    # The manager must retype the exact league name to confirm the delete.
+    # Server double-checks this against the stored league.name so a stale
+    # client with the old name can't nuke a renamed league by accident.
+    confirm_name: str
+
+@api_router.delete("/leagues/{league_id}")
+async def delete_league(league_id: str, payload: LeagueDeletePayload, request: Request,
+                          session_token: Optional[str] = Cookie(None),
+                          authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    lg = await db.leagues.find_one({"id": league_id}, {"_id": 0})
+    if not lg:
+        raise HTTPException(status_code=404, detail="League not found")
+    caller = await _require_member(league_id, user.user_id)
+    if caller.get("role") != "director":
+        raise HTTPException(status_code=403, detail="Only the director can delete a league")
+    # Server-side confirmation guard — client already asked, but we defend.
+    if (payload.confirm_name or "").strip() != (lg.get("name") or "").strip():
+        raise HTTPException(status_code=400,
+                             detail="Confirmation name does not match the league name")
+
+    # Gather round_ids so we can sweep round-scoped collections that don't
+    # carry a league_id column of their own (e.g. ctp_entries).
+    rounds = await db.rounds.find({"league_id": league_id}, {"_id": 0, "id": 1}).to_list(1000)
+    round_ids = [r["id"] for r in rounds]
+
+    # Cascade sweep. Every collection listed here stores either a
+    # `league_id` reference directly or is round-scoped. Deletes are hard
+    # (this feature is scoped to test-league cleanup per the manager UX).
+    counts: Dict[str, int] = {}
+    LEAGUE_SCOPED = [
+        "league_members", "rounds", "scorecards", "seasons", "brackets",
+        "ledger", "announcements", "lost_found", "stories", "feed_posts",
+    ]
+    for coll in LEAGUE_SCOPED:
+        res = await db[coll].delete_many({"league_id": league_id})
+        counts[coll] = int(res.deleted_count)
+    # Round-scoped: ctp_entries lives under round_id and never carries
+    # league_id, so we clean it separately.
+    if round_ids:
+        res = await db.ctp_entries.delete_many({"round_id": {"$in": round_ids}})
+        counts["ctp_entries"] = int(res.deleted_count)
+    else:
+        counts["ctp_entries"] = 0
+
+    # Finally, remove the league document itself.
+    res = await db.leagues.delete_one({"id": league_id})
+    counts["leagues"] = int(res.deleted_count)
+
+    total_docs = sum(counts.values())
+    return {
+        "ok": True,
+        "league_id": league_id,
+        "league_name": lg.get("name"),
+        "deleted_counts": counts,
+        "total_docs_removed": total_docs,
+    }
+
+
 # ============= PAYOUT CURVE PRESET =============
 class PayoutCurvePayload(BaseModel):
     # Fractions must sum to ~1.0. Preset picks like 50/30/20 = [0.5,0.3,0.2]

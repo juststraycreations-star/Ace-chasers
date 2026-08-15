@@ -496,3 +496,35 @@ Enterprise-grade League Management platform:
 
 ### Backlog (unchanged)
 - P2: Vault Share Sheets polish; Curve Sanity Warnings; Bundle Preview lightbox; Payout Curve History.
+
+---
+
+## Iteration 59 — Delete League cascade (2026-02-15)
+
+### Backend
+- **`DELETE /api/leagues/{id}`** — director-only. Requires a `confirm_name` payload that must exactly match the stored `league.name` (server-side guard even if the client already asked). Cascade-deletes across all league-scoped collections:
+  - `league_members`, `rounds`, `scorecards`, `seasons`, `brackets`, `ledger`, `announcements`, `lost_found`, `stories`, `feed_posts`
+  - Round-scoped: `ctp_entries` (via `round_id` lookup)
+  - Finally: `leagues` itself
+- Returns `{ deleted_counts: {...}, total_docs_removed: N }` for observability.
+
+### Frontend
+- New `DeleteLeaguePanel` component (`/app/frontend/src/components/DeleteLeaguePanel.jsx`) — director-only. Mounted inside the Compliance tab of `LeagueDetail`. Renders a subtle `text-red-600 hover:text-red-800 text-sm font-medium` "Delete League" trigger.
+- Type-to-confirm modal: Delete button stays disabled until the manager retypes the exact league name (client + server both enforce). Modal cancel closes gracefully; the Delete button transitions to "Deleting…" while awaiting the server.
+- On success: clears the `roundStore` (from Iteration 58) so no stale Round Detail state leaks onto the League List, fires a success toast with the total-docs-removed count, and `navigate('/leagues', { replace: true })`.
+
+### Tests
+- `tests/test_iteration59.py` — 4/4 pass:
+  - Wrong `confirm_name` → 400, league still exists.
+  - Non-director → 403.
+  - Cascade wipes every seeded collection (league_members, rounds, scorecards, seasons, ledger, feed_posts, announcements, ctp_entries).
+  - Repeated DELETE returns 404.
+
+### Files touched
+- `/app/backend/routers/leagues_router.py` — added `DELETE /leagues/{id}` cascade handler.
+- `/app/frontend/src/components/DeleteLeaguePanel.jsx` — new component.
+- `/app/frontend/src/pages/leagues/LeagueDetail.jsx` — mounted panel under the Compliance tab.
+
+### Backlog (unchanged)
+- P2: Round Detail Header + Active Players grid (UI over roundStore from Iteration 58).
+- P2: Vault Share Sheets polish; Curve Sanity Warnings; Bundle Preview lightbox; Payout Curve History.
