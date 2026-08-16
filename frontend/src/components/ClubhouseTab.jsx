@@ -16,14 +16,24 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
   const [stories, setStories] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [feed, setFeed] = useState([]);
-  // Split the feed once so the recap card(s) render above the
-  // Clubhouse Discussion divider and every user-authored post renders
-  // beneath it. Preserves the server-side sort order inside each half.
-  const [recaps, discussion] = useMemo(() => {
+  // Split the feed into three ordered slices so the layout reads
+  // top-to-bottom as:
+  //   1. Recap card(s) — the "active round" summary
+  //   2. Pinned posts   — critical announcements the director wants
+  //                        anchored above the fold (never scroll off)
+  //   3. Clubhouse Discussion divider
+  //   4. User-authored posts (chronological, per server order)
+  // Preserves server-side sort order inside each slice.
+  const [recaps, pinned, discussion] = useMemo(() => {
     const r = [];
+    const p = [];
     const d = [];
-    for (const p of feed) (p.kind === "recap" ? r : d).push(p);
-    return [r, d];
+    for (const post of feed) {
+      if (post.kind === "recap") r.push(post);
+      else if (post.pinned) p.push(post);
+      else d.push(post);
+    }
+    return [r, p, d];
   }, [feed]);
   const [lostFound, setLostFound] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -162,6 +172,106 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
   const resolveLF = async (id) => {
     try { await api.patch(`/lost-found/${id}/resolve`); await load(); } catch {}
   };
+
+  // Shared post renderer used above the divider (pinned) and below the
+  // divider (discussion). Kept as a plain function returning JSX so the
+  // pinned + discussion loops stay a single source of truth.
+  const renderPost = (p) => (
+    <div key={p.id} className={`card-surface p-5 ${p.hidden ? "opacity-40" : ""} ${p.pinned ? "ring-1 ring-amber-300 bg-amber-50/40" : ""}`} data-testid={`feed-post-${p.id}`}>
+      <div className="flex items-start gap-3">
+        {p.author_picture ? (
+          <img src={p.author_picture} className="w-9 h-9 rounded-full" alt="" />
+        ) : (
+          <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center text-xs">{p.author_name?.charAt(0)}</div>
+        )}
+        <div className="flex-1">
+          <div className="text-sm font-medium flex items-center gap-2">
+            {p.author_name}
+            {p.pinned && (
+              <span
+                className="text-[9px] uppercase tracking-wider text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-1.5 py-0.5 font-mono-data inline-flex items-center gap-0.5"
+                data-testid={`feed-post-pinned-${p.id}`}
+              >
+                <PushPin size={9} weight="fill" /> Pinned
+              </span>
+            )}
+            {p.hidden && (
+              <span className="text-[9px] uppercase tracking-wider text-red-400 font-mono-data" data-testid={`feed-post-hidden-${p.id}`}>
+                Removed
+              </span>
+            )}
+          </div>
+          <div className="text-[10px] font-mono-data text-zinc-500">{new Date(p.created_at).toLocaleString()}</div>
+          {p.title && (
+            <div className="mt-1 font-display text-base text-slate-900" data-testid={`feed-post-title-${p.id}`}>
+              {p.title}
+            </div>
+          )}
+          <div className="mt-2 text-sm text-slate-800 whitespace-pre-wrap">{p.body}</div>
+          {(() => {
+            // Iteration 51: posts now carry an ordered `media[]`.
+            // Fall back to legacy image_path / video_path for
+            // posts created before the migration.
+            const items = (p.media && p.media.length)
+              ? p.media
+              : [
+                  ...(p.image_path ? [{ kind: "image", path: p.image_path }] : []),
+                  ...(p.video_path ? [{ kind: "video", path: p.video_path, poster: p.video_poster }] : []),
+                ];
+            if (items.length === 0) return null;
+            return (
+              <div className="mt-3 grid gap-2" data-testid={`feed-post-media-${p.id}`}>
+                {items.map((m, i) => m.kind === "image" ? (
+                  <AuthImage
+                    key={i}
+                    path={m.path}
+                    className="max-h-96 rounded-lg border border-slate-200 cursor-zoom-in"
+                    onClick={() => setLightbox({ path: m.path, caption: p.author_name })}
+                    alt=""
+                    data-testid={`feed-post-image-${p.id}-${i}`}
+                  />
+                ) : (
+                  <video
+                    key={i}
+                    src={m.path.startsWith("http") ? m.path : `/api/files/${m.path}`}
+                    poster={m.poster || undefined}
+                    controls
+                    preload="metadata"
+                    className="max-h-96 w-full rounded-lg border border-slate-200 bg-black"
+                    data-testid={`feed-post-video-${p.id}-${i}`}
+                  />
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+        {(isDirector || p.author_id === currentUser?.user_id) && !p.hidden && (
+          <div className="flex items-center gap-1 shrink-0" data-testid={`feed-mod-panel-${p.id}`}>
+            <button
+              type="button"
+              onClick={() => deleteFeedPost(p.id)}
+              data-testid={`feed-delete-btn-${p.id}`}
+              title="Delete post"
+              className="p-1.5 rounded-md text-zinc-500 hover:text-red-500 hover:bg-red-500/10"
+            >
+              <Trash size={14} weight="duotone" />
+            </button>
+            {isDirector && p.author_id && p.author_id !== currentUser?.user_id && (
+              <button
+                type="button"
+                onClick={() => muteUser(p.author_id, p.author_name)}
+                data-testid={`feed-mute-btn-${p.id}`}
+                title={`Mute ${p.author_name}`}
+                className="p-1.5 rounded-md text-zinc-500 hover:text-amber-600 hover:bg-amber-500/10"
+              >
+                <SpeakerX size={14} weight="duotone" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6" data-testid="clubhouse-tab">
@@ -307,6 +417,20 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
             </div>
           ))}
 
+          {/* Pinned announcements — anchored above the divider so
+              critical posts never scroll off. Rendered only when the
+              director (or any actor with mod rights) has actually
+              pinned something. */}
+          {pinned.length > 0 && (
+            <div className="space-y-3" data-testid="clubhouse-pinned-block">
+              <div className="text-[10px] font-mono-data uppercase tracking-widest text-amber-700 flex items-center gap-1.5 mt-6">
+                <PushPin size={11} weight="fill" />
+                Pinned · {pinned.length}
+              </div>
+              {pinned.map(renderPost)}
+            </div>
+          )}
+
           {/* Structural section divider — cleanly separates the recap
               block above from the user-authored chat feed below.
               Padding pushes the heading away from the recap card's
@@ -319,103 +443,26 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
             Clubhouse Discussion
           </div>
 
-          {/* Discussion feed — user-authored posts only. */}
-          {discussion.map((p) => (
-            <div key={p.id} className={`card-surface p-5 ${p.hidden ? "opacity-40" : ""} ${p.pinned ? "ring-1 ring-amber-300 bg-amber-50/40" : ""}`} data-testid={`feed-post-${p.id}`}>
-              <div className="flex items-start gap-3">
-                {p.author_picture ? (
-                  <img src={p.author_picture} className="w-9 h-9 rounded-full" alt="" />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center text-xs">{p.author_name?.charAt(0)}</div>
-                )}
-                <div className="flex-1">
-                    <div className="text-sm font-medium flex items-center gap-2">
-                      {p.author_name}
-                      {p.pinned && (
-                        <span
-                          className="text-[9px] uppercase tracking-wider text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-1.5 py-0.5 font-mono-data inline-flex items-center gap-0.5"
-                          data-testid={`feed-post-pinned-${p.id}`}
-                        >
-                          <PushPin size={9} weight="fill" /> Pinned
-                        </span>
-                      )}
-                      {p.hidden && (
-                        <span className="text-[9px] uppercase tracking-wider text-red-400 font-mono-data" data-testid={`feed-post-hidden-${p.id}`}>
-                          Removed
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[10px] font-mono-data text-zinc-500">{new Date(p.created_at).toLocaleString()}</div>
-                    {p.title && (
-                      <div className="mt-1 font-display text-base text-slate-900" data-testid={`feed-post-title-${p.id}`}>
-                        {p.title}
-                      </div>
-                    )}
-                    <div className="mt-2 text-sm text-slate-800 whitespace-pre-wrap">{p.body}</div>
-                    {(() => {
-                      // Iteration 51: posts now carry an ordered `media[]`.
-                      // Fall back to legacy image_path / video_path for
-                      // posts created before the migration.
-                      const items = (p.media && p.media.length)
-                        ? p.media
-                        : [
-                            ...(p.image_path ? [{ kind: "image", path: p.image_path }] : []),
-                            ...(p.video_path ? [{ kind: "video", path: p.video_path, poster: p.video_poster }] : []),
-                          ];
-                      if (items.length === 0) return null;
-                      return (
-                        <div className="mt-3 grid gap-2" data-testid={`feed-post-media-${p.id}`}>
-                          {items.map((m, i) => m.kind === "image" ? (
-                            <AuthImage
-                              key={i}
-                              path={m.path}
-                              className="max-h-96 rounded-lg border border-slate-200 cursor-zoom-in"
-                              onClick={() => setLightbox({ path: m.path, caption: p.author_name })}
-                              alt=""
-                              data-testid={`feed-post-image-${p.id}-${i}`}
-                            />
-                          ) : (
-                            <video
-                              key={i}
-                              src={m.path.startsWith("http") ? m.path : `/api/files/${m.path}`}
-                              poster={m.poster || undefined}
-                              controls
-                              preload="metadata"
-                              className="max-h-96 w-full rounded-lg border border-slate-200 bg-black"
-                              data-testid={`feed-post-video-${p.id}-${i}`}
-                            />
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                  {(isDirector || p.author_id === currentUser?.user_id) && !p.hidden && (
-                    <div className="flex items-center gap-1 shrink-0" data-testid={`feed-mod-panel-${p.id}`}>
-                      <button
-                        type="button"
-                        onClick={() => deleteFeedPost(p.id)}
-                        data-testid={`feed-delete-btn-${p.id}`}
-                        title="Delete post"
-                        className="p-1.5 rounded-md text-zinc-500 hover:text-red-500 hover:bg-red-500/10"
-                      >
-                        <Trash size={14} weight="duotone" />
-                      </button>
-                      {isDirector && p.author_id && p.author_id !== currentUser?.user_id && (
-                        <button
-                          type="button"
-                          onClick={() => muteUser(p.author_id, p.author_name)}
-                          data-testid={`feed-mute-btn-${p.id}`}
-                          title={`Mute ${p.author_name}`}
-                          className="p-1.5 rounded-md text-zinc-500 hover:text-amber-600 hover:bg-amber-500/10"
-                        >
-                          <SpeakerX size={14} weight="duotone" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
+          {/* Discussion feed — user-authored, non-pinned posts. */}
+          {discussion.map(renderPost)}
+
+          {/* Friendly empty state below the divider when nobody's
+              posted yet. Only shows when the feed already has a recap
+              or a pinned post above (i.e. this is the first
+              discussion post that could exist). */}
+          {discussion.length === 0 && (recaps.length > 0 || pinned.length > 0) && (
+            <div
+              data-testid="clubhouse-discussion-empty-state"
+              className="text-center py-8 px-4 rounded-2xl border border-dashed border-gray-200 bg-gray-50/60"
+            >
+              <div className="font-display text-lg text-slate-900 mb-1">
+                Be the first to post
               </div>
-          ))}
+              <p className="text-sm text-slate-600">
+                Share a rip, a putt, or a heckle — the composer is right up top.
+              </p>
+            </div>
+          )}
           {feed.length === 0 && <div className="text-zinc-500 text-sm text-center py-6">No posts yet</div>}
         </div>
       )}

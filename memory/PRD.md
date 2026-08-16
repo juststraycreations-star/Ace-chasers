@@ -787,3 +787,26 @@ Both camelCase (client-friendly) and snake_case aliases persisted so future JSON
 - P2: Print-Ready Round Card PDF.
 - P2: Deleted Leagues Timeline UI + Retention Expiry cron.
 - P2: Round Detail Header + Active Players grid.
+
+---
+
+## Iteration 67 — Pinned anchor + empty discussion state (2026-02-16)
+
+### Added
+- **Pinned discussion anchor** — the `useMemo` feed splitter now produces three slices: `recaps`, `pinned`, `discussion`. Pinned posts render in a dedicated block ABOVE the "Clubhouse Discussion" divider under a small `PINNED · N` label chip (`text-amber-700` on a subtle amber background, `data-testid="clubhouse-pinned-block"`). Critical announcements no longer scroll off inside the chronological feed.
+- **Empty discussion state** — when the discussion slice is empty AND the feed already has a recap or pinned post, renders a dashed-outline card beneath the divider reading "Be the first to post · Share a rip, a putt, or a heckle — the composer is right up top." `data-testid="clubhouse-discussion-empty-state"`.
+
+### Refactor
+- Extracted the ~95-line post JSX into a `renderPost(p)` helper so the pinned block and the discussion loop stay in sync visually (single source of truth for post styling, mod controls, media rendering).
+
+### Files touched
+- `/app/frontend/src/components/ClubhouseTab.jsx` — `useMemo` split now returns 3 slices; new `renderPost` helper; pinned block + empty state.
+
+### Deploy
+- Production redeploy of Iterations 63–67 dispatched to https://acechasers.net.
+
+### Backlog (unchanged)
+- P2: Rotation Audit Log for join-code changes.
+- P2: Print-Ready Round Card PDF.
+- P2: Deleted Leagues Timeline + Retention Expiry cron.
+- P2: Round Detail Header + Active Players grid.
