@@ -1091,3 +1091,64 @@ When Firebase Cloud Messaging returns a transient 5xx / 429 or the network flake
 ### Tile behaviour (unchanged JS)
 `PushDeliveryTile` already aggregates by summing `totalSent / totalFailed / tokensPruned`. The retry follow-up row contributes retry outcomes to those totals naturally — no frontend changes needed.
 
+
+---
+
+## Iteration 75 — Weekly Push-Health Digest Emails (Feb 2026)
+
+### Goal
+Give each league director a plain-English weekly email summarising push delivery for their league — successes (initial + retry), retries recovered, permanent drops, and dead tokens pruned — so quiet leagues still notice delivery health drops.
+
+### Delivered
+- **`/app/backend/push_digest.py`** — new module:
+  * `LeagueDigest` dataclass — one row per director-visible league.
+  * `async gather_digests(db, window_days=7, now=None)` — pure aggregation over `push_notifications_log`:
+    - Windowed by `timestamp >= now - window_days`.
+    - Joins `roundId → rounds.league_id → leagues → users.email` in three batched queries.
+    - Skips leagues whose director has no on-file email (digest is a signal, not spam).
+    - Retry rows (`phase: "retry"`) contribute `retriedSent → retries_succeeded` and `permanentlyFailed → permanent_drops`. Recovered retries are added back into `successes` so the headline number reflects true delivery outcomes.
+    - Initial fan-out rows contribute `totalSent → successes`. `totalFailed` from initial rows is intentionally NOT counted — those are either recovered by the retry row (already added) OR terminal drops (already counted via `permanentlyFailed` on the retry row), so double-billing is avoided.
+    - `failed_token_prefixes` dedup carried through from the retry row for operator drilldown.
+  * `render_digest_email(digest)` — returns `(subject, plain, html)` with:
+    - Subject: `"<League Name> · push-health digest (N delivered)"`.
+    - Human date-range formatting via `_pretty_range` (same-month vs cross-month).
+    - Personalized greeting (`director_name.split(' ')[0]`).
+    - Plain-text and HTML variants, both containing every headline stat. HTML uses the same emerald/amber palette as the `PushDeliveryTile`.
+  * `smtp_send(to, subject, plain, html)` — Gmail SMTP via `GMAIL_SMTP_USER` + `GMAIL_APP_PASSWORD` (reuses beta_router's env conventions). Never raises — returns `(ok, note)` so a broken SMTP for one director can't stall the batch.
+  * `async run_weekly_digest(db, window_days=7, dry_run=False, now=None)` — orchestrator returning `{leagues_considered, sent, failed, skipped, rows: [...]}` for observability.
+
+- **`/app/backend/routers/push_router.py`** — new admin-gated endpoint:
+  * `POST /api/admin/push/digest/run?window_days=7&dry_run=false`
+  * Guarded by `X-Admin-Key` via `deps.require_admin`.
+  * Validates `1 <= window_days <= 90`.
+  * Lazy-imports `push_digest.run_weekly_digest` so the module isn't loaded on cold-start of every request.
+  * No in-process scheduler introduced — an external weekly cron / GitHub Action / manual curl is the intended trigger surface so multi-pod deploys can't double-send.
+
+### Verification (6 new + 12 regression = 18/18 green)
+- `tests/test_iteration74.py`:
+  1. `gather_digests` groups rows correctly across mixed initial + retry rows (successes=9, retries_succeeded=1, permanent_drops=1, event_count=3, pruned=1) and threads `failed_token_prefixes` through untouched.
+  2. `render_digest_email` — plain body carries every phrasing (`"9 delivered"`, `"1 recovered after a retry"`, `"1 permanent drop"`, `"1 dead token"`, `"3 broadcast event"`) and HTML carries the wrapped-in-`<b>` equivalents.
+  3. `run_weekly_digest(dry_run=True)` never invokes `smtp_send` (monkeypatched to explode on call) and returns a preview row per league.
+  4. `POST /api/admin/push/digest/run` → 401 without `X-Admin-Key`, 200 with it, and includes the seeded fixture league in `rows`.
+  5. Endpoint rejects `window_days=0` and `window_days=999` with 400.
+  6. Rows outside the window (30 days old) are excluded even when the fresh row is included.
+- Full regression: `pytest tests/test_iteration72.py tests/test_iteration73.py tests/test_iteration74.py` → 18 passed.
+
+### Operator runbook
+- Weekly trigger (from any host with `ADMIN_API_KEY`):
+  ```
+  curl -X POST "$BASE/api/admin/push/digest/run?window_days=7&dry_run=false" \
+       -H "X-Admin-Key: $ADMIN_API_KEY"
+  ```
+- Dry-run preview:
+  ```
+  curl -X POST "$BASE/api/admin/push/digest/run?window_days=7&dry_run=true" \
+       -H "X-Admin-Key: $ADMIN_API_KEY"
+  ```
+- Requires `GMAIL_SMTP_USER` + `GMAIL_APP_PASSWORD` set in the production `.env` (same creds as beta signup emails). Without them the endpoint still returns a summary but every row's `status` is `smtp_not_configured`.
+
+### Files touched
+- `/app/backend/push_digest.py` (new)
+- `/app/backend/routers/push_router.py` — import `require_admin`, add `POST /api/admin/push/digest/run`.
+- `/app/backend/tests/test_iteration74.py` (new)
+

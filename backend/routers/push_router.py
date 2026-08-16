@@ -20,11 +20,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Cookie, Header, HTTPException, Request
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 
 from .leagues_router import get_current_user
+from deps import require_admin
 
 api_router = APIRouter()
 
@@ -128,3 +129,33 @@ async def unregister_push_token(payload: PushTokenDeletePayload, request: Reques
         {"token": payload.token, "user_id": user.user_id}
     )
     return {"ok": True, "deleted": int(res.deleted_count)}
+
+
+# ══════════════════════════════════════════════════════════════════
+# Admin — weekly push-health digest email trigger
+# ══════════════════════════════════════════════════════════════════
+@api_router.post("/admin/push/digest/run")
+async def admin_run_push_digest(
+    window_days: int = 7,
+    dry_run: bool = False,
+    _: bool = Depends(require_admin),
+):
+    """Aggregate the last `window_days` of `push_notifications_log`
+    rows, group by league, and email each director a digest of
+    successes, retries and permanent drops.
+
+    Admin-gated by `X-Admin-Key`. Intended trigger surface is an
+    external weekly cron / GitHub Action / manual curl. No in-process
+    scheduler is used so a multi-pod rollout can't double-send.
+
+    Query params:
+      • `window_days` (default 7) — size of the aggregation window.
+      • `dry_run=true` (default false) — skip SMTP, just return the
+        computed subject lines + totals for a preview.
+    """
+    if window_days < 1 or window_days > 90:
+        raise HTTPException(status_code=400,
+                             detail="window_days must be between 1 and 90")
+    from push_digest import run_weekly_digest  # lazy import
+    return await run_weekly_digest(db, window_days=window_days, dry_run=dry_run)
+
