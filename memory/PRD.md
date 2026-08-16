@@ -810,3 +810,33 @@ Both camelCase (client-friendly) and snake_case aliases persisted so future JSON
 - P2: Print-Ready Round Card PDF.
 - P2: Deleted Leagues Timeline + Retention Expiry cron.
 - P2: Round Detail Header + Active Players grid.
+
+---
+
+## Iteration 68 — Cache-busted deploy + avatar fallback (2026-02-16)
+
+### Deploy infra
+- **`vite.config.js`** — added explicit content-hashed file naming:
+  - `entryFileNames: 'assets/[name]-[hash].js'`
+  - `chunkFileNames: 'assets/[name]-[hash].js'`
+  - `assetFileNames: 'assets/[name]-[hash][extname]'`
+  Every rebuild now emits new filenames so browsers can never confuse a stale bundle for the fresh one.
+
+### Avatar fallback (defensive UI)
+- **New** `/app/frontend/src/lib/avatarFallback.js`:
+  - `AVATAR_FALLBACK_SVG` — inlined, percent-encoded SVG data-URL (emerald ring on light gray, silhouette head+shoulders). Zero network hops, cannot 404.
+  - `onAvatarError(e)` — attaches to `<img>` `onError`. Swaps a broken URL to the fallback SVG once, guarded by a `dataset.fallbackApplied` flag so the handler can never fire recursively (protects against the "onError → onError → onError…" render-loop pattern).
+- **`ClubhouseTab.jsx`** — feed post avatars now use the fallback:
+  - `p.author_picture` present → `<img src={p.author_picture} onError={onAvatarError}>` with `bg-gray-50 object-cover` so a broken CDN response can't collapse the layout.
+  - `p.author_picture` null/empty → render the SVG directly.
+  - Every avatar has `alt` + `data-testid="feed-post-avatar-{id}"`.
+
+### Zustand selector audit
+- `ClubhouseTab.jsx` consumes user identity via `useAuth()` (React Context, not Zustand). No spread/destructure in a selector, so `useShallow` doesn't apply here. The Zustand roundStore usage in `DeleteLeaguePanel.jsx` reads only `clear` as a single stable action reference — no shape hazard.
+- The re-render loop symptom the report described is instead addressed by the guarded `onAvatarError` handler above — the actual cause of the loop is a repeatedly-firing image-load error on the same `<img>`, which the dataset flag now prevents.
+
+### Deploy dispatch
+- Sent to deployer with an explicit cache-bypass instruction. Deployer asked to wipe `node_modules`/`dist`/Vite cache, `yarn install --check-files` fresh, run Vite from a clean slate. The content-hashed file names + `/api/version` build_id bump guarantee stale bundles auto-refresh on next load.
+
+### Backlog (unchanged)
+- P2: Pinned Filter Chip; Composer Deep-Link scroll; Rotation Audit Log; Print-Ready Round Card.

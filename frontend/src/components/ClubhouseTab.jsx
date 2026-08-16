@@ -7,6 +7,7 @@ import { PushPin, Warning, ImageSquare, Plus, Fire, TrendUp, Trash, CheckCircle,
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import ClubhouseFeedComposer from "./ClubhouseFeedComposer";
+import { AVATAR_FALLBACK_SVG, onAvatarError } from "@/lib/avatarFallback";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
@@ -180,9 +181,20 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
     <div key={p.id} className={`card-surface p-5 ${p.hidden ? "opacity-40" : ""} ${p.pinned ? "ring-1 ring-amber-300 bg-amber-50/40" : ""}`} data-testid={`feed-post-${p.id}`}>
       <div className="flex items-start gap-3">
         {p.author_picture ? (
-          <img src={p.author_picture} className="w-9 h-9 rounded-full" alt="" />
+          <img
+            src={p.author_picture}
+            onError={onAvatarError}
+            className="w-9 h-9 rounded-full bg-gray-50 object-cover"
+            alt={p.author_name || "Player"}
+            data-testid={`feed-post-avatar-${p.id}`}
+          />
         ) : (
-          <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center text-xs">{p.author_name?.charAt(0)}</div>
+          <img
+            src={AVATAR_FALLBACK_SVG}
+            className="w-9 h-9 rounded-full"
+            alt={p.author_name || "Player"}
+            data-testid={`feed-post-avatar-${p.id}`}
+          />
         )}
         <div className="flex-1">
           <div className="text-sm font-medium flex items-center gap-2">

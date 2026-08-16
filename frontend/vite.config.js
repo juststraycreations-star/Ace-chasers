@@ -21,6 +21,14 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 900,
       rollupOptions: {
         output: {
+          // Content-hashed file names — every code change flips the
+          // hash so browsers can never serve a stale JS/CSS bundle.
+          // `[hash]` alone is the *file* hash (identity), `[hash:8]`
+          // shortens it, and rollup replaces `[hash]` with the actual
+          // content-hash at build time.
+          entryFileNames: 'assets/[name]-[hash].js',
+          chunkFileNames: 'assets/[name]-[hash].js',
+          assetFileNames: 'assets/[name]-[hash][extname]',
           manualChunks: (id) => {
             if (!id.includes('node_modules')) return undefined;
             // Firebase is a self-contained SDK — safe to split.
