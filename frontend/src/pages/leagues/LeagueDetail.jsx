@@ -8,6 +8,7 @@ import ClubhouseTab from "@/components/ClubhouseTab";
 import ComplianceTab from "@/components/ComplianceTab";
 import DeleteLeaguePanel from "@/components/DeleteLeaguePanel";
 import JoinRoundPanel from "@/components/JoinRoundPanel";
+import PushDeliveryTile from "@/components/PushDeliveryTile";
 import ManagerDMPanel from "@/components/ManagerDMPanel";
 import RoundQRPanel from "@/components/RoundQRPanel";
 import RoundCard from "@/components/RoundCard";
@@ -385,6 +386,7 @@ export default function LeagueDetail() {
         {tab === "compliance" && (
           <>
             <ComplianceTab leagueId={leagueId} isDirector={league.is_director} />
+            {league.is_director && <PushDeliveryTile />}
             <DeleteLeaguePanel
               leagueId={leagueId}
               leagueName={league.name}

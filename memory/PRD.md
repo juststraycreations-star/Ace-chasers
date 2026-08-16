@@ -1003,3 +1003,41 @@ Two layers of protection:
 - `/app/backend/push_service.py` — telemetry write; `bracket_advance` support in `_resolve_recipients` + `_build_payload`.
 - `/app/backend/routers/push_router.py` — `GET /api/push/log`.
 - `/app/backend/db.py` — 3 indexes on `push_notifications_log`.
+
+
+---
+
+## Iteration 73 — PushDeliveryTile UI (Feb 2026, current fork)
+
+### Goal
+Surface the FCM fan-out telemetry (Iteration 72's `push_notifications_log`) inside the League Detail → Compliance tab so directors can see delivery health without hitting the API.
+
+### Delivered
+- **`/app/frontend/src/components/PushDeliveryTile.jsx`** — director-only tile:
+  * Header row with `BellRinging` icon, "PUSH DELIVERY" eyebrow, "FCM fan-out health" title.
+  * 3-cell metric grid (Delivered / Failed / Broadcast Events Checked) with emerald + amber accents.
+  * "Live Activity Status" list of the last 5 telemetry rows rendered as flat sentences:
+    `"<Event Label>: N delivered, M failed, K pruned (T ago)."`
+  * Event labels: `join_code_rotated → "Join Code Rotated"`, `payouts_finalized → "Payout Finalize"`, `bracket_advance → "Bracket Advance"`.
+  * Empty-state copy: "No broadcast events logged yet."
+  * `relTime()` helper (just-now / minutes / hours / days).
+  * Fetches `GET /api/push/log?limit=25`, slices top 5, polls every 30 s.
+  * Silently swallows API errors so legacy backends without the endpoint don't spam the compliance tab.
+- **`/app/frontend/src/pages/leagues/LeagueDetail.jsx`** — imports the tile and mounts it inside the Compliance tab, gated on `league.is_director` (line 389).
+- Full `data-testid` coverage: `push-delivery-tile`, `push-tile-delivered`, `push-tile-failed`, `push-tile-events`, `push-tile-activity-empty`, `push-tile-activity-list`, `push-tile-activity-row-<id>`.
+
+### Verification
+- ESLint clean on the new component.
+- Backend health OK (`/var/log/supervisor/backend.err.log` shows normal startup).
+- `curl GET /api/push/log` unauthenticated returns HTTP 401 (auth guard working).
+- Preview screenshot: login page renders normally, no JS bundle errors, no router console errors beyond the pre-existing v7 future-flag warnings.
+- Backend/frontend contract cross-checked: `push_service._insert_log` writes `id` field ⇒ safe React `key={r.id}`; shape `{ rows, totals: { sent, failed, pruned, count } }` matches the tile.
+
+### Files touched
+- `/app/frontend/src/components/PushDeliveryTile.jsx` (new)
+- `/app/frontend/src/pages/leagues/LeagueDetail.jsx` (import + mount)
+
+### Not done (deferred per user choice "A" — Push tile only)
+- P2 lint cleanup: `calendar.jsx` nested components + ~10 empty `catch {}` blocks across CTPLeaderboard/ClubhouseTab/LeagueLiveNotifier/LedgerTab/VictoryCard/RoundScorecard.
+- Exponential-backoff retry queue for FCM 5xx responses in `push_service.py`.
+- Native-side `google-services.json` FCM API key still requires user to paste the real 39-char key locally (see `/app/memory/PUSH_NATIVE_CHECKLIST.md`).
