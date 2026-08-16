@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import api from "@/lib/api";
 import AuthImage from "./AuthImage";
 import Lightbox from "./Lightbox";
@@ -16,6 +16,15 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
   const [stories, setStories] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [feed, setFeed] = useState([]);
+  // Split the feed once so the recap card(s) render above the
+  // Clubhouse Discussion divider and every user-authored post renders
+  // beneath it. Preserves the server-side sort order inside each half.
+  const [recaps, discussion] = useMemo(() => {
+    const r = [];
+    const d = [];
+    for (const p of feed) (p.kind === "recap" ? r : d).push(p);
+    return [r, d];
+  }, [feed]);
   const [lostFound, setLostFound] = useState([]);
   const [uploading, setUploading] = useState(false);
   const storyInputRef = useRef(null);
@@ -263,47 +272,63 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
           {/* New post — polished ClubhouseFeedComposer (text + image + video). */}
           <ClubhouseFeedComposer onPostSubmit={submitPost} />
 
-          {/* Feed posts */}
-          {feed.map((p) => (
-            p.kind === "recap" ? (
-              <div key={p.id} className="tracing-beam" data-testid={`feed-recap-${p.id}`}>
-                <div className="tracing-beam-inner">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Fire weight="fill" className="text-[#F5C542]" />
-                    <div className="font-display text-lg">{p.title}</div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {p.meta?.hot_round && (
-                      <div className="p-4 rounded-lg bg-[#151518] border border-white/8">
-                        <div className="text-[10px] font-mono-data text-[#F5C542] mb-2">🔥 HOT ROUND</div>
-                        <div className="font-display text-xl">{p.meta.hot_round.name}</div>
-                        <div className="text-xs text-zinc-400 mt-1 font-mono-data">
-                          {p.meta.hot_round.plus_minus > 0 ? `+${p.meta.hot_round.plus_minus}` : p.meta.hot_round.plus_minus} · {p.meta.hot_round.total} strokes
-                        </div>
-                      </div>
-                    )}
-                    {p.meta?.most_improved && (
-                      <div className="p-4 rounded-lg bg-[#151518] border border-white/8">
-                        <div className="text-[10px] font-mono-data text-emerald-400 mb-2 flex items-center gap-1"><TrendUp size={12} weight="bold" /> MOST IMPROVED</div>
-                        <div className="font-display text-xl">{p.meta.most_improved.name}</div>
-                        <div className="text-xs text-zinc-400 mt-1 font-mono-data">
-                          −{p.meta.most_improved.delta} strokes vs last round
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-3 text-[10px] font-mono-data text-zinc-500">{new Date(p.created_at).toLocaleString()}</div>
+          {/* Recap card(s) — the "active round" recap block that lives
+              above the divider heading. Rendered separately from the
+              user-authored discussion feed below. */}
+          {recaps.map((p) => (
+            <div key={p.id} className="tracing-beam" data-testid={`feed-recap-${p.id}`}>
+              <div className="tracing-beam-inner">
+                <div className="flex items-center gap-2 mb-3">
+                  <Fire weight="fill" className="text-[#F5C542]" />
+                  <div className="font-display text-lg">{p.title}</div>
                 </div>
-              </div>
-            ) : (
-              <div key={p.id} className={`card-surface p-5 ${p.hidden ? "opacity-40" : ""} ${p.pinned ? "ring-1 ring-amber-300 bg-amber-50/40" : ""}`} data-testid={`feed-post-${p.id}`}>
-                <div className="flex items-start gap-3">
-                  {p.author_picture ? (
-                    <img src={p.author_picture} className="w-9 h-9 rounded-full" alt="" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center text-xs">{p.author_name?.charAt(0)}</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {p.meta?.hot_round && (
+                    <div className="p-4 rounded-lg bg-[#151518] border border-white/8">
+                      <div className="text-[10px] font-mono-data text-[#F5C542] mb-2">🔥 HOT ROUND</div>
+                      <div className="font-display text-xl">{p.meta.hot_round.name}</div>
+                      <div className="text-xs text-zinc-400 mt-1 font-mono-data">
+                        {p.meta.hot_round.plus_minus > 0 ? `+${p.meta.hot_round.plus_minus}` : p.meta.hot_round.plus_minus} · {p.meta.hot_round.total} strokes
+                      </div>
+                    </div>
                   )}
-                  <div className="flex-1">
+                  {p.meta?.most_improved && (
+                    <div className="p-4 rounded-lg bg-[#151518] border border-white/8">
+                      <div className="text-[10px] font-mono-data text-emerald-400 mb-2 flex items-center gap-1"><TrendUp size={12} weight="bold" /> MOST IMPROVED</div>
+                      <div className="font-display text-xl">{p.meta.most_improved.name}</div>
+                      <div className="text-xs text-zinc-400 mt-1 font-mono-data">
+                        −{p.meta.most_improved.delta} strokes vs last round
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-3 text-[10px] font-mono-data text-zinc-500">{new Date(p.created_at).toLocaleString()}</div>
+              </div>
+            </div>
+          ))}
+
+          {/* Structural section divider — cleanly separates the recap
+              block above from the user-authored chat feed below.
+              Padding pushes the heading away from the recap card's
+              dark background; the under-border line anchors the
+              discussion posts to it. */}
+          <div
+            data-testid="clubhouse-discussion-divider"
+            className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 mt-6 border-b border-gray-100 pb-2"
+          >
+            Clubhouse Discussion
+          </div>
+
+          {/* Discussion feed — user-authored posts only. */}
+          {discussion.map((p) => (
+            <div key={p.id} className={`card-surface p-5 ${p.hidden ? "opacity-40" : ""} ${p.pinned ? "ring-1 ring-amber-300 bg-amber-50/40" : ""}`} data-testid={`feed-post-${p.id}`}>
+              <div className="flex items-start gap-3">
+                {p.author_picture ? (
+                  <img src={p.author_picture} className="w-9 h-9 rounded-full" alt="" />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center text-xs">{p.author_name?.charAt(0)}</div>
+                )}
+                <div className="flex-1">
                     <div className="text-sm font-medium flex items-center gap-2">
                       {p.author_name}
                       {p.pinned && (
@@ -390,7 +415,6 @@ export default function ClubhouseTab({ leagueId, isDirector, currentUser }) {
                   )}
                 </div>
               </div>
-            )
           ))}
           {feed.length === 0 && <div className="text-zinc-500 text-sm text-center py-6">No posts yet</div>}
         </div>

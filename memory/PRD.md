@@ -756,3 +756,34 @@ Both camelCase (client-friendly) and snake_case aliases persisted so future JSON
 - P2: Deleted Leagues Timeline over `GET /api/deleted-leagues`.
 - P2: Retention Expiry cron for shadow rows.
 - P2: Round Detail Header + Active Players grid over Iteration 58 `roundStore`.
+
+---
+
+## Iteration 66 — Clubhouse Discussion section divider (2026-02-16)
+
+### Changed
+- `ClubhouseTab.jsx` — the flat `feed.map()` that interleaved recap cards and user-authored posts is now split via `useMemo` into two ordered slices:
+  1. **Recaps** — render at the top of the feed, preserving their tracing-beam styled dark card wrapper.
+  2. **Discussion** — user-authored posts rendered below the new heading.
+- Between the two, a **structural section divider** anchors the discussion loop:
+  ```jsx
+  <div
+    data-testid="clubhouse-discussion-divider"
+    className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 mt-6 border-b border-gray-100 pb-2"
+  >
+    Clubhouse Discussion
+  </div>
+  ```
+  `mt-6` pushes the heading off the black recap card; `border-b border-gray-100 pb-2` gives a clean anchor line for the chat posts below.
+
+### Files touched
+- `/app/frontend/src/components/ClubhouseTab.jsx` — added `useMemo` split + divider element.
+
+### Testing
+- Frontend lint clean on my changes (3 pre-existing empty-catch warnings unrelated). Backend contract unchanged; no new pytest needed.
+
+### Backlog (unchanged)
+- P2: Rotation Audit Log for join-code changes.
+- P2: Print-Ready Round Card PDF.
+- P2: Deleted Leagues Timeline UI + Retention Expiry cron.
+- P2: Round Detail Header + Active Players grid.
