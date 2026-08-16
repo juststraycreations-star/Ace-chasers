@@ -840,3 +840,43 @@ Both camelCase (client-friendly) and snake_case aliases persisted so future JSON
 
 ### Backlog (unchanged)
 - P2: Pinned Filter Chip; Composer Deep-Link scroll; Rotation Audit Log; Print-Ready Round Card.
+
+---
+
+## Iteration 69 — Push notifications (JS + backend layer) (2026-02-16)
+
+### Delivered from the sandbox
+- **`/app/frontend/src/lib/pushNotifications.js`** — thin wrapper around `@capacitor/push-notifications`. Dynamic `@capacitor/core` import so pure-web bundles never crash. Exports `getNotificationPermissionState()` and `requestNotificationPermission({ playerId, postToken })`. Registration listener resolves with the FCM token; 15 s safety timeout so a lost native callback never leaves the UI hung. Logs the token for debugging then POSTs `{ token, platform }` to the backend.
+- **`/app/frontend/src/components/PushPermissionPrimer.jsx`** — pre-permission primer modal. Text: *"Ace Chasers needs your permission to send real-time alerts when your scoring card updates, a new hole layout freezes, or when a league manager pushes automated payouts."* Bottom-sheet on mobile, centered on desktop. Persists a `SEEN_KEY` localStorage flag on dismiss so users aren't re-nagged. Only mounts on native platforms (Capacitor `isNativePlatform`) — silently no-ops on plain web.
+- Mounted in `App.jsx` alongside `OnboardingGate`, gated on `isAuthenticated`.
+- **Backend `push_router.py`**:
+  - `POST /api/push/register-token` — upserts on `token` string. 400 on empty/too-short tokens.
+  - `GET /api/push/tokens` — actor-scoped listing.
+  - `POST /api/push/unregister-token` — idempotent, actor-scoped delete.
+- **`push_tokens` collection** with `token` unique index + `user_id` index (added in `db.ensure_indexes`).
+- **Dependencies added** (frontend): `@capacitor/core@8.5.0`, `@capacitor/push-notifications@8.1.2`.
+
+### Explicitly NOT in this iteration (blocked by sandbox capabilities)
+- Capacitor scaffolding (`npx cap init`, `android/` folder, `google-services.json`) — must be run locally.
+- Native runtime verification of the `POST_NOTIFICATIONS` dialog on API 33+.
+- FCM test send end-to-end.
+
+See `/app/memory/PUSH_NATIVE_CHECKLIST.md` for the local dev checklist.
+
+### Tests
+- `tests/test_iteration69.py` — 5/5 pass:
+  1. Register + list returns the row with correct platform/device_name.
+  2. Repeat register on same token upserts (no duplicate row).
+  3. Empty token → 400.
+  4. Listing is actor-scoped (A can't see B's tokens).
+  5. Unregister is idempotent (`deleted=0` on 2nd call) + actor-scoped (attacker can't drop victim's row).
+
+### Files touched
+- Backend: `routers/push_router.py` (new); `server.py` (include router); `db.py` (indexes).
+- Frontend: `lib/pushNotifications.js` (new); `components/PushPermissionPrimer.jsx` (new); `App.jsx` (mount); `package.json` (Capacitor deps).
+- Docs: `memory/PUSH_NATIVE_CHECKLIST.md`.
+
+### Backlog (unchanged)
+- Local step: run `npx cap init` + `npx cap add android`, install `google-services.json`, verify the runtime dialog on a physical Android 13+ device.
+- P2: iOS parity (APNs handshake, same JS flow).
+- P2: Fan-out worker that reads `push_tokens` and pushes FCM messages on scorecard/payout events.

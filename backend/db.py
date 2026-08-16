@@ -97,7 +97,9 @@ async def ensure_indexes() -> None:
     await db.post_comments.create_index("created_at")
     await db.messages.create_index([("pair_key", 1), ("created_at", -1)])
     await db.messages.create_index("to_uid")
-    # Delete-league shadow / audit trail (Iteration 61).
+    # Push notification tokens (Iteration 69).
+    await db.push_tokens.create_index("token", unique=True)
+    await db.push_tokens.create_index("user_id")
     await db.deleted_leagues.create_index("league_id")
     await db.deleted_leagues.create_index("actor_id")
     await db.deleted_leagues.create_index([("actor_id", 1), ("deleted_at", -1)])

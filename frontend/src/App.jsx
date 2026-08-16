@@ -5,6 +5,7 @@ import AuthProvider from './components/AuthProvider';
 import Navigation from './components/Navigation';
 import EmailVerificationBanner from './components/EmailVerificationBanner';
 import OnboardingGate from './components/OnboardingGate';
+import PushPermissionPrimer from './components/PushPermissionPrimer';
 import FirstRunWelcomeModal from './components/FirstRunWelcomeModal';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import { Toaster } from './components/ui/sonner';
@@ -65,6 +66,7 @@ function AppRoutes() {
       {isAuthenticated && <Navigation />}
       {isAuthenticated && <EmailVerificationBanner />}
       {isAuthenticated && <OnboardingGate />}
+      {isAuthenticated && <PushPermissionPrimer />}
       {isAuthenticated && <FirstRunWelcomeModal />}
 
       <Suspense fallback={<RouteFallback />}>

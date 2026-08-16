@@ -49,6 +49,7 @@ from routers import (  # noqa: E402
     messages_router,
     news_router,
     posts_router,
+    push_router,
     social_router,
 )
 from seed_courses import seed_default_courses  # noqa: E402
@@ -221,3 +222,4 @@ app.include_router(courses_router.router)
 app.include_router(news_router.router)
 app.include_router(beta_router.router)
 app.include_router(leagues_router.api_router, prefix="/api")
+app.include_router(push_router.api_router, prefix="/api")
