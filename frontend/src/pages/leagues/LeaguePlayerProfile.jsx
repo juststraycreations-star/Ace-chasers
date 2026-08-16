@@ -10,16 +10,36 @@ import { toast } from "sonner";
 export default function PlayerProfile() {
   const { leagueId, memberId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [profile, setProfile] = useState(null);
+  const [league, setLeague] = useState(null);
+  const [editingDiv, setEditingDiv] = useState(false);
+  const [divVal, setDivVal] = useState("");
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await api.get(`/leagues/${leagueId}/players/${memberId}`);
-        setProfile(data);
-      } catch {}
-    })();
-  }, [leagueId, memberId]);
+  const load = async () => {
+    try {
+      const [p, lg] = await Promise.all([
+        api.get(`/leagues/${leagueId}/players/${memberId}`),
+        api.get(`/leagues/${leagueId}`),
+      ]);
+      setProfile(p.data);
+      setLeague(lg.data);
+      setDivVal(p.data?.member?.division || "Open");
+    } catch { /* profile endpoints optional — page will stay in LOADING */ }
+  };
+
+  useEffect(() => { load(); }, [leagueId, memberId]);
+
+  const saveDivision = async () => {
+    try {
+      await api.patch(`/league-members/${memberId}/division`, { division: divVal });
+      toast.success("Division updated");
+      setEditingDiv(false);
+      await load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Could not update division");
+    }
+  };
 
   if (!profile) {
     return (

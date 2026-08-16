@@ -880,3 +880,26 @@ See `/app/memory/PUSH_NATIVE_CHECKLIST.md` for the local dev checklist.
 - Local step: run `npx cap init` + `npx cap add android`, install `google-services.json`, verify the runtime dialog on a physical Android 13+ device.
 - P2: iOS parity (APNs handshake, same JS flow).
 - P2: Fan-out worker that reads `push_tokens` and pushes FCM messages on scorecard/payout events.
+
+---
+
+## Iteration 70 — Pre-audit compliance hotfixes (2026-02-16)
+
+### Blockers cleared
+1. **`context/AuthContext.jsx`** — `useAuth()` was calling `useAuthStore` conditionally inside an `if (!ctx)` branch, violating rules-of-hooks. Rewrote so both store selectors run unconditionally on every render; the `ctx` branch just picks which value to return.
+2. **`pages/leagues/LeaguePlayerProfile.jsx`** — 6 undefined-var references (`editingDiv`, `divVal`, `setDivVal`, `setEditingDiv`, `league`, `user`, `saveDivision`) would have thrown `ReferenceError` on first render of any player profile card, white-screening the audit device. Added the missing `useState` hooks, a parallel `/leagues/{id}` fetch to hydrate `league`, and a real `saveDivision` handler that PATCHes `/league-members/{id}/division`.
+
+### Lint sweep now green on blockers
+- Frontend errors: 34 → 21. All remaining items are cosmetic (empty-catch swallows, unescaped `'`/`"` in JSX text, `Calendar`'s nested render component, `cmdk-input-wrapper` unknown DOM prop). None crash.
+- Backend: still 0 lint issues.
+
+### Files touched
+- `/app/frontend/src/context/AuthContext.jsx` — top-of-component hook order fix.
+- `/app/frontend/src/pages/leagues/LeaguePlayerProfile.jsx` — added state + `useAuth` + `saveDivision` + parallel league fetch.
+
+### Backlog (unchanged priority)
+- **MEDIUM**: `components/ui/calendar.jsx:59,62` — hoist nested components out of `Calendar` render.
+- **LOW**: 10 empty-catch swallows across the feed/ledger/scorecard surfaces — add comment or toast.
+- **LOW**: 7 unescaped-entity sites in `Beta.jsx`, `CTPLeaderboard.jsx`, `LeagueLanding.jsx`.
+- **LOW**: `components/ui/command.jsx:36` — swap `cmdk-input-wrapper` for `data-cmdk-input-wrapper`.
+- **PLAY STORE PRE-SUBMIT**: privacy-policy route, data-safety declaration, `POST_NOTIFICATIONS` in `AndroidManifest.xml`.

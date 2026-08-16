@@ -34,22 +34,23 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    // Provider missing — fall back to reading directly from the store so we
-    // never crash a league page during a hot reload.
-    const user = useAuthStore((s) => s.user);
-    const profile = useAuthStore((s) => s.profile);
-    return {
-      user: user
-        ? {
-            user_id: user.uid,
-            name: profile?.name || user.displayName || user.email,
-            email: user.email,
-            picture: profile?.profilePictureUrl || user.photoURL || null,
-          }
-        : null,
-      loading: false,
-    };
-  }
-  return ctx;
+  // Hooks must be called unconditionally per rules-of-hooks. We always
+  // read from the store; the provider result (if present) wins, but
+  // reading both keeps the hook order stable across every render.
+  const storeUser = useAuthStore((s) => s.user);
+  const storeProfile = useAuthStore((s) => s.profile);
+  if (ctx) return ctx;
+  // Provider missing — fall back to the store so a hot-reload landing
+  // on a league page doesn't blow up.
+  return {
+    user: storeUser
+      ? {
+          user_id: storeUser.uid,
+          name: storeProfile?.name || storeUser.displayName || storeUser.email,
+          email: storeUser.email,
+          picture: storeProfile?.profilePictureUrl || storeUser.photoURL || null,
+        }
+      : null,
+    loading: false,
+  };
 }
