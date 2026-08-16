@@ -1,3 +1,16 @@
+> ## ✅ google-services.json — installed Feb 2026
+> The real 39-char FCM Android API key has been written to
+> `/app/android/app/google-services.json`
+> - Project ID: `acechaser-38c33`
+> - Package: `net.acechasers.app`
+> - Mobile SDK App ID: `1:388698465312:android:726dae7631da76f3de495f`
+>
+> Next step on your local machine (this sandbox cannot run it):
+> ```
+> cd frontend && yarn build && npx cap sync android && npx cap open android
+> ```
+
+
 # Iteration 69 — Push Notifications: Native Build Checklist
 
 This sandbox delivered the **JS + backend** layer of push notifications. The
