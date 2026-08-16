@@ -96,6 +96,7 @@ export const MOCK_CURRENT_ROUND = Object.freeze({
   layout: '18-hole · par 54',
   gameType: 'singles',
   totalPlayersCount: 4,
+  joinCode: 'W8K3',
 });
 
 export const MOCK_ACTIVE_PLAYERS = Object.freeze([
@@ -210,6 +211,11 @@ export const useRoundStore = create((set, get) => ({
       layout: deriveLayout(round),
       gameType: mapGameType(round.format),
       totalPlayersCount: activePlayers.length || members.length || 0,
+      // Backend `rounds.join_code` — 4-char uppercase alphanumeric code
+      // for players who can't scan the QR (see leagues_router
+      // `_generate_round_join_code`). Null on legacy rounds created
+      // before the code was added.
+      joinCode: round.join_code || null,
     };
 
     set({

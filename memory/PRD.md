@@ -645,3 +645,41 @@ Both camelCase (client-friendly) and snake_case aliases persisted so future JSON
 - P2: Deleted Leagues Timeline UI over `GET /api/deleted-leagues` for post-30s restore access.
 - P2: Retention Expiry cron that flips `retention_locked` to false + `restore_state` to `"expired"` after `restorable_until`.
 - P2: Round Detail Header + Active Players grid over the Iteration 58 `roundStore`.
+
+---
+
+## Iteration 63 — Round manual Join Code (2026-02-15)
+
+### Backend
+- **`Round.join_code`** — new `Optional[str]` field on the Round model.
+- **`_generate_round_join_code(db)`** — 4-char code generator using the alphabet `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (uppercase A-Z + digits, minus visually-confusable `O`, `0`, `I`, `1`). Collision-checks against `scheduled` and `active` rounds; falls back to a 5-char code only if the 4-char space is saturated. Alphabet is 32 chars → 1,048,576 code space.
+- `create_round` now generates a unique join code at insert time.
+- `GET /api/rounds/{id}/qr` echoes `join_code` alongside the deeplink so the QR panel can render both surfaces.
+- **New endpoint** `GET /api/rounds/join/{join_code}` — case-insensitive lookup restricted to active/scheduled rounds. Auto-joins the caller to the league if they aren't a member yet, then idempotently enrolls them into a solo card + scorecard on the round. Returns `{ round, auto_joined_league, already_enrolled, card, scorecard }`. Broadcasts a `player_joined` WS event with `via: "manual_join_code"` so the round view live-refreshes.
+
+### Frontend
+- **`roundStore.currentRound.joinCode`** — new field. `hydrateFromBackend` reads it from `round.join_code`; mock fixture set to `"W8K3"`.
+- **`RoundQRPanel`** now renders a fallback lane beneath the QR:
+  - Label: `OR ENTER MANUAL JOIN CODE` (`text-xs font-bold text-gray-400 tracking-wider mb-1`, `data-testid="round-qr-join-label"`).
+  - Code block: letter-spaced inside a soft-bordered gray container (`text-2xl font-mono font-bold tracking-widest text-emerald-700 bg-gray-50 px-4 py-2 rounded-lg border border-gray-200`), `data-testid="round-qr-join-code"`. Renders as `W 8 K 3` (spaces between chars).
+
+### Tests
+- `tests/test_iteration63.py` — 5/5 pass:
+  1. New round has a valid 4-char join code (right alphabet, no confusable chars).
+  2. QR endpoint echoes the join_code.
+  3. `GET /rounds/join/{code}` enrolls a fresh player + is idempotent on repeat.
+  4. Two rounds in the same league get distinct codes (uniqueness).
+  5. Unknown code returns 404.
+- Node smoke test confirms `joinCode` propagates through `roundStore.hydrateFromBackend`.
+
+### Files touched
+- `/app/backend/routers/leagues_router.py` — `join_code` field + generator helper + `create_round` wiring; new `secrets` import.
+- `/app/backend/routers/leagues_extensions_router.py` — `GET /rounds/join/{code}` handler + `join_code` echoed in `/qr`.
+- `/app/frontend/src/store/roundStore.js` — `joinCode` in `currentRound` + mock + hydrate.
+- `/app/frontend/src/components/RoundQRPanel.jsx` — fallback lane beneath the QR.
+
+### Backlog (unchanged)
+- P2: Client-side text input for the manual code (currently only the display half of the round-side is done — the join-typing UI on the player side is a next step).
+- P2: Deleted Leagues Timeline over `GET /api/deleted-leagues`.
+- P2: Retention Expiry cron.
+- P2: Round Detail Header + Active Players grid over the Iteration 58 `roundStore`.

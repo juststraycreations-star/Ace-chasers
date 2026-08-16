@@ -104,6 +104,29 @@ export default function RoundQRPanel({ roundId, roundName }) {
           </div>
         </div>
       )}
+
+      {/* Manual join-code fallback — for players dealing with camera
+          glare or hardware scanning failures on the course. */}
+      {!loading && payload?.join_code && (
+        <div className="mt-6 pt-6 border-t border-slate-100">
+          <div
+            className="text-xs font-bold text-gray-400 tracking-wider mb-1"
+            data-testid="round-qr-join-label"
+          >
+            OR ENTER MANUAL JOIN CODE
+          </div>
+          <div
+            data-testid="round-qr-join-code"
+            className="text-2xl font-mono font-bold tracking-widest text-emerald-700 bg-gray-50 px-4 py-2 rounded-lg border border-gray-200 inline-block"
+          >
+            {payload.join_code
+              .toString()
+              .toUpperCase()
+              .split("")
+              .join(" ")}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

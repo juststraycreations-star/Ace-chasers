@@ -20,6 +20,7 @@ import os
 import io
 import asyncio
 import logging
+import secrets
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Literal, Dict, Any
@@ -176,6 +177,38 @@ def now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
+# 4-char round join-code alphabet: uppercase A–Z + digits, minus O, 0,
+# I, 1 to eliminate the "did you mean 0 or O?" confusion on printed
+# scorecards. Alphabet size 32 → 32^4 = 1,048,576 code space, plenty
+# even after collision retries.
+_JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+async def _generate_round_join_code(db) -> str:
+    """Return a unique 4-char code among currently-scheduled/active
+    rounds. Completed rounds recycle their codes so the alphabet
+    doesn't run out over multiple seasons.
+    """
+    # 12 attempts is enough even at 90% saturation of the alphabet;
+    # in practice the first pick nearly always wins.
+    for _ in range(12):
+        code = "".join(secrets.choice(_JOIN_CODE_ALPHABET) for _ in range(4))
+        clash = await db.rounds.find_one(
+            {"join_code": code, "status": {"$in": ["scheduled", "active"]}},
+            {"_id": 0, "id": 1},
+        )
+        if not clash:
+            return code
+    # Fallback: append a 5th char to guarantee uniqueness if the
+    # 4-char space is genuinely exhausted for active rounds.
+    for _ in range(6):
+        code = "".join(secrets.choice(_JOIN_CODE_ALPHABET) for _ in range(5))
+        clash = await db.rounds.find_one({"join_code": code}, {"_id": 0, "id": 1})
+        if not clash:
+            return code
+    raise RuntimeError("Could not generate a unique round join code")
+
+
 
 
 # ============= MODELS =============
@@ -243,6 +276,11 @@ class Round(BaseModel):
     course_rating: Optional[float] = None
     director_notes: Optional[str] = ""
     ctp_holes: List[int] = Field(default_factory=list)
+    # 4-char uppercase alphanumeric fallback for players who can't scan
+    # the QR (glare, dead camera, etc.). Excludes visually-ambiguous
+    # characters (O, 0, I, 1). Populated at round creation via
+    # `_generate_round_join_code()` — see below.
+    join_code: Optional[str] = None
     created_at: str = Field(default_factory=now_iso)
 
 class LeagueMember(BaseModel):
@@ -629,9 +667,10 @@ async def create_round(league_id: str, payload: RoundCreate, request: Request,
     if m.get("role") != "director":
         raise HTTPException(status_code=403, detail="Only director can create rounds")
     par = payload.par_per_hole or [3] * payload.holes
+    join_code = await _generate_round_join_code(db)
     rd = Round(league_id=league_id, season_id=payload.season_id, name=payload.name,
                date=payload.date, holes=payload.holes, par_per_hole=par,
-               course_rating=payload.course_rating)
+               course_rating=payload.course_rating, join_code=join_code)
     await db.rounds.insert_one(rd.model_dump())
 
     # ── Auto-publish a pinned scheduling announcement to the clubhouse ──

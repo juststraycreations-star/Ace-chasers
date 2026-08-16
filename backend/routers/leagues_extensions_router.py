@@ -71,6 +71,7 @@ async def get_round_qr_payload(round_id: str, request: Request,
         "round_name": rd.get("name"),
         "league_id": rd["league_id"],
         "deeplink": f"/rounds/{round_id}/checkin",
+        "join_code": rd.get("join_code"),
         "generated_at": _now_iso(),
         "issuer": user.user_id,
     }
@@ -147,6 +148,91 @@ async def self_enroll_round(round_id: str, request: Request,
          "via": "qr_self_enroll"},
     )
     return {
+        "auto_joined_league": auto_joined_league,
+        "already_enrolled": False,
+        "card": card.model_dump(),
+        "scorecard": sc,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════
+# Manual join code — GET /api/rounds/join/{join_code}
+# ══════════════════════════════════════════════════════════════════
+# Alternative to the QR path for players dealing with camera glare or
+# hardware scanning failures on the course. Case-insensitive lookup;
+# the 4-char code is uppercase-alphanumeric with confusable letters
+# (O, 0, I, 1) already excluded at generation time.
+@api_router.get("/rounds/join/{join_code}")
+async def lookup_round_by_join_code(join_code: str, request: Request,
+                                     session_token: Optional[str] = Cookie(None),
+                                     authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    normalized = (join_code or "").strip().upper()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Join code cannot be empty")
+    rd = await db.rounds.find_one(
+        {"join_code": normalized, "status": {"$in": ["scheduled", "active"]}},
+        {"_id": 0},
+    )
+    if not rd:
+        raise HTTPException(status_code=404, detail="No active round matches that code")
+
+    league_id = rd["league_id"]
+    # Auto-join the league if the player isn't already a member — mirrors
+    # the QR self-enroll flow so the manual code has identical UX.
+    m = await db.league_members.find_one(
+        {"league_id": league_id, "user_id": user.user_id}, {"_id": 0}
+    )
+    auto_joined_league = False
+    if not m:
+        count = await db.league_members.count_documents({"league_id": league_id})
+        m_obj = LeagueMember(
+            league_id=league_id, user_id=user.user_id, name=user.name,
+            picture=user.picture, bag_tag=count + 1,
+        )
+        await db.league_members.insert_one(m_obj.model_dump())
+        m = m_obj.model_dump()
+        auto_joined_league = True
+
+    # Idempotent scorecard/card enrollment — same shape as QR path.
+    existing_sc = await db.scorecards.find_one(
+        {"round_id": rd["id"], "member_id": m["id"]}, {"_id": 0}
+    )
+    if existing_sc and existing_sc.get("card_id"):
+        card = await db.cards.find_one({"id": existing_sc["card_id"]}, {"_id": 0})
+        return {
+            "round": rd,
+            "auto_joined_league": auto_joined_league,
+            "already_enrolled": True,
+            "card": card,
+            "scorecard": existing_sc,
+        }
+
+    label = f"{m['name'].split(' ')[0]}'s Card"
+    card = Card(round_id=rd["id"], label=label, player_ids=[m["id"]])
+    await db.cards.insert_one(card.model_dump())
+    if existing_sc:
+        await db.scorecards.update_one(
+            {"id": existing_sc["id"]}, {"$set": {"card_id": card.id}},
+        )
+        sc = {**existing_sc, "card_id": card.id}
+    else:
+        handicap = await _compute_handicap(league_id, m["id"], rd["par_per_hole"])
+        sc = Scorecard(
+            round_id=rd["id"], league_id=league_id, member_id=m["id"],
+            card_id=card.id, scores=[0] * rd["holes"],
+            handicap_at_round=handicap,
+        )
+        await db.scorecards.insert_one(sc.model_dump())
+        sc = sc.model_dump()
+
+    await ws_manager.broadcast(
+        f"round:{rd['id']}",
+        {"type": "player_joined", "member_id": m["id"], "card_id": card.id,
+         "via": "manual_join_code"},
+    )
+    return {
+        "round": rd,
         "auto_joined_league": auto_joined_league,
         "already_enrolled": False,
         "card": card.model_dump(),
