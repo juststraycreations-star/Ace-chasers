@@ -1180,57 +1180,72 @@ async def delete_league(league_id: str, payload: LeagueDeletePayload, request: R
         raise HTTPException(status_code=400,
                              detail="Confirmation name does not match the league name")
 
-    # Gather round_ids so we can sweep round-scoped collections that don't
-    # carry a league_id column of their own (e.g. ctp_entries).
-    rounds = await db.rounds.find({"league_id": league_id}, {"_id": 0, "id": 1}).to_list(1000)
+    # 1) SNAPSHOT — snapshot every league- and round-scoped document
+    #    BEFORE any delete runs, so the Undo path can splice them back
+    #    into the live collections byte-for-byte. Cap the snapshot at
+    #    a sane size to keep the shadow row bounded (test-league cleanup
+    #    UX, not a general-purpose backup).
+    rounds = await db.rounds.find({"league_id": league_id}, {"_id": 0}).to_list(1000)
     round_ids = [r["id"] for r in rounds]
 
-    # Cascade sweep. Every collection listed here stores either a
-    # `league_id` reference directly or is round-scoped. Deletes are hard
-    # (this feature is scoped to test-league cleanup per the manager UX).
-    counts: Dict[str, int] = {}
     LEAGUE_SCOPED = [
         "league_members", "rounds", "scorecards", "seasons", "brackets",
         "ledger", "announcements", "lost_found", "stories", "feed_posts",
     ]
+    shadow_docs: Dict[str, list] = {}
+    for coll in LEAGUE_SCOPED:
+        shadow_docs[coll] = await db[coll].find(
+            {"league_id": league_id}, {"_id": 0}
+        ).to_list(5000)
+    shadow_docs["ctp_entries"] = (
+        await db.ctp_entries.find({"round_id": {"$in": round_ids}}, {"_id": 0}).to_list(5000)
+        if round_ids else []
+    )
+    total_shadow_docs = sum(len(v) for v in shadow_docs.values()) + 1  # +1 for the league doc
+    if total_shadow_docs > 20_000:
+        raise HTTPException(
+            status_code=413,
+            detail=f"League too large to snapshot ({total_shadow_docs} docs). Contact support.",
+        )
+
+    # 2) CASCADE — hard-delete every league- and round-scoped row.
+    counts: Dict[str, int] = {}
     for coll in LEAGUE_SCOPED:
         res = await db[coll].delete_many({"league_id": league_id})
         counts[coll] = int(res.deleted_count)
-    # Round-scoped: ctp_entries lives under round_id and never carries
-    # league_id, so we clean it separately.
     if round_ids:
         res = await db.ctp_entries.delete_many({"round_id": {"$in": round_ids}})
         counts["ctp_entries"] = int(res.deleted_count)
     else:
         counts["ctp_entries"] = 0
 
-    # Shadow audit — write BEFORE deleting the league doc so an
-    # interrupted request still leaves a paper trail. `retention_locked`
-    # flags the row for the future undo-window path.
+    # 3) SHADOW — write the audit row with the pre-delete snapshot so the
+    #    Undo path can splice everything back. `retention_locked` gates
+    #    who/when this row can be restored.
     deleted_at = now_iso()
     audit_id = str(uuid.uuid4())
     restorable_until = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
     audit_doc = {
         "id": audit_id,
         "league_id": league_id,
-        "league": lg,  # clone of the league config at time of delete
+        "league": lg,                 # clone of the league config
+        "shadow_docs": shadow_docs,   # every child doc, keyed by collection
         "deleted_at": deleted_at,
-        "deletedAt": deleted_at,   # camelCase alias for the client
+        "deletedAt": deleted_at,
         "actor_id": user.user_id,
-        "actorId": user.user_id,   # camelCase alias
+        "actorId": user.user_id,
         "per_collection_counts": counts,
-        "perCollectionCounts": counts,  # camelCase alias
+        "perCollectionCounts": counts,
         "retention_locked": True,
         "restorable_until": restorable_until,
-        "restore_state": "pending",  # "pending" | "restored" | "expired"
+        "restore_state": "pending",   # "pending" | "restored" | "expired"
     }
     await db.deleted_leagues.insert_one(audit_doc)
 
-    # Finally, remove the league document itself.
+    # 4) Remove the league doc itself last so the shadow already has
+    #    the config even if step 4 fails.
     res = await db.leagues.delete_one({"id": league_id})
     counts["leagues"] = int(res.deleted_count)
-    # Persist the final leagues count into the audit trail (was 0 when we
-    # first wrote the doc a few lines up).
     await db.deleted_leagues.update_one(
         {"id": audit_id},
         {"$set": {
@@ -1249,6 +1264,75 @@ async def delete_league(league_id: str, payload: LeagueDeletePayload, request: R
         "audit_id": audit_id,
         "deletedAt": deleted_at,
         "restorable_until": restorable_until,
+    }
+
+
+class LeagueRestorePayload(BaseModel):
+    # Client sends the audit id returned from DELETE. Server verifies the
+    # caller is the same actor who deleted the league and the retention
+    # lock is still active.
+    audit_id: str
+
+
+@api_router.post("/leagues/restore")
+async def restore_league(payload: LeagueRestorePayload, request: Request,
+                          session_token: Optional[str] = Cookie(None),
+                          authorization: Optional[str] = Header(None)):
+    """Move every doc in the shadow row back into its live collection.
+
+    Only the original deleter can restore. Once restored, the shadow row
+    is stamped with `restore_state: "restored"` and the retention lock
+    flipped off so it can't be double-restored.
+    """
+    user = await get_current_user(request, session_token, authorization)
+    shadow = await db.deleted_leagues.find_one({"id": payload.audit_id}, {"_id": 0})
+    if not shadow:
+        raise HTTPException(status_code=404, detail="Shadow row not found")
+    if shadow.get("actor_id") != user.user_id:
+        raise HTTPException(status_code=403, detail="Only the deleter can restore this league")
+    # Order matters: check "already restored" BEFORE "retention expired"
+    # so a second restore attempt gets the more precise 409 signal.
+    if shadow.get("restore_state") != "pending":
+        raise HTTPException(status_code=409, detail="This league has already been restored")
+    if not shadow.get("retention_locked"):
+        raise HTTPException(status_code=410, detail="Restore window has expired")
+
+    league = shadow.get("league") or {}
+    if not league.get("id"):
+        raise HTTPException(status_code=500, detail="Shadow row missing league config")
+
+    # Reinsert the league doc first so referential integrity is restored
+    # before any child row.
+    restored_counts: Dict[str, int] = {}
+    await db.leagues.insert_one(league)
+    restored_counts["leagues"] = 1
+
+    for coll, docs in (shadow.get("shadow_docs") or {}).items():
+        if not docs:
+            restored_counts[coll] = 0
+            continue
+        # insert_many keeps ordering; if a row somehow snuck back in
+        # meanwhile, we let Mongo raise so we don't silently duplicate.
+        await db[coll].insert_many(docs)
+        restored_counts[coll] = len(docs)
+
+    # Mark the shadow row so it can't be restored twice.
+    await db.deleted_leagues.update_one(
+        {"id": payload.audit_id},
+        {"$set": {
+            "restore_state": "restored",
+            "retention_locked": False,
+            "restored_at": now_iso(),
+        }},
+    )
+    total_restored = sum(restored_counts.values())
+    return {
+        "ok": True,
+        "audit_id": payload.audit_id,
+        "league_id": league.get("id"),
+        "league_name": league.get("name"),
+        "restored_counts": restored_counts,
+        "total_docs_restored": total_restored,
     }
 
 

@@ -4,6 +4,7 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { Trash, Warning, CircleNotch } from "@phosphor-icons/react";
 import { useRoundStore } from "@/store/roundStore";
+import { spawnUndoToast } from "./UndoDeleteToast";
 
 /**
  * DeleteLeaguePanel — director-only "danger zone" section rendered
@@ -44,22 +45,35 @@ export default function DeleteLeaguePanel({ leagueId, leagueName, isDirector }) 
     if (!nameOK || busy) return;
     setBusy(true);
     try {
-      await api.delete(`/leagues/${leagueId}`, {
+      const { data } = await api.delete(`/leagues/${leagueId}`, {
         data: { confirm_name: typed.trim() },
       });
       // Clear any in-memory round state before we leave — otherwise a
       // stale Round Detail Header could linger on the League List.
       clearRoundStore();
-      // Success banner at the top of the viewport — copy is fixed per
-      // the manager brief so the message reads consistently every time
-      // a league is destroyed.
+      // Success banner at the top of the viewport.
       toast.success("League successfully permanently removed from database.", {
         position: "top-center",
         duration: 5000,
         "data-testid": "delete-league-success-toast",
       });
-      // replace:true so the back button doesn't restore the dead page.
+      // Redirect first, THEN spawn the undo toast so it lands on the
+      // fresh League List view (sonner's toaster is app-global).
       navigate("/leagues", { replace: true });
+      // rAF gives the router one tick to unmount the modal cleanly
+      // before the persistent undo toast appears at the bottom.
+      requestAnimationFrame(() => {
+        spawnUndoToast({
+          auditId: data.audit_id,
+          leagueName: data.league_name || leagueName,
+          onRestored: () => {
+            // Simplest way to re-hydrate the League List after a
+            // restore: full reload so every consumer (dashboard cards,
+            // sidebars, unread badges) picks up the resurrected league.
+            window.location.reload();
+          },
+        });
+      });
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Could not delete league");
       setBusy(false);

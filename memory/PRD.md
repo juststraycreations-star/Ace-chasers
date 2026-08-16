@@ -611,3 +611,37 @@ Both camelCase (client-friendly) and snake_case aliases persisted so future JSON
 - P2: Wire the Undo Window UI (frontend) on top of the existing shadow — 30-second "Undo" toast that restores docs from the shadow copy when tapped.
 - P2: Cron/expiry job to demote `retention_locked` after `restorable_until` passes.
 - P2: Round Detail Header + Active Players grid over the Iteration 58 `roundStore`.
+
+---
+
+## Iteration 62 — 30-second Undo Delete window (2026-02-15)
+
+### Backend
+- **`shadow_docs` in the audit row** — the DELETE handler now snapshots every league- and round-scoped child doc BEFORE running the cascade, keyed by source collection. Cap: 20,000 docs total, else 413 (test-league cleanup UX, not a general-purpose backup).
+- **New endpoint** `POST /api/leagues/restore` — takes `{ audit_id }`, verifies caller is the original deleter and the row is `restore_state: "pending"` + `retention_locked: true`, then reinserts the league doc + every shadow-scoped child back into its live collection. On success flips `restore_state → "restored"`, `retention_locked → false`, stamps `restored_at`.
+- Precedence on error codes: 404 (audit row missing) → 403 (not the deleter) → 409 (already restored) → 410 (retention window expired).
+
+### Frontend
+- **New `UndoDeleteToast` component + `spawnUndoToast()` imperative helper** — sonner `toast.custom({ position: "bottom-center", duration: 30_000 })`. Reads *"League deleted. Mistake? \[Undo] (Ns remaining)"* with a live 30 → 0 second countdown and an emerald progress bar that drains to 0.
+- Tapping Undo → `POST /leagues/restore` → dismisses the toast, fires a `top-center` success toast (`N records back in place`), and `window.location.reload()` so every dashboard consumer picks up the resurrected league.
+- Toast is spawned via `requestAnimationFrame` **after** `navigate('/leagues', { replace: true })` so it lands on the fresh League List (sonner is app-global; the countdown survives navigation).
+- Timer expiry (30 s) just dismisses the toast. The initial DELETE ran server-side already, and the 30-day retention lock still allows a slower undo path via the shadow listing later.
+
+### Files touched
+- `/app/backend/routers/leagues_router.py` — DELETE now snapshots children; added `POST /leagues/restore`.
+- `/app/frontend/src/components/UndoDeleteToast.jsx` — new component.
+- `/app/frontend/src/components/DeleteLeaguePanel.jsx` — spawns the undo toast after redirect.
+
+### Tests
+- `tests/test_iteration62.py` — 5/5 pass:
+  1. Shadow row includes `shadow_docs` for every league-scoped collection (rounds, scorecards, ledger, ctp_entries, etc.).
+  2. Restore reinserts the league + all children; `GET /leagues/{id}` succeeds again; shadow stamped `restore_state: "restored"`.
+  3. Double-restore returns 409 (idempotent-adjacent guard).
+  4. Non-deleter caller → 403.
+  5. Unknown audit id → 404.
+- Combined delete-league sweep (59 + 61 + 62): 12/12 green.
+
+### Backlog (unchanged)
+- P2: Deleted Leagues Timeline UI over `GET /api/deleted-leagues` for post-30s restore access.
+- P2: Retention Expiry cron that flips `retention_locked` to false + `restore_state` to `"expired"` after `restorable_until`.
+- P2: Round Detail Header + Active Players grid over the Iteration 58 `roundStore`.
