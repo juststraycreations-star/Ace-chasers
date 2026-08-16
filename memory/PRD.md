@@ -683,3 +683,38 @@ Both camelCase (client-friendly) and snake_case aliases persisted so future JSON
 - P2: Deleted Leagues Timeline over `GET /api/deleted-leagues`.
 - P2: Retention Expiry cron.
 - P2: Round Detail Header + Active Players grid over the Iteration 58 `roundStore`.
+
+---
+
+## Iteration 64 — Manual Join Code entry panel (2026-02-16)
+
+### New component
+- **`/app/frontend/src/components/JoinRoundPanel.jsx`** — bounded white card panel with an emerald-tinted border (`border-emerald-100`), a `text-sm font-bold text-gray-700` label reading "Have a Join Code?", a 4-char uppercase-only text input (`uppercase tracking-widest font-mono`), and an emerald "Join Round" CTA. Compact prop for the RoundList surface.
+
+### Input handling
+- Live filter maps every keystroke to uppercase and strips characters outside the server-side alphabet (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`) so a player can never submit a code the backend would 404 on.
+- Submit gated on exactly 4 chars; empty/incomplete inputs render the disabled `bg-gray-100 text-gray-400` button state.
+- Enter key submits alongside the button tap.
+
+### Wire-up
+- `GET /api/rounds/join/{code}` → `navigate('/rounds/' + response.round.id)` lands the player straight in `RoundScorecard.jsx`.
+- Auto-toast "Joined {round}" only when `auto_joined_league === true` so returning members don't get spammed on every re-open.
+- Human-readable error mapping: 404 → "No active round matches that code"; anything else surfaces the server's `detail`.
+
+### Mount points
+- **League Dashboard** (`/pages/leagues/LeagueDashboard.jsx`) — Zone -1, top of the leagues list.
+- **League Detail Rounds tab** (`/pages/leagues/LeagueDetail.jsx`) — Compact variant at the top of the Rounds tab, above the "New Round" director CTA.
+
+### Files touched
+- `/app/frontend/src/components/JoinRoundPanel.jsx` — new.
+- `/app/frontend/src/pages/leagues/LeagueDashboard.jsx` — mount panel above WelcomeChecklist.
+- `/app/frontend/src/pages/leagues/LeagueDetail.jsx` — mount compact panel at top of Rounds tab.
+
+### Testing
+- No new backend endpoint; existing `test_iteration63.py` (5/5) already covers `GET /rounds/join/{code}`. Frontend lint clean on all touched files. Route `/rounds/:roundId` confirmed present in App.jsx.
+
+### Backlog (unchanged)
+- P2: Refresh Code on Reset button on RoundQRPanel (director-only regenerate).
+- P2: Print-Ready Round Card PDF with QR + manual code side-by-side.
+- P2: Deleted Leagues Timeline UI; Retention Expiry cron.
+- P2: Round Detail Header + Active Players grid over Iteration 58 `roundStore`.

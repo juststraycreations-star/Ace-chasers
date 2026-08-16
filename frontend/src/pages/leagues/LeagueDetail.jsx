@@ -7,6 +7,7 @@ import LedgerTab from "@/components/LedgerTab";
 import ClubhouseTab from "@/components/ClubhouseTab";
 import ComplianceTab from "@/components/ComplianceTab";
 import DeleteLeaguePanel from "@/components/DeleteLeaguePanel";
+import JoinRoundPanel from "@/components/JoinRoundPanel";
 import ManagerDMPanel from "@/components/ManagerDMPanel";
 import RoundQRPanel from "@/components/RoundQRPanel";
 import RoundCard from "@/components/RoundCard";
@@ -240,6 +241,8 @@ export default function LeagueDetail() {
 
         {tab === "rounds" && (
           <div className="space-y-6" data-testid="rounds-tab">
+            {/* Manual round join by code — top of RoundList surface. */}
+            <JoinRoundPanel compact />
             {league.is_director && (
               <div className="flex justify-end">
                 <button

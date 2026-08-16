@@ -7,6 +7,7 @@ import { LeagueGridSkeleton } from "@/components/Skeletons";
 import { Plus, MapPin, Users, TrendUp } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import WelcomeChecklist from "@/components/WelcomeChecklist";
+import JoinRoundPanel from "@/components/JoinRoundPanel";
 import { useAuth } from "@/context/AuthContext";
 
 /**
@@ -62,6 +63,9 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50" data-testid="dashboard-page">
       <AppHeader />
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+        {/* Zone -1 — Manual round join by code (players who can't scan the QR). */}
+        <JoinRoundPanel />
+
         {/* Zone 0 — Manager quick-start (only for users who run at least one league) */}
         {!loading && myLeagues.length > 0 && (
           <WelcomeChecklist
