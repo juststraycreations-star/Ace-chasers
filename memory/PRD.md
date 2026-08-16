@@ -903,3 +903,49 @@ See `/app/memory/PUSH_NATIVE_CHECKLIST.md` for the local dev checklist.
 - **LOW**: 7 unescaped-entity sites in `Beta.jsx`, `CTPLeaderboard.jsx`, `LeagueLanding.jsx`.
 - **LOW**: `components/ui/command.jsx:36` — swap `cmdk-input-wrapper` for `data-cmdk-input-wrapper`.
 - **PLAY STORE PRE-SUBMIT**: privacy-policy route, data-safety declaration, `POST_NOTIFICATIONS` in `AndroidManifest.xml`.
+
+---
+
+## Iteration 71 — Live FCM fan-out worker (2026-02-16)
+
+### Delivered — stack note
+User brief asked for Node.js; delivered in **Python** to match the actual FastAPI/Motor backend. Public entry point signature matches the brief.
+
+### New module `/app/backend/push_service.py`
+- **`process_live_round_event(round_id, event_type, **ctx)`** — single async entry point, never raises. Returns `{sent, failed, pruned, dry_run}`.
+- Event types:
+  - `"join_code_rotated"` — silent data payload (no notification block) with `android.priority: HIGH` so it delivers in Doze. Recipients = every player with a `scorecards` row on that round.
+  - `"payouts_finalized"` — high-priority alert with the exact copy from the manager brief: *"Payouts are live! Check the clubhouse ledger to see your cash breakdown."* Recipients = every `league_member` matching `ctx.league_id` (+ optionally `ctx.division` for scoped fan-out). Channel id `ace_chasers_payouts`, click action `OPEN_CLUBHOUSE_LEDGER`.
+- **Per-token exception isolation** via `asyncio.gather(..., return_exceptions=True)`. One bad token can never block the batch.
+- **Dead-token pruning** — FCM's `404`/`410`/`UNREGISTERED`/`SENDER_ID_MISMATCH`/`INVALID_ARGUMENT` statuses trigger a `delete_many({token: {$in: [...]}})` sweep so the next fan-out isn't slowed by stale rows.
+- **OAuth token caching** — one process-wide access-token cache (refresh in a thread-pool via `google-auth` service-account creds). Refresh forced on 401.
+- **Dry-run mode** — if `FIREBASE_SERVICE_ACCOUNT_PATH` is unset (preview / dev), sender logs the payload and returns `dry_run: True`. Never crashes.
+
+### Wired triggers
+- **`PUT /api/rounds/{id}/regenerate-code`** — fires `asyncio.create_task(process_live_round_event(round_id, "join_code_rotated", join_code=..., old_code=...))` after the WS broadcasts. Fire-and-forget so the manager's PUT returns instantly.
+- **`POST /api/rounds/{id}/finalize-payout`** — one create_task per division so per-division push channels stay separable.
+
+### Tests
+- `tests/test_iteration71.py` — 5/5 pass:
+  1. `process_live_round_event` never raises (unknown event type).
+  2. `join_code_rotated` recipient resolution reads only checked-in players and only those with push tokens.
+  3. `payouts_finalized` narrows to the ctx-provided division.
+  4. Payload builder emits the exact manager-brief copy for the alert AND a data-only silent shape for the rotation event.
+  5. Missing round returns clean summary, doesn't throw.
+- Combined join-code + push sweep (65 + 71): 10/10 green.
+
+### Env config needed for production
+```
+FIREBASE_SERVICE_ACCOUNT_PATH=/etc/secrets/firebase-service-account.json
+FIREBASE_PROJECT_ID=acechaser-38c33
+```
+Preview stays in dry-run until the secret file is mounted. No app-side change is needed to enable live sends — just drop the JSON in place and set the env var.
+
+### Files touched
+- Backend: `push_service.py` (new); `routers/leagues_extensions_router.py` (fire-and-forget trigger + `asyncio` import); `routers/leagues_rounds_router.py` (per-division trigger).
+- Tests: `tests/test_iteration71.py`.
+
+### Backlog (unchanged)
+- P2: iOS parity for the two event channels (APNs `content-available: 1` for the silent one).
+- P2: `push_notifications_log` collection for observability of sent/failed/pruned per event.
+- P2: Retry queue for transient 5xx from FCM (current design drops on 5xx).

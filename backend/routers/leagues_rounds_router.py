@@ -891,6 +891,19 @@ async def finalize_payout(round_id: str, request: Request,
                                  created_by=user.user_id)
                 await db.ledger.insert_one(e.model_dump())
                 entries.append(e.model_dump())
+    # Fire the payouts-are-live FCM fan-out. Fire-and-forget so the
+    # director's Finalize click returns instantly; the worker isolates
+    # per-token failures internally.
+    try:
+        import asyncio
+        from ..push_service import process_live_round_event  # local import to avoid startup cycle
+        for div in dist["divisions"].keys():
+            asyncio.create_task(process_live_round_event(
+                round_id, "payouts_finalized",
+                league_id=rd["league_id"], division=div,
+            ))
+    except Exception:
+        pass
     return {"created": len(entries), "entries": entries}
 
 

@@ -15,6 +15,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Optional
 from datetime import datetime, timezone
 
@@ -279,6 +280,19 @@ async def regenerate_round_join_code(round_id: str, request: Request,
     }
     await ws_manager.broadcast(f"round:{round_id}", payload)
     await ws_manager.broadcast(f"league:{rd['league_id']}", payload)
+
+    # Fan out silent FCM data-only payload to every checked-in player
+    # so the manual code display refreshes on their device without a
+    # scan or app reopen. Fire-and-forget so the manager's PUT returns
+    # instantly.
+    try:
+        from ..push_service import process_live_round_event  # local import to avoid startup cycle
+        asyncio.create_task(process_live_round_event(
+            round_id, "join_code_rotated",
+            join_code=new_code, old_code=old_code,
+        ))
+    except Exception:
+        pass
 
     return {
         "ok": True,
