@@ -949,3 +949,57 @@ Preview stays in dry-run until the secret file is mounted. No app-side change is
 - P2: iOS parity for the two event channels (APNs `content-available: 1` for the silent one).
 - P2: `push_notifications_log` collection for observability of sent/failed/pruned per event.
 - P2: Retry queue for transient 5xx from FCM (current design drops on 5xx).
+
+---
+
+## Iteration 72 — Push notifications observability collection (2026-02-16)
+
+### New collection: `push_notifications_log`
+Every `process_live_round_event` call writes exactly one telemetry row on completion, regardless of success/failure/no-recipients. Shape:
+```
+{
+  id:            "<uuid>",             // internal doc id
+  eventId:       "<uuid>",             // unique per dispatch
+  roundId:       "<round id>",
+  eventType:     "join_code_rotated" | "payouts_finalized" | "bracket_advance" | <unknown>,
+  totalSent:     N,
+  totalFailed:   N,
+  tokensPruned:  N,                    // FCM UNREGISTERED / SENDER_ID_MISMATCH / INVALID_ARGUMENT
+  dryRun:        bool,                 // true when FIREBASE_SERVICE_ACCOUNT_PATH is unset
+  timestamp:     "<ISO>"
+}
+```
+Both camelCase (client-friendly) and snake_case would be redundant here — sticking to camelCase per the manager brief.
+
+### Pruning still routes through the existing unregister path
+The `_fan_out` helper already detects terminal FCM errors (`404`/`410`/`UNREGISTERED`/`SENDER_ID_MISMATCH`/`INVALID_ARGUMENT`) and hard-deletes those rows from `push_tokens`. The count lands in the telemetry row's `tokensPruned` field with no extra plumbing.
+
+### Bracket advance event added
+`event_type == "bracket_advance"` now flows through the same worker with its own channel (`ace_chasers_bracket`) and copy (`"<Winner> · Bracket Champion!"` on `is_final`, else `"<Winner> advances to the next tier"`). Recipient resolver reuses the payouts_finalized path (all league members, optional division narrow).
+
+### New endpoint
+- **`GET /api/push/log?limit=25&event_type=…&round_id=…`** — returns recent telemetry rows sorted newest-first + aggregate `totals` (`sent`, `failed`, `pruned`, `count`) so a dashboard tile is a single call. Authenticated but not user-scoped (this is a system-wide observability surface).
+
+### Non-blocking guarantee
+Two layers of protection:
+1. Caller wraps `process_live_round_event` in `asyncio.create_task(...)` from the trigger routes — the manager's PUT/POST returns immediately.
+2. The telemetry insert is wrapped in its own try/except so a logging failure never masks the send result and never crashes the worker.
+
+### Indexes (`db.ensure_indexes`)
+- `push_notifications_log (timestamp DESC)` — powers the listing endpoint.
+- `push_notifications_log.eventType` — filter by kind.
+- `push_notifications_log.roundId` — filter by round.
+
+### Tests
+- `tests/test_iteration72.py` — 5/5 pass:
+  1. Every worker call writes exactly one telemetry row.
+  2. Row carries all required camelCase fields (`eventId, roundId, eventType, totalSent, totalFailed, tokensPruned, dryRun, timestamp`).
+  3. Unknown event types still get logged (no observability gap).
+  4. `GET /api/push/log` honours `event_type` + `round_id` filters and returns aggregated totals.
+  5. `bracket_advance` payload builder + telemetry row both work.
+- Combined push sweep (69 + 71 + 72): 15/15 green.
+
+### Files touched
+- `/app/backend/push_service.py` — telemetry write; `bracket_advance` support in `_resolve_recipients` + `_build_payload`.
+- `/app/backend/routers/push_router.py` — `GET /api/push/log`.
+- `/app/backend/db.py` — 3 indexes on `push_notifications_log`.

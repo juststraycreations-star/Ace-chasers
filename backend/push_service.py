@@ -61,17 +61,47 @@ async def process_live_round_event(round_id: str, event_type: str, **ctx) -> Dic
 
     Returns a summary `{ sent, failed, pruned, dry_run }` for logging.
     Never raises — caller side-effects are already committed.
+
+    On completion (success OR failure) writes exactly one row to the
+    `push_notifications_log` collection with the observability shape:
+      { eventId, roundId, eventType, totalSent, totalFailed,
+        tokensPruned, timestamp, dryRun }
+    Persistence uses the same event loop; because the caller wraps
+    this coroutine in `asyncio.create_task`, the log write never
+    delays the originating HTTP response.
     """
+    import uuid  # local — keeps top-level imports lean
+    from datetime import datetime, timezone
+
+    result = {"sent": 0, "failed": 0, "pruned": 0, "dry_run": False}
     try:
         recipients = await _resolve_recipients(round_id, event_type, ctx)
-        if not recipients:
-            return {"sent": 0, "failed": 0, "pruned": 0, "dry_run": False}
-        payload = _build_payload(round_id, event_type, ctx)
-        results = await _fan_out(recipients, payload)
-        return results
+        if recipients:
+            payload = _build_payload(round_id, event_type, ctx)
+            result = await _fan_out(recipients, payload)
     except Exception:  # noqa: BLE001 — worker must never bubble
         logger.exception("push_service.process_live_round_event crashed")
-        return {"sent": 0, "failed": 0, "pruned": 0, "dry_run": False, "error": True}
+        result["error"] = True
+
+    # ── Observability write ─────────────────────────────────────
+    # Wrapped in its own try/except so a logging failure NEVER masks
+    # the actual send result and never crashes the worker.
+    try:
+        await db.push_notifications_log.insert_one({
+            "id": str(uuid.uuid4()),
+            "eventId": str(uuid.uuid4()),  # unique per dispatch
+            "roundId": round_id,
+            "eventType": event_type,
+            "totalSent": int(result.get("sent") or 0),
+            "totalFailed": int(result.get("failed") or 0),
+            "tokensPruned": int(result.get("pruned") or 0),
+            "dryRun": bool(result.get("dry_run") or False),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception:  # noqa: BLE001
+        logger.exception("push_service telemetry write failed")
+
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -94,7 +124,7 @@ async def _resolve_recipients(round_id: str, event_type: str, ctx: dict) -> List
             {"id": {"$in": member_ids}}, {"_id": 0, "user_id": 1}
         ).to_list(500)
         user_ids = list({m["user_id"] for m in members if m.get("user_id")})
-    elif event_type == "payouts_finalized":
+    elif event_type in ("payouts_finalized", "bracket_advance"):
         rd = await db.rounds.find_one({"id": round_id}, {"_id": 0, "league_id": 1})
         if not rd:
             return []
@@ -155,6 +185,26 @@ def _build_payload(round_id: str, event_type: str, ctx: dict) -> Dict[str, Any]:
                     "channel_id": "ace_chasers_payouts",
                     "click_action": "OPEN_CLUBHOUSE_LEDGER",
                 },
+            },
+        }
+    if event_type == "bracket_advance":
+        winner = str(ctx.get("winner_name") or "Winner")
+        is_final = bool(ctx.get("is_final"))
+        return {
+            "notification": {
+                "title": "Bracket champion crowned!" if is_final else "Bracket advance",
+                "body": (f"{winner} · Bracket Champion!" if is_final
+                          else f"{winner} advances to the next tier"),
+            },
+            "data": {
+                "type": "bracket_advance",
+                "round_id": round_id,
+                "winner_name": winner,
+                "is_final": "true" if is_final else "false",
+            },
+            "android": {
+                "priority": "HIGH",
+                "notification": {"channel_id": "ace_chasers_bracket"},
             },
         }
     return {}

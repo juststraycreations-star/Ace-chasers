@@ -100,6 +100,10 @@ async def ensure_indexes() -> None:
     # Push notification tokens (Iteration 69).
     await db.push_tokens.create_index("token", unique=True)
     await db.push_tokens.create_index("user_id")
+    # Push notification observability log (Iteration 72).
+    await db.push_notifications_log.create_index([("timestamp", -1)])
+    await db.push_notifications_log.create_index("eventType")
+    await db.push_notifications_log.create_index("roundId")
     await db.deleted_leagues.create_index("league_id")
     await db.deleted_leagues.create_index("actor_id")
     await db.deleted_leagues.create_index([("actor_id", 1), ("deleted_at", -1)])

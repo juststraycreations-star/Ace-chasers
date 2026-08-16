@@ -86,6 +86,33 @@ async def list_my_push_tokens(request: Request,
     return {"tokens": rows, "count": len(rows)}
 
 
+@api_router.get("/push/log")
+async def list_push_notifications_log(request: Request,
+                                        session_token: Optional[str] = Cookie(None),
+                                        authorization: Optional[str] = Header(None),
+                                        limit: int = 25,
+                                        event_type: Optional[str] = None,
+                                        round_id: Optional[str] = None):
+    """Observability endpoint — returns recent fan-out telemetry rows.
+
+    Not user-scoped (this is a system-wide observability surface for
+    managers/devs). Callers need to be authenticated to hit it.
+    """
+    await get_current_user(request, session_token, authorization)
+    query: dict = {}
+    if event_type: query["eventType"] = event_type
+    if round_id:   query["roundId"] = round_id
+    rows = await db.push_notifications_log.find(query, {"_id": 0}) \
+        .sort("timestamp", -1).limit(max(1, min(limit, 200))).to_list(200)
+    # Aggregate totals for quick dashboard glance.
+    totals = {"sent": 0, "failed": 0, "pruned": 0, "count": len(rows)}
+    for r in rows:
+        totals["sent"]   += int(r.get("totalSent") or 0)
+        totals["failed"] += int(r.get("totalFailed") or 0)
+        totals["pruned"] += int(r.get("tokensPruned") or 0)
+    return {"rows": rows, "totals": totals}
+
+
 class PushTokenDeletePayload(BaseModel):
     token: str
 
