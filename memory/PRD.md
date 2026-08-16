@@ -1041,3 +1041,53 @@ Surface the FCM fan-out telemetry (Iteration 72's `push_notifications_log`) insi
 - P2 lint cleanup: `calendar.jsx` nested components + ~10 empty `catch {}` blocks across CTPLeaderboard/ClubhouseTab/LeagueLiveNotifier/LedgerTab/VictoryCard/RoundScorecard.
 - Exponential-backoff retry queue for FCM 5xx responses in `push_service.py`.
 - Native-side `google-services.json` FCM API key still requires user to paste the real 39-char key locally (see `/app/memory/PUSH_NATIVE_CHECKLIST.md`).
+
+---
+
+## Iteration 74 — FCM 5xx Exponential-Backoff Retry Queue (Feb 2026)
+
+### Goal
+When Firebase Cloud Messaging returns a transient 5xx / 429 or the network flakes, retry the affected recipients out-of-band so the league director standing on the fairway never sees the retry latency, and mark the tokens that exhaust every attempt as permanently failed in `push_notifications_log`.
+
+### Delivered — all in `/app/backend/push_service.py`
+- **Transient vs terminal classifier** in `_send_one`:
+  * `httpx.HTTPError` (connect / timeout / DNS / reset) → `{ok: False, retry: True, status: "http_error:<cls>"}`
+  * HTTP `>= 500` OR `429` → `{ok: False, retry: True, status: "<code>:<detail>"}`
+  * `404 / 410 / UNREGISTERED / SENDER_ID_MISMATCH / INVALID_ARGUMENT` still route to `prune` (never retried — the token is dead).
+  * All other 4xx stay terminal (no `retry` flag).
+- **`_fan_out`** now collects a `retry_recipients` list and, when non-empty, hands back a `_retry_batch` bundle (recipients + payload + creds_path + project_id) to the caller. Never launches the retry itself so the initial telemetry log always writes first.
+- **`_retry_with_backoff(...)`** — new coroutine, runs entirely off the request path:
+  * Exponential schedule: `base_delay * 2**(attempt-1)` → default 2 s → 4 s → 8 s (≤ 14 s tail budget).
+  * Per-attempt `asyncio.gather(..., return_exceptions=True)` reuses `_send_one`, so 4xx surfacing mid-retry still prunes correctly.
+  * `asyncio.CancelledError`-safe (supervisor restart → graceful bail-out with partial log).
+  * When `attempts_run == max_attempts` the remaining `pending` list becomes the permanently-failed set — no silent drops.
+  * Writes **one** follow-up row to `push_notifications_log` correlated by the parent `eventId` with `phase: "retry"`, `attempts`, `retriedSent`, `permanentlyFailed`, `failedTokenPrefixes` (12-char prefix + ellipsis — never the full token), plus aggregate `totalSent / totalFailed / tokensPruned` for the dashboard tile's sum-aggregation.
+- **`_spawn_background(coro)`** — new helper for the safe fire-and-forget asyncio idiom:
+  * Grabs the running loop → `create_task(coro)`.
+  * Registers the task in a module-level `_BACKGROUND_TASKS: set` so the loop's GC can't reap it mid-flight.
+  * `add_done_callback(_BACKGROUND_TASKS.discard)` clears the reference the instant it completes → no leaked task references in long-running processes.
+  * Defensive `RuntimeError` guard for the "no running loop" edge case at import time.
+- **`process_live_round_event`** now:
+  * Generates one stable `eventId` per dispatch and passes it to the retry task so the two log rows correlate.
+  * Writes the initial telemetry row with a new `retriesPending` count so operators can see at a glance whether the retry queue is engaged.
+  * Pops `_retry_batch` **before** returning so it never leaks into the caller's dict / HTTP response envelope.
+  * Schedules `_retry_with_backoff` via `_spawn_background`. The caller's HTTP request has already returned by the time the first `asyncio.sleep(delay)` begins.
+
+### Verification (7 new + 5 regression = 12/12 green)
+- `tests/test_iteration73.py`:
+  1. `_send_one` marks 5xx `UNAVAILABLE` as `retry`.
+  2. `_send_one` marks 4xx `INVALID_ARGUMENT` as terminal (`prune`, not `retry`).
+  3. `_send_one` marks `httpx.ConnectError` as `retry`.
+  4. `_retry_with_backoff` recovers a token on the 2nd attempt, logs `retriedSent: 1 / permanentlyFailed: 0 / attempts: 2`.
+  5. `_retry_with_backoff` exhausts on always-5xx and logs 2 permanently-failed tokens with truncated 12-char + `…` prefixes.
+  6. `_spawn_background` registers the task, then clears itself via done_callback.
+  7. End-to-end: `process_live_round_event` returns immediately with the initial batch outcome while the retry runs on the loop's own time; `_retry_batch` never leaks into the response dict.
+- `tests/test_iteration72.py` — full pass (initial log shape backwards-compatible; new fields `retriesPending`, `phase`, `attempts`, `retriedSent`, `permanentlyFailed`, `failedTokenPrefixes` are additive).
+
+### Files touched
+- `/app/backend/push_service.py` — module-level `_BACKGROUND_TASKS`, `_spawn_background`, `_retry_with_backoff`; classifier upgrades in `_send_one`; retry hand-off in `_fan_out`; `retriesPending` field + retry scheduling in `process_live_round_event`.
+- `/app/backend/tests/test_iteration73.py` — 7 focused pytest cases with monkeypatched `_send_one` / `httpx.AsyncClient`.
+
+### Tile behaviour (unchanged JS)
+`PushDeliveryTile` already aggregates by summing `totalSent / totalFailed / tokensPruned`. The retry follow-up row contributes retry outcomes to those totals naturally — no frontend changes needed.
+

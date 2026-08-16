@@ -52,6 +52,44 @@ FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
 # refresh lazily on 401 or expiry.
 _ACCESS_TOKEN: Dict[str, Any] = {"token": None, "expires_at": 0}
 
+# ── Retry-queue tuning ────────────────────────────────────────────
+# Transient FCM 5xx / network errors are re-attempted with
+# exponential backoff. Kept tight so a director standing on the
+# fairway sees fresh telemetry within ~14 s of the initial fan-out
+# but generous enough to absorb a brief Google Cloud blip.
+_RETRY_MAX_ATTEMPTS = 3        # attempts AFTER the initial send
+_RETRY_BASE_DELAY_SEC = 2.0    # 2s, 4s, 8s → ≤ 14s tail budget
+
+# Module-level task registry — prevents the running-loop GC from
+# reaping our fire-and-forget retry tasks mid-flight. Each task
+# self-clears via `add_done_callback(_BACKGROUND_TASKS.discard)`
+# so the set never grows unbounded (safe memory cleanup).
+_BACKGROUND_TASKS: set = set()
+
+
+def _spawn_background(coro) -> None:
+    """Schedule `coro` on the running loop and track it safely.
+
+    Follows the asyncio best-practice pattern:
+      task = create_task(coro)
+      registry.add(task)
+      task.add_done_callback(registry.discard)
+    This keeps a strong reference (so the loop doesn't GC the task
+    before it runs) AND clears the reference the instant the task
+    finishes (so long-lived processes don't leak completed tasks).
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop — impossible from an async caller, but be
+        # defensive so a mis-wire during startup doesn't crash the
+        # importing module.
+        logger.warning("push_service._spawn_background called outside a loop")
+        return
+    task = loop.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+
 
 # ══════════════════════════════════════════════════════════════════
 # Public entry point
@@ -83,23 +121,45 @@ async def process_live_round_event(round_id: str, event_type: str, **ctx) -> Dic
         logger.exception("push_service.process_live_round_event crashed")
         result["error"] = True
 
+    # `eventId` is generated once and reused by the retry follow-up
+    # row so the two log entries can be correlated in observability.
+    event_id = str(uuid.uuid4())
+
     # ── Observability write ─────────────────────────────────────
     # Wrapped in its own try/except so a logging failure NEVER masks
     # the actual send result and never crashes the worker.
     try:
         await db.push_notifications_log.insert_one({
             "id": str(uuid.uuid4()),
-            "eventId": str(uuid.uuid4()),  # unique per dispatch
+            "eventId": event_id,
             "roundId": round_id,
             "eventType": event_type,
             "totalSent": int(result.get("sent") or 0),
             "totalFailed": int(result.get("failed") or 0),
             "tokensPruned": int(result.get("pruned") or 0),
             "dryRun": bool(result.get("dry_run") or False),
+            "retriesPending": len(result.get("_retry_batch", {}).get("recipients") or []),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
     except Exception:  # noqa: BLE001
         logger.exception("push_service telemetry write failed")
+
+    # ── Schedule transient-error retry (5xx / network) ──────────
+    # Runs entirely off the caller's request path via _spawn_background
+    # so the director's HTTP response is already flushed before the
+    # first backoff sleep begins. Uses the same eventId so the
+    # follow-up log row correlates with the initial one.
+    retry_batch = result.pop("_retry_batch", None)
+    if retry_batch and retry_batch.get("recipients"):
+        _spawn_background(_retry_with_backoff(
+            recipients=retry_batch["recipients"],
+            payload=retry_batch["payload"],
+            creds_path=retry_batch["creds_path"],
+            project_id=retry_batch["project_id"],
+            round_id=round_id,
+            event_type=event_type,
+            parent_event_id=event_id,
+        ))
 
     return result
 
@@ -234,11 +294,14 @@ async def _fan_out(recipients: List[dict], payload: Dict[str, Any]) -> Dict[str,
     outcomes = await asyncio.gather(*tasks, return_exceptions=True)
     sent = failed = 0
     prune_tokens: List[str] = []
+    retry_recipients: List[dict] = []
     for row, outcome in zip(recipients, outcomes):
         if isinstance(outcome, Exception):
             failed += 1
             logger.warning("push_service send failed token=%s err=%s",
                             row["token"][:12] + "…", outcome)
+            # Bare gather-exception is treated as transient — retry.
+            retry_recipients.append(row)
             continue
         if outcome.get("ok"):
             sent += 1
@@ -246,6 +309,8 @@ async def _fan_out(recipients: List[dict], payload: Dict[str, Any]) -> Dict[str,
             failed += 1
             if outcome.get("prune"):
                 prune_tokens.append(row["token"])
+            elif outcome.get("retry"):
+                retry_recipients.append(row)
 
     if prune_tokens:
         try:
@@ -257,7 +322,141 @@ async def _fan_out(recipients: List[dict], payload: Dict[str, Any]) -> Dict[str,
     else:
         pruned_ct = 0
 
-    return {"sent": sent, "failed": failed, "pruned": pruned_ct, "dry_run": False}
+    result: Dict[str, Any] = {"sent": sent, "failed": failed,
+                              "pruned": pruned_ct, "dry_run": False}
+    if retry_recipients:
+        # Handed back to the caller so it can schedule a background
+        # retry task AFTER writing the initial telemetry row.
+        result["_retry_batch"] = {
+            "recipients": retry_recipients,
+            "payload": payload,
+            "creds_path": creds_path,
+            "project_id": project_id,
+        }
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════
+# Background retry with exponential backoff
+# ══════════════════════════════════════════════════════════════════
+async def _retry_with_backoff(*,
+                                recipients: List[dict],
+                                payload: Dict[str, Any],
+                                creds_path: str,
+                                project_id: str,
+                                round_id: str,
+                                event_type: str,
+                                parent_event_id: str,
+                                max_attempts: int = _RETRY_MAX_ATTEMPTS,
+                                base_delay: float = _RETRY_BASE_DELAY_SEC) -> None:
+    """Re-attempt transient failures out-of-band from the caller.
+
+    Contract:
+      • Runs entirely off the caller's request path (scheduled via
+        `_spawn_background`) so the director's UI never waits on
+        backoff sleeps.
+      • Exponential schedule: base_delay * 2**(attempt-1)
+        → 2 s, 4 s, 8 s on the default settings.
+      • Only 5xx / 429 / network errors ever land here. 4xx are
+        permanent and never enter the retry queue.
+      • Dead tokens surfaced by FCM during a retry are still pruned
+        from `push_tokens`, matching first-pass behaviour.
+      • On completion (success OR exhaustion) writes exactly one
+        follow-up telemetry row keyed by the parent `eventId`, with
+        `phase: "retry"` and the truncated prefixes of any tokens
+        that were permanently marked failed. Full tokens are never
+        persisted to observability — they are secrets.
+      • Wraps every phase in try/except so the background task can
+        never raise into the loop and never leaks a reference back
+        into `_BACKGROUND_TASKS`.
+    """
+    import uuid
+    from datetime import datetime, timezone
+
+    pending = list(recipients)
+    retried_sent = 0
+    prune_tokens: List[str] = []
+    attempts_run = 0
+
+    while pending:
+        # Stop before starting another pass we're not allowed to run.
+        # Whatever is still `pending` here becomes permanent failure.
+        if attempts_run >= max_attempts:
+            break
+        attempts_run += 1
+        delay = base_delay * (2 ** (attempts_run - 1))
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            # Loop shutting down (e.g. supervisor restart). Log a
+            # partial row so operators still see what happened.
+            logger.info("push_service retry cancelled after %d attempts", attempts_run - 1)
+            break
+
+        try:
+            outcomes = await asyncio.gather(
+                *[_send_one(row, payload, creds_path, project_id) for row in pending],
+                return_exceptions=True,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("push_service retry gather crashed")
+            break
+
+        next_pending: List[dict] = []
+        for row, outcome in zip(pending, outcomes):
+            if isinstance(outcome, Exception):
+                # Still transient — carry forward. The next loop-top
+                # gate decides whether another pass is allowed.
+                next_pending.append(row)
+                continue
+            if outcome.get("ok"):
+                retried_sent += 1
+            elif outcome.get("prune"):
+                prune_tokens.append(row["token"])
+            elif outcome.get("retry"):
+                # Still transient — carry forward, gate decides.
+                next_pending.append(row)
+            # else: permanent 4xx (creds_error / auth) → drops out.
+        pending = next_pending
+
+    # ── Prune dead tokens surfaced during retry ─────────────────
+    pruned_ct = 0
+    if prune_tokens:
+        try:
+            res = await db.push_tokens.delete_many({"token": {"$in": prune_tokens}})
+            pruned_ct = int(res.deleted_count)
+        except Exception:  # noqa: BLE001
+            logger.exception("push_service retry prune failed")
+
+    # `pending` at this point == tokens that exhausted every retry
+    # or hit a permanent error mid-retry. Report the token PREFIX
+    # (never the full token — that's a secret) for correlation.
+    permanently_failed = len(pending)
+    failed_prefixes = [row["token"][:12] + "…" for row in pending]
+
+    # ── Follow-up telemetry row ─────────────────────────────────
+    try:
+        await db.push_notifications_log.insert_one({
+            "id": str(uuid.uuid4()),
+            "eventId": parent_event_id,       # correlates with initial row
+            "roundId": round_id,
+            "eventType": event_type,
+            "phase": "retry",
+            "attempts": attempts_run,
+            "retriedSent": retried_sent,
+            "permanentlyFailed": permanently_failed,
+            "failedTokenPrefixes": failed_prefixes,
+            # Aggregated fields — kept so the dashboard tile that sums
+            # `totalSent` / `totalFailed` / `tokensPruned` picks up the
+            # retry outcome without special-casing the `phase` field.
+            "totalSent": retried_sent,
+            "totalFailed": permanently_failed,
+            "tokensPruned": pruned_ct,
+            "dryRun": False,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception:  # noqa: BLE001
+        logger.exception("push_service retry telemetry write failed")
 
 
 async def _send_one(row: dict, payload: Dict[str, Any], creds_path: str, project_id: str) -> Dict[str, Any]:
@@ -282,7 +481,9 @@ async def _send_one(row: dict, payload: Dict[str, Any], creds_path: str, project
         async with httpx.AsyncClient(timeout=8.0) as client:
             resp = await client.post(url, headers=headers, json=body)
     except httpx.HTTPError as e:
-        return {"ok": False, "status": f"http_error:{e.__class__.__name__}"}
+        # Network / timeout / DNS / connection reset — all transient.
+        return {"ok": False, "retry": True,
+                "status": f"http_error:{e.__class__.__name__}"}
 
     if resp.status_code == 200:
         return {"ok": True, "status": "sent"}
@@ -300,6 +501,10 @@ async def _send_one(row: dict, payload: Dict[str, Any], creds_path: str, project
         # Force a token refresh next call.
         _ACCESS_TOKEN["token"] = None
         _ACCESS_TOKEN["expires_at"] = 0
+    # 5xx and 429 → transient, worth a backoff retry.
+    if resp.status_code >= 500 or resp.status_code == 429:
+        return {"ok": False, "retry": True,
+                "status": f"{resp.status_code}:{detail or 'transient'}"}
     return {"ok": False, "status": f"{resp.status_code}:{detail or 'unknown'}"}
 
 
