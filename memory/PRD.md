@@ -718,3 +718,41 @@ Both camelCase (client-friendly) and snake_case aliases persisted so future JSON
 - P2: Print-Ready Round Card PDF with QR + manual code side-by-side.
 - P2: Deleted Leagues Timeline UI; Retention Expiry cron.
 - P2: Round Detail Header + Active Players grid over Iteration 58 `roundStore`.
+
+---
+
+## Iteration 65 — Regenerate Join Code (1-tap security) (2026-02-16)
+
+### Backend
+- **New endpoint** `PUT /api/rounds/{round_id}/regenerate-code` — director-only. Reuses `_generate_round_join_code(db)` so the new code follows the exact same alphabet/uniqueness rules as create-time. Returns `{ ok, round_id, join_code, old_code }`.
+- **Guard**: completed rounds return 409 (no security value in rotating a done round, and it would recycle the freed code into the active pool).
+- **Broadcast**: on success, fires a `join_code_rotated` WS event on both `round:{round_id}` and `league:{league_id}` channels with `{ round_id, join_code, old_code, rotated_at }` so every subscribed manager screen updates without a page reload.
+- Precedence: 404 (round missing) → 409 (completed) → 403 (non-director).
+
+### Frontend
+- **`RoundQRPanel`** now:
+  - Accepts `isDirector` prop.
+  - Renders a subtle refresh icon (`text-gray-400 hover:text-emerald-600 transition-colors`) inline-right of the manual code card when the caller is director. `title="Regenerate Join Code"` (native tooltip) + matching `aria-label` for a11y. `data-testid="round-qr-regenerate-btn"`.
+  - Click → `PUT /rounds/{id}/regenerate-code`. Optimistically updates local state, then subscribes to the round WS channel so codes rotated by another director/device also refresh the display.
+  - Icon spins during the PUT (`animate-spin`), disabled + `opacity-50` while in flight.
+- `RoundCard.jsx` now passes `isDirector` through to `RoundQRPanel`.
+
+### Tests
+- `tests/test_iteration65.py` — 5/5 pass:
+  1. Director rotation returns a fresh code that matches the alphabet contract.
+  2. Non-director → 403.
+  3. Completed round → 409.
+  4. Old code stops resolving after rotation; new code resolves.
+  5. Missing round → 404.
+- Combined join-code sweep (63 + 65): 10/10 green.
+
+### Files touched
+- `/app/backend/routers/leagues_extensions_router.py` — imported `_generate_round_join_code`; added `PUT /rounds/{id}/regenerate-code`.
+- `/app/frontend/src/components/RoundQRPanel.jsx` — full rewrite with regenerate + WS subscription.
+- `/app/frontend/src/components/RoundCard.jsx` — plumbs `isDirector` prop through.
+
+### Backlog (unchanged)
+- P2: Print-Ready Round Card PDF with QR + manual code side-by-side.
+- P2: Deleted Leagues Timeline over `GET /api/deleted-leagues`.
+- P2: Retention Expiry cron for shadow rows.
+- P2: Round Detail Header + Active Players grid over Iteration 58 `roundStore`.

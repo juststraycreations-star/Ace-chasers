@@ -26,6 +26,7 @@ from .leagues_router import (
     LeagueMember,
     Scorecard,
     _compute_handicap,
+    _generate_round_join_code,
     _require_member,
     api_router,
     db,
@@ -237,6 +238,53 @@ async def lookup_round_by_join_code(join_code: str, request: Request,
         "already_enrolled": False,
         "card": card.model_dump(),
         "scorecard": sc,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════
+# Regenerate round join code — director-only "1-tap security" action
+# ══════════════════════════════════════════════════════════════════
+@api_router.put("/rounds/{round_id}/regenerate-code")
+async def regenerate_round_join_code(round_id: str, request: Request,
+                                       session_token: Optional[str] = Cookie(None),
+                                       authorization: Optional[str] = Header(None)):
+    """Wipe the old join_code and mint a fresh one. Broadcast the new
+    value to any subscribed manager screens so their display and the
+    active check-in loop refresh without a page reload.
+    """
+    user = await get_current_user(request, session_token, authorization)
+    rd = await db.rounds.find_one({"id": round_id}, {"_id": 0})
+    if not rd:
+        raise HTTPException(status_code=404, detail="Round not found")
+    if rd.get("status") == "completed":
+        # No security value in rotating a code on a done round, and it
+        # would recycle a code that another live round could pick up.
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot regenerate code on a completed round",
+        )
+    await _require_director(rd["league_id"], user.user_id)
+    new_code = await _generate_round_join_code(db)
+    old_code = rd.get("join_code")
+    await db.rounds.update_one({"id": round_id}, {"$set": {"join_code": new_code}})
+
+    # Push the new code out over both the round channel (viewers on the
+    # scorecard) and the league channel (managers on the round list).
+    payload = {
+        "type": "join_code_rotated",
+        "round_id": round_id,
+        "join_code": new_code,
+        "old_code": old_code,
+        "rotated_at": _now_iso(),
+    }
+    await ws_manager.broadcast(f"round:{round_id}", payload)
+    await ws_manager.broadcast(f"league:{rd['league_id']}", payload)
+
+    return {
+        "ok": True,
+        "round_id": round_id,
+        "join_code": new_code,
+        "old_code": old_code,
     }
 
 

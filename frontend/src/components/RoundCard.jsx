@@ -85,7 +85,7 @@ export default function RoundCard({
         </div>
         {qrOpen && (
           <div className="mt-4" data-testid={`round-qr-wrapper-${round.id}`}>
-            <RoundQRPanel roundId={round.id} roundName={round.name} />
+            <RoundQRPanel roundId={round.id} roundName={round.name} isDirector={isDirector} />
           </div>
         )}
       </div>

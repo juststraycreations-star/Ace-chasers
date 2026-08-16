@@ -1,21 +1,27 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import api from "@/lib/api";
 import { toast } from "sonner";
-import { QrCode, Copy } from "@phosphor-icons/react";
+import { QrCode, Copy, ArrowsClockwise } from "@phosphor-icons/react";
+import { useWebSocket } from "@/lib/ws";
 
 /**
  * RoundQRPanel — encodes a deep-link into a scannable QR so any
  * league member (or newcomer) can point a phone camera at it and land
  * on `/rounds/{id}/checkin` which auto-enrolls them into the round.
  *
- * The QR encodes an absolute URL rooted at REACT_APP_BACKEND_URL / the
- * current origin so the target works whether the manager prints it on
- * a coffee-cup sleeve or DMs it inside the app.
+ * Two extras beyond the QR itself:
+ *   1. A manual join-code fallback (Iteration 63) shown beneath the QR
+ *      for players who can't scan (glare, dead camera, etc.).
+ *   2. A director-only 1-tap "Regenerate" refresh button (Iteration 65)
+ *      that mints a fresh 4-char code and broadcasts it over the
+ *      `round:{id}` and `league:{id}` WS channels so every subscribed
+ *      manager screen refreshes without a page reload.
  */
-export default function RoundQRPanel({ roundId, roundName }) {
+export default function RoundQRPanel({ roundId, roundName, isDirector = false }) {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [rotating, setRotating] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -30,6 +36,15 @@ export default function RoundQRPanel({ roundId, roundName }) {
     })();
   }, [roundId]);
 
+  // Live-refresh the display when ANY director rotates the code — even
+  // from a different device — via the round-scoped WS channel.
+  const onWsMessage = useCallback((msg) => {
+    if (!msg || msg.type !== "join_code_rotated") return;
+    if (msg.round_id !== roundId) return;
+    setPayload((prev) => (prev ? { ...prev, join_code: msg.join_code } : prev));
+  }, [roundId]);
+  useWebSocket(`/api/ws/rounds/${roundId}`, onWsMessage, Boolean(roundId));
+
   const url =
     payload?.deeplink && typeof window !== "undefined"
       ? `${window.location.origin}${payload.deeplink}`
@@ -41,6 +56,22 @@ export default function RoundQRPanel({ roundId, roundName }) {
       toast.success("Check-in link copied");
     } catch {
       toast.error("Copy failed");
+    }
+  };
+
+  const regenerate = async () => {
+    if (rotating) return;
+    setRotating(true);
+    try {
+      const { data } = await api.put(`/rounds/${roundId}/regenerate-code`);
+      // Optimistic local update — the WS broadcast will follow, but
+      // the caller's screen shouldn't wait for their own echo.
+      setPayload((prev) => (prev ? { ...prev, join_code: data.join_code } : prev));
+      toast.success(`New code · ${data.join_code}`);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Could not regenerate code");
+    } finally {
+      setRotating(false);
     }
   };
 
@@ -115,15 +146,34 @@ export default function RoundQRPanel({ roundId, roundName }) {
           >
             OR ENTER MANUAL JOIN CODE
           </div>
-          <div
-            data-testid="round-qr-join-code"
-            className="text-2xl font-mono font-bold tracking-widest text-emerald-700 bg-gray-50 px-4 py-2 rounded-lg border border-gray-200 inline-block"
-          >
-            {payload.join_code
-              .toString()
-              .toUpperCase()
-              .split("")
-              .join(" ")}
+          <div className="inline-flex items-center gap-2">
+            <div
+              data-testid="round-qr-join-code"
+              className="text-2xl font-mono font-bold tracking-widest text-emerald-700 bg-gray-50 px-4 py-2 rounded-lg border border-gray-200 inline-block"
+            >
+              {payload.join_code
+                .toString()
+                .toUpperCase()
+                .split("")
+                .join(" ")}
+            </div>
+            {isDirector && (
+              <button
+                type="button"
+                onClick={regenerate}
+                disabled={rotating}
+                title="Regenerate Join Code"
+                aria-label="Regenerate Join Code"
+                data-testid="round-qr-regenerate-btn"
+                className="p-2 text-gray-400 hover:text-emerald-600 transition-colors disabled:opacity-50"
+              >
+                <ArrowsClockwise
+                  size={18}
+                  weight="bold"
+                  className={rotating ? "animate-spin" : ""}
+                />
+              </button>
+            )}
           </div>
         </div>
       )}
