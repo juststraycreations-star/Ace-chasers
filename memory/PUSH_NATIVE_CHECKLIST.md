@@ -11,13 +11,26 @@
 > - `minSdkVersion 22`
 > - `versionCode 2` · `versionName "1.0.1"` (bumped to bypass the grayed-out Play Console lock)
 > - Google Services plugin applied only when `google-services.json` is present (Capacitor default).
+> - **`signingConfigs.release`** — reads `keystore.properties` if present so `./gradlew bundleRelease` produces a signed AAB automatically.
 >
-> When you run `npx cap add android` locally, Capacitor detects existing files and skips overwriting — so these two files roll straight into the native project.
+> ## ✅ Full native scaffold — committed Feb 2026
+> Ready for a one-shot local build:
+> - `/app/frontend/capacitor.config.ts` — appId, appName, webDir, PushNotifications plugin config → skips `cap init`.
+> - `/app/android/app/src/main/AndroidManifest.xml` — INTERNET, WAKE_LOCK, ACCESS_NETWORK_STATE, VIBRATE, **POST_NOTIFICATIONS** (Android 13+) permissions + FileProvider entry.
+> - `/app/android/keystore.properties.template` — copy → `keystore.properties`, fill in 4 fields, gradle will sign.
+> - `/app/android/.gitignore` — protects `keystore.properties`, `*.jks`, `*.keystore`, gradle/idea caches.
 >
-> Next step on your local machine (this sandbox cannot run it):
+> One-shot local build sequence:
 > ```
-> cd frontend && yarn build && npx cap sync android && npx cap open android
+> git pull
+> cd frontend && yarn add -D @capacitor/cli @capacitor/android && yarn build
+> npx cap add android          # first time only per machine
+> npx cap sync android
+> cd ../android
+> cp keystore.properties.template keystore.properties  # then edit
+> ./gradlew bundleRelease
 > ```
+> AAB output: `<repo>/android/app/build/outputs/bundle/release/app-release.aab`
 
 
 # Iteration 69 — Push Notifications: Native Build Checklist

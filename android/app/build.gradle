@@ -1,5 +1,16 @@
 apply plugin: 'com.android.application'
 
+// ─── Release signing (reads keystore.properties if present) ──────
+// Copy `keystore.properties.template` → `keystore.properties`, fill
+// in your upload keystore path + passwords locally, and gradle will
+// sign automatically. If the file is missing (CI / preview / first
+// clone) the debug build still works — only `bundleRelease` needs it.
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace "net.acechasers.app"
     compileSdkVersion 36 // Android 16 targeting compliance (Play Store 2025+)
@@ -18,10 +29,23 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
