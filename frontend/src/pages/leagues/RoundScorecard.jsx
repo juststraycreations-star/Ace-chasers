@@ -74,8 +74,21 @@ export default function RoundScorecard() {
   const [sweeping, setSweeping] = useState(false);
   const [joining, setJoining] = useState(false);
   const chatEnd = useRef(null);
+  // ── Post-submit circuit-breaker ────────────────────────────────
+  // The instant the backend confirms `/finalize` we flip this to
+  // true. Every layout hook below (scrollIntoView, load(), late WS
+  // ripples) checks it and no-ops so the viewport can't jitter or
+  // spam-refetch during the navigate() unmount tick.
+  const postSubmitLockRef = useRef(false);
+  // Toast-debounce for `load()` failures — prevents "Failed to load
+  // round" from firing repeatedly if a WS refresh briefly races the
+  // round's completed-state transition on the backend.
+  const lastLoadErrToastAt = useRef(0);
 
   const load = async () => {
+    // Circuit-breaker: we've already handed off; don't refetch a
+    // round that's about to unmount.
+    if (postSubmitLockRef.current) return;
     try {
       const { data } = await api.get(`/rounds/${roundId}`);
       setData(data);
@@ -84,7 +97,15 @@ export default function RoundScorecard() {
       setMembers(memb.data);
       const lg = await api.get(`/leagues/${data.round.league_id}`);
       setLeague(lg.data);
-    } catch { toast.error("Failed to load round"); }
+    } catch {
+      // Debounced — one toast per 4-second window even if the effect
+      // graph re-fires. Silences the previous loop on the finalize path.
+      const now = Date.now();
+      if (now - lastLoadErrToastAt.current > 4000) {
+        lastLoadErrToastAt.current = now;
+        toast.error("Failed to load round");
+      }
+    }
   };
 
   const loadChat = useCallback(async () => {
@@ -95,9 +116,37 @@ export default function RoundScorecard() {
     } catch {}
   }, [roundId, selectedCardId]);
 
-  useEffect(() => { load(); }, [load]);
+  // Bind load() to roundId only. Previous form `[load]` re-created
+  // `load` every render → the effect refired every render → infinite
+  // refetch loop, which surfaced as "Failed to load round" toast
+  // spam right after certify (when the round briefly 404s during the
+  // completed-state transition on the backend).
+  useEffect(() => { load(); }, [roundId]);
   useEffect(() => { loadChat(); }, [loadChat]);
-  useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [chat.length]);
+  // scrollIntoView — chat-panel autoscroll. Guarded three ways so it
+  // can NEVER bounce the viewport after certify:
+  //  1. Post-submit lock — no scroll during finalize / navigate.
+  //  2. Skip the initial mount tick — `[chat.length]` fires once with
+  //     length 0 → 0 which was harmless but wasted a scroll call.
+  //  3. `block: "nearest"` — only scrolls the chat panel, not the
+  //     document, in case a parent's overflow chain propagates.
+  const initialChatMountRef = useRef(true);
+  useEffect(() => {
+    if (postSubmitLockRef.current) return;
+    if (initialChatMountRef.current) {
+      initialChatMountRef.current = false;
+      return;
+    }
+    chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [chat.length]);
+  // Unmount cleanup — resets the circuit-breaker + processing flags
+  // so a StrictMode remount / react-router replay starts from a
+  // clean, non-locked state.
+  useEffect(() => () => {
+    postSubmitLockRef.current = false;
+    initialChatMountRef.current = true;
+    lastLoadErrToastAt.current = 0;
+  }, []);
   // Bind offline-queue listeners once on mount so queued score writes
   // drain automatically when connectivity returns.
   useEffect(() => { bindOfflineQueueListeners(); }, []);
@@ -182,44 +231,51 @@ export default function RoundScorecard() {
 
   const finalizeScorecard = async () => {
     if (!certifyChecked || !certifyForScorecardId) return;
+    // Hard re-entry guard — belt-and-braces on top of the disabled=
+    // attribute on the Certify button. Prevents any late click /
+    // synthetic-event replay from double-firing the POST.
+    if (certifying) return;
     setCertifying(true);
     try {
       const { data: finRes } = await api.post(`/scorecards/${certifyForScorecardId}/finalize`, {
         certified: true,
       });
-      // Server confirmed the write + WS broadcast. Clear the certify modal
-      // state and redirect the user to the League Feed to break any UI-freeze
-      // loop the local scorecard/refresh path could get stuck in.
-      try {
-        toast.success("Scorecard finalized · logged to Proof of Score");
-        setCertifyForScorecardId(null);
-        setCertifyChecked(false);
-        setCertifying(false);
-        // Match-Play tie detection — director must resolve manually, so we
-        // stay on this page instead of redirecting.
-        const adv = finRes?.bracket_advance;
-        if (adv?.tied && league?.is_director) {
-          setPendingTieBreak(adv);
-          return;
-        }
-        if (adv?.resolved) {
-          const winName = adv.winner_name || "Winner";
-          toast.success(
-            adv.is_final
-              ? `🏆 ${winName} · Bracket Champion!`
-              : `${winName} advances to ${adv.next_tier_label || "the next tier"}`
-          );
-          if (adv.is_final) fireChampionConfetti();
-        }
-        if (round?.league_id) {
-          navigate(`/leagues/${round.league_id}?tab=clubhouse`, { replace: true });
-        } else {
-          navigate("/feed", { replace: true });
-        }
-      } catch (stateErr) {
-        // State-reset shouldn't throw, but if it does we still redirect so
-        // the user isn't trapped on a half-updated scorecard view.
-        console.warn("finalize post-success reset failed", stateErr);
+      // ─── ✂️  CIRCUIT-BREAKER — engaged the millisecond the backend
+      // confirms the finalize write. Order matters:
+      //   1. Flip the post-submit lock BEFORE any setState so the
+      //      chatEnd scrollIntoView effect (and any late WS ripple
+      //      through load()) short-circuits immediately.
+      //   2. Close the modal state so the popup unmounts on the very
+      //      next render.
+      //   3. Only THEN run toasts, bracket-advance detection, and
+      //      navigate() — these are pure side-effects at this point.
+      postSubmitLockRef.current = true;
+      setCertifyForScorecardId(null);
+      setCertifyChecked(false);
+      setCertifying(false);
+
+      toast.success("Scorecard finalized · logged to Proof of Score");
+      // Match-Play tie detection — director must resolve manually,
+      // so we stay on this page instead of redirecting. Release the
+      // lock so the page can refresh normally.
+      const adv = finRes?.bracket_advance;
+      if (adv?.tied && league?.is_director) {
+        setPendingTieBreak(adv);
+        postSubmitLockRef.current = false;
+        return;
+      }
+      if (adv?.resolved) {
+        const winName = adv.winner_name || "Winner";
+        toast.success(
+          adv.is_final
+            ? `🏆 ${winName} · Bracket Champion!`
+            : `${winName} advances to ${adv.next_tier_label || "the next tier"}`
+        );
+        if (adv.is_final) fireChampionConfetti();
+      }
+      if (round?.league_id) {
+        navigate(`/leagues/${round.league_id}?tab=clubhouse`, { replace: true });
+      } else {
         navigate("/feed", { replace: true });
       }
     } catch (e) {

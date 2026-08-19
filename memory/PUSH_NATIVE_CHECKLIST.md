@@ -5,6 +5,15 @@
 > - Package: `net.acechasers.app`
 > - Mobile SDK App ID: `1:388698465312:android:726dae7631da76f3de495f`
 >
+> ## ✅ app/build.gradle — SDK targeting Feb 2026
+> Committed at `/app/android/app/build.gradle` with:
+> - `compileSdkVersion 36` · `targetSdkVersion 36` (Android 16, Play Store 2025+ compliance)
+> - `minSdkVersion 22`
+> - `versionCode 2` · `versionName "1.0.1"` (bumped to bypass the grayed-out Play Console lock)
+> - Google Services plugin applied only when `google-services.json` is present (Capacitor default).
+>
+> When you run `npx cap add android` locally, Capacitor detects existing files and skips overwriting — so these two files roll straight into the native project.
+>
 > Next step on your local machine (this sandbox cannot run it):
 > ```
 > cd frontend && yarn build && npx cap sync android && npx cap open android
