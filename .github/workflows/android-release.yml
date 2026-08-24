@@ -1,0 +1,181 @@
+# ══════════════════════════════════════════════════════════════════
+# Ace Chasers — Signed Android AAB via GitHub Actions
+# ══════════════════════════════════════════════════════════════════
+# Zero local build required. Trigger manually from the Actions tab
+# (workflow_dispatch) and this pipeline:
+#   1. Compiles the React 18 / Tailwind web bundle with Vite
+#   2. Generates the Capacitor Android native scaffold
+#   3. Restores your upload keystore from a base64-encoded secret
+#   4. Runs `./gradlew bundleRelease` with signing enabled
+#   5. Attaches `app-release.aab` as a downloadable artifact
+#
+# Repo secrets you MUST configure BEFORE the first run
+# (Settings → Secrets and variables → Actions → New repository secret):
+#
+#   ANDROID_KEYSTORE_BASE64   — full keystore file, base64-encoded.
+#                                Encode locally with:
+#                                base64 -i acechasers-upload.jks | pbcopy
+#                                (on Linux: base64 acechasers-upload.jks)
+#   ANDROID_KEYSTORE_PASSWORD — the `storePassword` from your keystore
+#   ANDROID_KEY_PASSWORD      — the `keyPassword` for the specific alias
+#   ANDROID_KEY_ALIAS         — the alias name (e.g. acechasers-upload)
+#
+# Once configured, click **Run workflow** on the Actions tab and 8–12
+# minutes later the signed AAB is on the run's Artifacts panel — drag
+# straight into Play Console → Production → Create release.
+# ══════════════════════════════════════════════════════════════════
+
+name: Android · Signed Release AAB
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_note:
+        description: "Optional note for this build (shown in the artifact name)"
+        required: false
+        default: ""
+
+  # Automatic build on tag pushes matching `v1.2.3` style — comment
+  # this block out if you'd rather trigger every release by hand.
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-release-aab:
+    name: Build & sign AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── Source + toolchain ─────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      # ── Web bundle ─────────────────────────────────────────────
+      - name: Install frontend deps
+        working-directory: frontend
+        run: yarn install --frozen-lockfile
+
+      - name: Build web bundle (Vite)
+        working-directory: frontend
+        run: yarn build
+
+      # ── Capacitor Android scaffold ─────────────────────────────
+      # `cap add android` is idempotent: it skips files that already
+      # exist (our variables.gradle, app/build.gradle, manifest,
+      # google-services.json) and creates only what's missing
+      # (gradlew, settings.gradle, capacitor.settings.gradle,
+      # MainActivity, res/*, proguard-rules).
+      - name: Install Capacitor CLI + Android platform
+        working-directory: frontend
+        run: yarn add -D @capacitor/cli @capacitor/android
+
+      - name: Scaffold Android project if missing
+        working-directory: frontend
+        run: |
+          if [ ! -f ../android/gradlew ]; then
+            npx cap add android
+          else
+            echo "Android scaffold already present — skipping cap add"
+          fi
+
+      - name: Sync web assets into native project
+        working-directory: frontend
+        run: npx cap sync android
+
+      # ── Signing ────────────────────────────────────────────────
+      # Decode the keystore from the base64 secret into a real .jks
+      # file on the runner disk, then materialise the keystore.properties
+      # gradle expects. Both live under `android/` and are torn down
+      # when the runner terminates.
+      - name: Restore keystore from secret
+        working-directory: android
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is not set."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > acechasers-upload.jks
+          echo "Keystore size: $(stat -c%s acechasers-upload.jks) bytes"
+
+      - name: Write keystore.properties
+        working-directory: android
+        env:
+          STORE_PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PW: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          for var in STORE_PW KEY_PW KEY_ALIAS; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Required secret $var is not set."
+              exit 1
+            fi
+          done
+          cat > keystore.properties <<EOF
+          storeFile=$(pwd)/acechasers-upload.jks
+          storePassword=${STORE_PW}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PW}
+          EOF
+          echo "keystore.properties written ($(wc -l < keystore.properties) lines)."
+
+      # ── Compile ────────────────────────────────────────────────
+      - name: Build signed release AAB
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --stop || true
+          ./gradlew clean bundleRelease --no-daemon --max-workers=2 --stacktrace
+
+      # ── Verify signature ───────────────────────────────────────
+      # A belt-and-braces check so an unsigned AAB can never leave
+      # the pipeline. `jarsigner -verify` prints "jar verified." on
+      # success; anything else and we hard-fail the step.
+      - name: Verify AAB signature
+        working-directory: android
+        run: |
+          AAB=app/build/outputs/bundle/release/app-release.aab
+          if [ ! -f "$AAB" ]; then
+            echo "::error::AAB not produced at $AAB"
+            exit 1
+          fi
+          jarsigner -verify "$AAB" | tee /tmp/jarverify.log
+          grep -q "jar verified" /tmp/jarverify.log || {
+            echo "::error::AAB signature verification failed"; exit 1;
+          }
+          ls -lh "$AAB"
+
+      # ── Shred secrets ──────────────────────────────────────────
+      # Runners are ephemeral but explicit tear-down is cheap and
+      # makes the intent visible to auditors.
+      - name: Shred keystore + properties from runner
+        if: always()
+        working-directory: android
+        run: |
+          shred -u -z acechasers-upload.jks keystore.properties 2>/dev/null || \
+            rm -f acechasers-upload.jks keystore.properties
+
+      # ── Publish ────────────────────────────────────────────────
+      - name: Upload signed AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: acechasers-app-release-${{ github.run_number }}${{ inputs.version_note && format('-{0}', inputs.version_note) || '' }}
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30

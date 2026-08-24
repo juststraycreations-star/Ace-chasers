@@ -1,3 +1,15 @@
+> ## 🤖 GitHub Actions signed AAB — committed Feb 2026
+> Workflow at `/app/.github/workflows/android-release.yml` — click **Run workflow** on the Actions tab (or push a `v*.*.*` tag) and 8–12 min later a signed `app-release.aab` is on the run's Artifacts panel.
+>
+> **One-time setup** — configure 4 GitHub repo secrets (Settings → Secrets and variables → Actions):
+> - `ANDROID_KEYSTORE_BASE64` — run `./scripts/encode-keystore.sh ~/keystores/acechasers-upload.jks` and paste the output
+> - `ANDROID_KEYSTORE_PASSWORD` — `storePassword`
+> - `ANDROID_KEY_PASSWORD` — `keyPassword`
+> - `ANDROID_KEY_ALIAS` — e.g. `acechasers-upload`
+>
+> The workflow decodes → signs → **verifies with `jarsigner`** → shreds the keystore → uploads the AAB. If the signature check fails, the workflow hard-fails so an unsigned AAB can never leave the pipeline.
+
+
 > ## ✅ google-services.json — installed Feb 2026
 > The real 39-char FCM Android API key has been written to
 > `/app/android/app/google-services.json`
