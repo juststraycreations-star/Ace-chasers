@@ -1,0 +1,35 @@
+// ═══════════════════════════════════════════════════════════════════
+// Ace Chasers — Capacitor Android ecosystem variables
+// ═══════════════════════════════════════════════════════════════════
+// Source of truth for SDK targeting and shared plugin versions across
+// every module in the Android project. `app/build.gradle` and any
+// Capacitor plugin modules read from `rootProject.ext.*`, so bumping
+// a single number here rolls through the whole build graph.
+//
+// Feb 2026 — Play Store now REQUIRES targetSdk 36 (Android 16) for
+// new bundle uploads. This file locks compile + target at 36. Leave
+// `minSdkVersion` at 22 unless you actually want to drop legacy
+// device support (currently ~2% of installed base).
+// ═══════════════════════════════════════════════════════════════════
+
+ext {
+    // ── SDK targeting ─────────────────────────────────────────────
+    minSdkVersion = 22
+    compileSdkVersion = 36   // Android 16
+    targetSdkVersion = 36    // Android 16 — Play Store 2025+ mandate
+
+    // ── Toolchain ─────────────────────────────────────────────────
+    androidxActivityVersion = '1.9.2'
+    androidxAppCompatVersion = '1.7.0'
+    androidxCoordinatorLayoutVersion = '1.2.0'
+    androidxCoreVersion = '1.13.1'
+    androidxFragmentVersion = '1.8.4'
+    coreSplashScreenVersion = '1.0.1'
+    androidxWebkitVersion = '1.12.1'
+
+    // ── Instrumentation ───────────────────────────────────────────
+    junitVersion = '4.13.2'
+    androidxJunitVersion = '1.2.1'
+    androidxEspressoCoreVersion = '3.6.1'
+    cordovaAndroidVersion = '10.1.1'
+}

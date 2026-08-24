@@ -13,14 +13,17 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace "net.acechasers.app"
-    compileSdkVersion 36 // Android 16 targeting compliance (Play Store 2025+)
+    // Sourced from `android/variables.gradle` so a single edit at the
+    // project root rolls through every module (Capacitor plugin
+    // modules also read from `rootProject.ext.*`).
+    compileSdkVersion rootProject.ext.compileSdkVersion
 
     defaultConfig {
         applicationId "net.acechasers.app"
-        minSdkVersion 22
-        targetSdkVersion 36 // Android 16 targeting compliance
-        versionCode 2       // Bumped to bypass the grayed-out console lock
-        versionName "1.0.1"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 3       // Bumped from 2 → 3 for the SDK-36 upload track
+        versionName "1.0.2" // Patch bump matching the versionCode step
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             // Files and dirs to omit from the packaged assets dir, modified

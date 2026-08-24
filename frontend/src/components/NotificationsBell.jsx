@@ -162,10 +162,15 @@ export default function NotificationsBell() {
         )}
       </button>
 
-      {/* Inline toast */}
+      {/* Inline toast — mobile-safe: horizontal gutter via `inset-x-3`
+          on small screens, right-anchored past sm. Safe-area top inset
+          keeps it clear of iPhone notches. */}
       {toast && (
         <div
-          className="fixed top-20 right-4 z-[60] bg-white text-gray-800 border border-disc-green/30 rounded-xl shadow-xl px-4 py-3 max-w-xs flex items-start gap-2 animate-in"
+          className="fixed z-[60] bg-white text-gray-800 border border-disc-green/30 rounded-xl shadow-xl px-4 py-3
+                     flex items-start gap-2 animate-in
+                     inset-x-3 top-[max(env(safe-area-inset-top),5rem)]
+                     sm:inset-x-auto sm:right-4 sm:top-20 sm:max-w-xs"
           data-testid="notifications-toast"
         >
           <span aria-hidden="true">🤝</span>
@@ -203,97 +208,135 @@ export default function NotificationsBell() {
         </div>
       )}
 
-      {/* Popover panel */}
+      {/* Popover panel — desktop anchored dropdown / mobile bottom drawer.
+          Layout constraints:
+            • width: `w-[calc(100vw-1.5rem)]` on mobile = 100vw minus 12px
+              gutter each side → cannot bleed past viewport edges. Capped
+              at `max-w-sm` (24rem) so tablet portrait doesn't stretch it.
+            • height: `max-h-[85vh]` on the whole panel; the middle body
+              gets `flex-1 min-h-0 overflow-y-auto` so scroll is CONTAINED
+              inside the panel — header + footer stay pinned.
+            • positioning: `fixed inset-x-3 bottom-3` on mobile pins to
+              the bottom of the viewport (bottom-drawer pattern) with
+              12px gutter; `sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-3`
+              restores the desktop anchored dropdown next to the bell.
+            • safe-area: `pb-[max(env(safe-area-inset-bottom),0.5rem)]`
+              respects iPhone home-indicator + Android nav-gesture bars. */}
       {open && (
-        <div
-          className="absolute right-0 mt-3 w-80 bg-white text-gray-800 rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-50"
-          data-testid="notifications-panel"
-        >
-          <div className="px-4 py-3 bg-disc-green/5 border-b border-gray-100 flex items-center justify-between">
-            <p className="font-bold text-disc-green">Player requests</p>
-            <span className="text-xs text-gray-500" data-testid="notifications-panel-count">
-              {count}
-            </span>
-          </div>
-
-          {browserPermission === 'default' && (
-            <button
-              type="button"
-              onClick={askBrowserPermission}
-              className="w-full text-left text-xs text-disc-green hover:bg-disc-green/5 font-semibold px-4 py-2 border-b border-gray-100"
-              data-testid="notifications-enable-browser-btn"
-            >
-              🔔 Enable browser notifications
-            </button>
-          )}
-
-          {count === 0 ? (
-            <p className="px-4 py-6 text-sm text-gray-500 text-center" data-testid="notifications-empty">
-              No pending player requests.
-            </p>
-          ) : (
-            <ul className="max-h-80 overflow-y-auto divide-y divide-gray-100">
-              {requests.map((req) => {
-                const u = req.from_user;
-                const avatar = resolveImageUrl(u.profilePictureUrl) || DEFAULT_AVATAR;
-                return (
-                  <li
-                    key={u.uid}
-                    className="flex items-center gap-3 px-4 py-3"
-                    data-testid={`notifications-request-${u.uid}`}
-                  >
-                    <Link to={`/players/${u.uid}`} onClick={() => setOpen(false)} className="flex-shrink-0">
-                      <img
-                        src={avatar}
-                        alt={u.name || 'Player'}
-                        className="w-10 h-10 rounded-full object-cover border-2 border-white shadow ring-2 ring-disc-green"
-                      />
-                    </Link>
-                    <div className="flex-1 min-w-0">
-                      <Link
-                        to={`/players/${u.uid}`}
-                        onClick={() => setOpen(false)}
-                        className="font-semibold text-gray-800 hover:text-disc-green text-sm truncate block"
-                      >
-                        {u.name || 'Player'}
-                      </Link>
-                      <p className="text-xs text-gray-500">wants to add you as a player</p>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleAccept(u.uid)}
-                        className="bg-disc-green hover:bg-disc-green/90 text-white text-xs font-bold px-2.5 py-1 rounded-md shadow-sm"
-                        data-testid={`notifications-accept-${u.uid}`}
-                        title="Add Player?"
-                      >
-                        ✓ Add
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleIgnore(u.uid)}
-                        className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold px-2.5 py-1 rounded-md"
-                        data-testid={`notifications-ignore-${u.uid}`}
-                        title="Ignore"
-                      >
-                        ✕ Ignore
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          <Link
-            to="/likes"
+        <>
+          {/* Semi-opaque backdrop — mobile only. Signals "modal open"
+              and provides a big tap target to dismiss without competing
+              with the click-outside listener. */}
+          <button
+            type="button"
+            aria-label="Close notifications"
             onClick={() => setOpen(false)}
-            className="block text-center text-xs text-disc-green font-semibold px-4 py-3 border-t border-gray-100 hover:bg-disc-green/5"
-            data-testid="notifications-view-all"
+            className="fixed inset-0 z-40 bg-slate-900/40 sm:hidden"
+            data-testid="notifications-panel-backdrop"
+          />
+          <div
+            className="fixed inset-x-3 bottom-3 z-50 flex flex-col
+                       max-h-[85vh] w-[calc(100vw-1.5rem)] max-w-sm mx-auto
+                       pb-[max(env(safe-area-inset-bottom),0.5rem)]
+                       bg-white text-gray-800 rounded-xl shadow-2xl
+                       border border-gray-100 overflow-hidden
+                       sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-3 sm:mx-0
+                       sm:w-80 sm:max-w-none sm:max-h-[85vh] sm:pb-0"
+            data-testid="notifications-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Player requests"
           >
-            View all on Likes page →
-          </Link>
-        </div>
+            <div className="px-4 py-3 bg-disc-green/5 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+              <p className="font-bold text-disc-green">Player requests</p>
+              <span className="text-xs text-gray-500" data-testid="notifications-panel-count">
+                {count}
+              </span>
+            </div>
+
+            {browserPermission === 'default' && (
+              <button
+                type="button"
+                onClick={askBrowserPermission}
+                className="w-full text-left text-xs text-disc-green hover:bg-disc-green/5 font-semibold px-4 py-2 border-b border-gray-100 flex-shrink-0"
+                data-testid="notifications-enable-browser-btn"
+              >
+                🔔 Enable browser notifications
+              </button>
+            )}
+
+            {/* Scrollable body — flex-1 min-h-0 is the canonical
+                overflow-safe combo inside a flex-column parent. */}
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+              {count === 0 ? (
+                <p className="px-4 py-6 text-sm text-gray-500 text-center" data-testid="notifications-empty">
+                  No pending player requests.
+                </p>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {requests.map((req) => {
+                    const u = req.from_user;
+                    const avatar = resolveImageUrl(u.profilePictureUrl) || DEFAULT_AVATAR;
+                    return (
+                      <li
+                        key={u.uid}
+                        className="flex items-center gap-3 px-4 py-3"
+                        data-testid={`notifications-request-${u.uid}`}
+                      >
+                        <Link to={`/players/${u.uid}`} onClick={() => setOpen(false)} className="flex-shrink-0">
+                          <img
+                            src={avatar}
+                            alt={u.name || 'Player'}
+                            className="w-10 h-10 rounded-full object-cover border-2 border-white shadow ring-2 ring-disc-green"
+                          />
+                        </Link>
+                        <div className="flex-1 min-w-0">
+                          <Link
+                            to={`/players/${u.uid}`}
+                            onClick={() => setOpen(false)}
+                            className="font-semibold text-gray-800 hover:text-disc-green text-sm truncate block"
+                          >
+                            {u.name || 'Player'}
+                          </Link>
+                          <p className="text-xs text-gray-500">wants to add you as a player</p>
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleAccept(u.uid)}
+                            className="bg-disc-green hover:bg-disc-green/90 text-white text-xs font-bold px-2.5 py-1 rounded-md shadow-sm"
+                            data-testid={`notifications-accept-${u.uid}`}
+                            title="Add Player?"
+                          >
+                            ✓ Add
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleIgnore(u.uid)}
+                            className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold px-2.5 py-1 rounded-md"
+                            data-testid={`notifications-ignore-${u.uid}`}
+                            title="Ignore"
+                          >
+                            ✕ Ignore
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <Link
+              to="/likes"
+              onClick={() => setOpen(false)}
+              className="block text-center text-xs text-disc-green font-semibold px-4 py-3 border-t border-gray-100 hover:bg-disc-green/5 flex-shrink-0"
+              data-testid="notifications-view-all"
+            >
+              View all on Likes page →
+            </Link>
+          </div>
+        </>
       )}
     </div>
   );
