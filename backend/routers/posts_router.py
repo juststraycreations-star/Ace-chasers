@@ -245,6 +245,10 @@ async def _attach_recent_comments(
             authors_by_uid[u["uid"]] = u
     for post in posts:
         bucket = grouped.get(post.id) or []
+        # `can_delete` = comment author OR post author (viewer moderates
+        # their own posts). Kept in lock-step with the server-side
+        # policy in `delete_comment` below.
+        post_author_is_viewer = post.author.uid == viewer_uid
         post.recent_comments = [
             CommentOut(
                 id=c["id"],
@@ -259,6 +263,7 @@ async def _attach_recent_comments(
                     ),
                 ),
                 is_mine=c["author_uid"] == viewer_uid,
+                can_delete=(c["author_uid"] == viewer_uid) or post_author_is_viewer,
             )
             for c in bucket
         ]
@@ -439,6 +444,10 @@ async def _set_reaction(post_id: str, user_uid: str, value: str) -> dict:
 @router.get("/api/posts/{post_id}/comments", response_model=list[CommentOut])
 async def list_comments(post_id: str, current=Depends(get_current_user)):
     db = get_db()
+    # Post lookup once so `can_delete` can honour the post-author path
+    # without re-hitting the DB per comment.
+    post = await db.posts.find_one({"id": post_id}, {"author_uid": 1, "_id": 0})
+    post_author_is_viewer = bool(post and post.get("author_uid") == current["uid"])
     comments = await (
         db.post_comments.find({"post_id": post_id})
         .sort("created_at", 1)
@@ -453,6 +462,7 @@ async def list_comments(post_id: str, current=Depends(get_current_user)):
     out: list[CommentOut] = []
     for c in comments:
         author = authors_by_uid.get(c["author_uid"])
+        is_mine = c["author_uid"] == current["uid"]
         out.append(
             CommentOut(
                 id=c["id"],
@@ -464,7 +474,8 @@ async def list_comments(post_id: str, current=Depends(get_current_user)):
                     name=(author or {}).get("name"),
                     profilePictureUrl=(author or {}).get("profilePictureUrl"),
                 ),
-                is_mine=c["author_uid"] == current["uid"],
+                is_mine=is_mine,
+                can_delete=is_mine or post_author_is_viewer,
             )
         )
     await _attach_comment_reactions(out, current["uid"])
@@ -499,6 +510,8 @@ async def add_comment(
             profilePictureUrl=(author or {}).get("profilePictureUrl"),
         ),
         is_mine=True,
+        # The commenter can always delete their own comment.
+        can_delete=True,
     )
 
 
@@ -506,12 +519,26 @@ async def add_comment(
 async def delete_comment(
     post_id: str, comment_id: str, current=Depends(get_current_user)
 ):
+    """Delete a comment. Two ownership paths satisfy the guard:
+      1. Caller wrote the comment (`author_uid == viewer`).
+      2. Caller owns the post the comment lives on (`post.author_uid ==
+         viewer`) — lets a post author moderate any comment on their post
+         even if the commenter is somebody else.
+    Anything else → 404 (deliberate: same shape as "not found" so we don't
+    leak the existence of comments the caller can't touch)."""
     db = get_db()
-    res = await db.post_comments.delete_one(
-        {"id": comment_id, "post_id": post_id, "author_uid": current["uid"]}
-    )
-    if res.deleted_count == 0:
+    # Load the comment and its parent post together so the policy check
+    # is one code path instead of two `delete_one` attempts.
+    comment = await db.post_comments.find_one({"id": comment_id, "post_id": post_id})
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    post = await db.posts.find_one({"id": post_id}, {"author_uid": 1, "_id": 0})
+    viewer = current["uid"]
+    is_comment_author = comment.get("author_uid") == viewer
+    is_post_author = bool(post and post.get("author_uid") == viewer)
+    if not (is_comment_author or is_post_author):
         raise HTTPException(status_code=404, detail="Comment not found or not yours")
+    await db.post_comments.delete_one({"id": comment_id, "post_id": post_id})
     # Cascade: drop any nice/likes on the deleted comment so counts stay sane.
     await db.post_comment_likes.delete_many({"comment_id": comment_id})
     return {"ok": True}

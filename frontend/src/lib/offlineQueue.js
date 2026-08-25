@@ -15,6 +15,7 @@
 import api from "@/lib/api";
 
 const STORAGE_KEY = "ace_offline_score_queue_v1";
+const MUT_STORAGE_KEY = "ace_offline_mut_queue_v1";
 let flushing = false;
 let listenersBound = false;
 
@@ -48,7 +49,55 @@ function writeQueue(q) {
 }
 
 export function pendingCount() {
-  return readQueue().length;
+  return readQueue().length + readMutQueue().length;
+}
+
+// ─── Generic mutation queue (comment deletes, other one-shot writes) ─
+// Kept as a separate localStorage slot from the score queue so:
+//  • the score queue's tight coalesce-by-(scorecardId,hole) semantics
+//    stay untouched (score writes replay LAST-WINS, mutations replay
+//    once and are then popped);
+//  • a mutation that fails a 4xx doesn't poison the score-drain loop.
+// Each item is a self-describing envelope so `flushQueue` can replay
+// it against any endpoint without knowing the shape up front.
+function readMutQueue() {
+  try {
+    const raw = localStorage.getItem(MUT_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeMutQueue(q) {
+  try {
+    localStorage.setItem(MUT_STORAGE_KEY, JSON.stringify(q));
+  } catch {
+    /* storage full — drop silently, UI still works. */
+  }
+}
+
+/**
+ * Queue a comment delete for later replay when the network returns.
+ * Idempotent: replaying the DELETE on a comment that's already gone
+ * just returns 404, which the drain loop treats as a permanent
+ * failure and pops off the queue.
+ */
+export function enqueueCommentDelete({ postId, commentId }) {
+  const q = readMutQueue();
+  // Dedup — never queue the same delete twice.
+  if (q.some((m) => m.kind === "comment_delete" && m.commentId === commentId)) {
+    return;
+  }
+  q.push({
+    id: uuid(),
+    kind: "comment_delete",
+    postId,
+    commentId,
+    ts: Date.now(),
+  });
+  writeMutQueue(q);
+  flushQueue();
 }
 
 export function enqueueScore({ scorecardId, hole, strokes }) {
@@ -75,6 +124,7 @@ export async function flushQueue() {
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
   flushing = true;
   try {
+    // ── 1) Score queue — coalesced, retry-until-success ────────
     let q = readQueue();
     while (q.length > 0) {
       const next = q[0];
@@ -95,6 +145,34 @@ export async function flushQueue() {
         if (status && status >= 400 && status < 500) {
           q = q.slice(1);
           writeQueue(q);
+          continue;
+        }
+        break;
+      }
+    }
+    // ── 2) Generic mutation queue — one shot, drop on 4xx ──────
+    let mq = readMutQueue();
+    while (mq.length > 0) {
+      const item = mq[0];
+      try {
+        if (item.kind === "comment_delete") {
+          await api.delete(`/posts/${item.postId}/comments/${item.commentId}`);
+        } else {
+          // Unknown kind — pop so it can't wedge the drain forever.
+          mq = mq.slice(1);
+          writeMutQueue(mq);
+          continue;
+        }
+        mq = mq.slice(1);
+        writeMutQueue(mq);
+      } catch (e) {
+        const status = e?.response?.status;
+        // 404 = already gone (success from user's perspective).
+        // 401/403 = auth issue, retry after re-auth pointless here.
+        // 4xx overall = don't retry.
+        if (status && status >= 400 && status < 500) {
+          mq = mq.slice(1);
+          writeMutQueue(mq);
           continue;
         }
         break;

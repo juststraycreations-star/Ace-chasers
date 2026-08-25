@@ -175,6 +175,11 @@ class CommentOut(BaseModel):
     created_at: str
     author: PostAuthor
     is_mine: bool = False
+    # True when the viewer is EITHER the comment author OR the author
+    # of the post the comment lives under. Drives the client-side
+    # visibility of the delete affordance — the server double-checks
+    # on DELETE regardless of what the client sends.
+    can_delete: bool = False
     nice_count: int = 0
     liked_by_me: bool = False
 

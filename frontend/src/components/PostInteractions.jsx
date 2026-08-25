@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { resolveImageUrl } from '../lib/images';
 import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
+import { enqueueCommentDelete } from '../lib/offlineQueue';
+import CommentActionsMenu from './CommentActionsMenu';
+import ConfirmDeleteCommentSheet from './ConfirmDeleteCommentSheet';
 
 /**
  * Per-post Nice button + collapsible comment thread.
@@ -26,6 +30,15 @@ export default function PostInteractions({ post }) {
   // Server-supplied preview of up to 3 latest comments — drives the inline
   // teaser that's visible without expanding the full thread.
   const [preview, setPreview] = useState(post.recent_comments || []);
+  // Which comment (if any) is queued for the delete confirmation sheet.
+  const [pendingDelete, setPendingDelete] = useState(null);
+
+  // Best-effort backfill of `can_delete` for legacy cached responses.
+  // Server-of-truth is set inside posts_router.py; this only matters
+  // during the first render after an app update that ships new logic
+  // against a service-worker-cached feed payload.
+  const viewerOwnsPost = !!post.is_mine;
+  const canDelete = (c) => c.can_delete || c.is_mine || viewerOwnsPost;
 
   const sendReaction = async (value) => {
     const prev = react;
@@ -99,15 +112,101 @@ export default function PostInteractions({ post }) {
     }
   };
 
-  const deleteMyComment = async (commentId) => {
-    try {
-      await api.delete(`/posts/${post.id}/comments/${commentId}`);
-      setComments((prev) => (prev || []).filter((c) => c.id !== commentId));
-      setCount((c) => Math.max(0, c - 1));
-      setPreview((prev) => prev.filter((c) => c.id !== commentId));
-    } catch (err) {
-      console.error('delete comment failed', err);
+  /**
+   * Optimistic delete flow:
+   *   1. Snapshot the comment before removing it so we can restore on failure.
+   *   2. Remove from both the preview and expanded lists + decrement count.
+   *   3. Fire DELETE. If offline OR the network fails transiently, queue the
+   *      mutation via `enqueueCommentDelete` so it replays when connectivity
+   *      returns — the local UI stays consistent either way.
+   *   4. On a 4xx (403/404) — usually meaning the server disagrees about
+   *      ownership — roll back and surface a toast so the user knows why
+   *      the comment came back.
+   */
+  const removeComment = async (comment) => {
+    // Snapshot BEFORE mutation so rollback is trivial.
+    const previewSnapshot = preview;
+    const commentsSnapshot = comments;
+    const countSnapshot = count;
+
+    setPreview((prev) => prev.filter((c) => c.id !== comment.id));
+    setComments((prev) => (prev === null ? prev : prev.filter((c) => c.id !== comment.id)));
+    setCount((c) => Math.max(0, c - 1));
+
+    // Offline first — queue and toast the user so they know it will sync.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      enqueueCommentDelete({ postId: post.id, commentId: comment.id });
+      toast.success('Comment queued for deletion — will sync when you reconnect.');
+      return;
     }
+
+    try {
+      await api.delete(`/posts/${post.id}/comments/${comment.id}`);
+    } catch (err) {
+      const status = err?.response?.status;
+      // 5xx / network → treat as a transient offline blip: queue + inform.
+      if (!status || status >= 500) {
+        enqueueCommentDelete({ postId: post.id, commentId: comment.id });
+        toast.success('Comment queued — will retry automatically.');
+        return;
+      }
+      // 4xx → server-side rejection. Roll back and surface a toast.
+      console.error('delete comment failed', err);
+      setPreview(previewSnapshot);
+      setComments(commentsSnapshot);
+      setCount(countSnapshot);
+      toast.error('Failed to delete comment. Please try again.');
+    }
+  };
+
+  const confirmPendingDelete = async () => {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    setPendingDelete(null);
+    await removeComment(target);
+  };
+
+  /**
+   * Long-press bindings for a comment row. Touch users can hold a
+   * comment for ~450 ms to open its actions menu without hunting for
+   * the tiny ⋯ button. The actual open is done by dispatching a
+   * `commentActions:longPress` CustomEvent that `CommentActionsMenu`
+   * subscribes to — keeps ref plumbing out of the list templates.
+   */
+  const bindLongPress = (comment) => {
+    if (!canDelete(comment)) return {}; // no menu for this user → no gesture either
+    let timer = null;
+    const start = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent('commentActions:longPress', {
+            detail: { commentId: comment.id },
+          })
+        );
+      }, 450);
+    };
+    const cancel = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+    return {
+      onTouchStart: start,
+      onTouchEnd: cancel,
+      onTouchMove: cancel,
+      onTouchCancel: cancel,
+      onContextMenu: (e) => {
+        // Desktop parity — right-click opens the menu.
+        e.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent('commentActions:longPress', {
+            detail: { commentId: comment.id },
+          })
+        );
+      },
+    };
   };
 
   /**
@@ -190,8 +289,9 @@ export default function PostInteractions({ post }) {
           {preview.map((c) => (
             <li
               key={c.id}
-              className="flex items-start gap-2 text-sm"
+              className="flex items-start gap-2 text-sm select-none"
               data-testid={`comment-preview-${c.id}`}
+              {...bindLongPress(c)}
             >
               <Link to={`/players/${c.author.uid}`} className="flex-shrink-0">
                 <img
@@ -212,6 +312,12 @@ export default function PostInteractions({ post }) {
                 </p>
                 <div className="mt-1">{renderCommentNice(c)}</div>
               </div>
+              {canDelete(c) && (
+                <CommentActionsMenu
+                  comment={c}
+                  onDelete={() => setPendingDelete(c)}
+                />
+              )}
             </li>
           ))}
           {count > preview.length && (
@@ -280,8 +386,7 @@ export default function PostInteractions({ post }) {
       </div>
 
       {showComments && (
-        <div className="mt-3" data-testid={`comments-section-${post.id}`}>
-          {comments === null ? (
+        <div className="mt-3" data-testid={`comments-section-${post.id}`}>          {comments === null ? (
             <p className="text-xs text-gray-400 italic">Loading comments…</p>
           ) : (
             <ul className="space-y-2 mb-3">
@@ -293,8 +398,9 @@ export default function PostInteractions({ post }) {
               {comments.map((c) => (
                 <li
                   key={c.id}
-                  className="flex items-start gap-2 text-sm"
+                  className="flex items-start gap-2 text-sm select-none"
                   data-testid={`comment-${c.id}`}
+                  {...bindLongPress(c)}
                 >
                   <Link to={`/players/${c.author.uid}`} className="flex-shrink-0">
                     <img
@@ -315,17 +421,11 @@ export default function PostInteractions({ post }) {
                     </p>
                     <div className="mt-1">{renderCommentNice(c)}</div>
                   </div>
-                  {c.is_mine && (
-                    <button
-                      type="button"
-                      onClick={() => deleteMyComment(c.id)}
-                      className="text-xs text-gray-400 hover:text-red-500"
-                      title="Delete comment"
-                      data-testid={`comment-delete-${c.id}`}
-                      aria-label="Delete comment"
-                    >
-                      ✕
-                    </button>
+                  {canDelete(c) && (
+                    <CommentActionsMenu
+                      comment={c}
+                      onDelete={() => setPendingDelete(c)}
+                    />
                   )}
                 </li>
               ))}
@@ -366,6 +466,15 @@ export default function PostInteractions({ post }) {
           </form>
         </div>
       )}
+      {/* Confirmation sheet — mobile-first bottom drawer that swaps to
+          a centered modal on ≥ sm. Rendered here so it's a sibling of
+          every comment list (preview + expanded thread) and can be
+          driven by either. */}
+      <ConfirmDeleteCommentSheet
+        open={!!pendingDelete}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={confirmPendingDelete}
+      />
     </div>
   );
 }
