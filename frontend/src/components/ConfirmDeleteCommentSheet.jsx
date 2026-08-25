@@ -64,8 +64,8 @@ export default function ConfirmDeleteCommentSheet({ open, onCancel, onConfirm })
           Delete this comment?
         </h2>
         <p className="text-sm text-slate-600 mb-5">
-          Are you sure you want to delete this comment? This action cannot be
-          undone.
+          Delete this comment? You&apos;ll have 5 seconds to undo before it&apos;s
+          permanently removed.
         </p>
         <div className="flex items-center gap-2 justify-end">
           <button

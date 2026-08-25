@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
@@ -7,6 +7,7 @@ import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
 import { enqueueCommentDelete } from '../lib/offlineQueue';
 import CommentActionsMenu from './CommentActionsMenu';
 import ConfirmDeleteCommentSheet from './ConfirmDeleteCommentSheet';
+import SwipeToRevealDelete from './SwipeToRevealDelete';
 
 /**
  * Per-post Nice button + collapsible comment thread.
@@ -113,51 +114,100 @@ export default function PostInteractions({ post }) {
   };
 
   /**
-   * Optimistic delete flow:
-   *   1. Snapshot the comment before removing it so we can restore on failure.
-   *   2. Remove from both the preview and expanded lists + decrement count.
-   *   3. Fire DELETE. If offline OR the network fails transiently, queue the
-   *      mutation via `enqueueCommentDelete` so it replays when connectivity
-   *      returns — the local UI stays consistent either way.
-   *   4. On a 4xx (403/404) — usually meaning the server disagrees about
-   *      ownership — roll back and surface a toast so the user knows why
-   *      the comment came back.
+   * Deferred-delete + Undo pattern (iOS Mail / Gmail style):
+   *   1. Snapshot the comment before removing it so we can restore.
+   *   2. Optimistically remove from preview + full-thread lists.
+   *   3. Show a 5-second toast with an "Undo" action.
+   *   4. Schedule the actual DELETE for `+5000 ms`.
+   *   5. If Undo tapped: clear the timer AND put the comment back.
+   *      If offline: `enqueueCommentDelete` still fires at t+5s so
+   *      the intent survives even without connectivity.
+   *      On unmount: fire the pending delete synchronously so we
+   *      don't lose the user's intent when they navigate away.
    */
-  const removeComment = async (comment) => {
+  const pendingDeletesRef = useRef(new Map()); // commentId → { timer, restore, commit }
+  const UNDO_MS = 5000;
+
+  const doDeleteNow = (postId, commentId) => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      enqueueCommentDelete({ postId, commentId });
+      return;
+    }
+    api
+      .delete(`/posts/${postId}/comments/${commentId}`)
+      .catch((err) => {
+        const status = err?.response?.status;
+        if (!status || status >= 500) {
+          enqueueCommentDelete({ postId, commentId });
+        }
+        // 4xx (already-gone / 403) → nothing to do, comment is out
+        // of the local UI and either doesn't exist on the server or
+        // shouldn't be touched by this viewer.
+      });
+  };
+
+  const removeComment = (comment) => {
     // Snapshot BEFORE mutation so rollback is trivial.
     const previewSnapshot = preview;
     const commentsSnapshot = comments;
     const countSnapshot = count;
 
     setPreview((prev) => prev.filter((c) => c.id !== comment.id));
-    setComments((prev) => (prev === null ? prev : prev.filter((c) => c.id !== comment.id)));
+    setComments((prev) =>
+      prev === null ? prev : prev.filter((c) => c.id !== comment.id)
+    );
     setCount((c) => Math.max(0, c - 1));
 
-    // Offline first — queue and toast the user so they know it will sync.
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      enqueueCommentDelete({ postId: post.id, commentId: comment.id });
-      toast.success('Comment queued for deletion — will sync when you reconnect.');
-      return;
-    }
-
-    try {
-      await api.delete(`/posts/${post.id}/comments/${comment.id}`);
-    } catch (err) {
-      const status = err?.response?.status;
-      // 5xx / network → treat as a transient offline blip: queue + inform.
-      if (!status || status >= 500) {
-        enqueueCommentDelete({ postId: post.id, commentId: comment.id });
-        toast.success('Comment queued — will retry automatically.');
-        return;
-      }
-      // 4xx → server-side rejection. Roll back and surface a toast.
-      console.error('delete comment failed', err);
+    const restore = () => {
       setPreview(previewSnapshot);
       setComments(commentsSnapshot);
       setCount(countSnapshot);
-      toast.error('Failed to delete comment. Please try again.');
-    }
+    };
+    const commit = () => doDeleteNow(post.id, comment.id);
+
+    // Schedule the delete + register in the ref so unmount can flush.
+    const timer = setTimeout(() => {
+      commit();
+      pendingDeletesRef.current.delete(comment.id);
+    }, UNDO_MS);
+    pendingDeletesRef.current.set(comment.id, { timer, restore, commit });
+
+    // Sonner supports an inline action button — the whole undo UX is
+    // one line here.
+    toast('Comment deleted', {
+      description: comment.body.slice(0, 60) + (comment.body.length > 60 ? '…' : ''),
+      duration: UNDO_MS,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          const entry = pendingDeletesRef.current.get(comment.id);
+          if (!entry) return;
+          clearTimeout(entry.timer);
+          pendingDeletesRef.current.delete(comment.id);
+          entry.restore();
+        },
+      },
+    });
   };
+
+  // Unmount / route-change safety: flush any pending deletes so the
+  // user's intent isn't lost when they navigate away before the 5-second
+  // grace expires. Runs commits synchronously; the network POST still
+  // fires-and-forgets in the background.
+  useEffect(() => {
+    const map = pendingDeletesRef.current;
+    return () => {
+      for (const [, entry] of map.entries()) {
+        clearTimeout(entry.timer);
+        try {
+          entry.commit();
+        } catch (_e) {
+          /* commit is fire-and-forget already */
+        }
+      }
+      map.clear();
+    };
+  }, []);
 
   const confirmPendingDelete = async () => {
     if (!pendingDelete) return;
@@ -208,6 +258,14 @@ export default function PostInteractions({ post }) {
       },
     };
   };
+
+  // Swipe-to-reveal is a touch-only affordance. Desktop users still
+  // get the ⋯ menu / right-click; enabling swipe there would just be
+  // dead code paths, and mouse drag would fight text selection.
+  const isTouchDevice =
+    typeof window !== 'undefined' &&
+    ('ontouchstart' in window || (navigator?.maxTouchPoints ?? 0) > 0);
+  const canSwipeDelete = (c) => isTouchDevice && canDelete(c);
 
   /**
    * Toggle a 👍 Nice reaction on a single comment. Optimistically updates
@@ -289,35 +347,42 @@ export default function PostInteractions({ post }) {
           {preview.map((c) => (
             <li
               key={c.id}
-              className="flex items-start gap-2 text-sm select-none"
+              className="text-sm select-none"
               data-testid={`comment-preview-${c.id}`}
               {...bindLongPress(c)}
             >
-              <Link to={`/players/${c.author.uid}`} className="flex-shrink-0">
-                <img
-                  src={resolveImageUrl(c.author.profilePictureUrl) || DEFAULT_AVATAR}
-                  alt={c.author.name || 'Player'}
-                  className="w-7 h-7 rounded-full object-cover"
-                />
-              </Link>
-              <div className="flex-1 bg-gray-100 rounded-2xl px-3 py-1.5">
-                <Link
-                  to={`/players/${c.author.uid}`}
-                  className="font-semibold text-gray-800 hover:text-disc-green text-xs"
-                >
-                  {c.author.name || 'Player'}
-                </Link>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
-                  {c.body}
-                </p>
-                <div className="mt-1">{renderCommentNice(c)}</div>
-              </div>
-              {canDelete(c) && (
-                <CommentActionsMenu
-                  comment={c}
-                  onDelete={() => setPendingDelete(c)}
-                />
-              )}
+              <SwipeToRevealDelete
+                enabled={canSwipeDelete(c)}
+                onDelete={() => removeComment(c)}
+              >
+                <div className="flex items-start gap-2 bg-transparent py-0.5">
+                  <Link to={`/players/${c.author.uid}`} className="flex-shrink-0">
+                    <img
+                      src={resolveImageUrl(c.author.profilePictureUrl) || DEFAULT_AVATAR}
+                      alt={c.author.name || 'Player'}
+                      className="w-7 h-7 rounded-full object-cover"
+                    />
+                  </Link>
+                  <div className="flex-1 bg-gray-100 rounded-2xl px-3 py-1.5">
+                    <Link
+                      to={`/players/${c.author.uid}`}
+                      className="font-semibold text-gray-800 hover:text-disc-green text-xs"
+                    >
+                      {c.author.name || 'Player'}
+                    </Link>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
+                      {c.body}
+                    </p>
+                    <div className="mt-1">{renderCommentNice(c)}</div>
+                  </div>
+                  {canDelete(c) && (
+                    <CommentActionsMenu
+                      comment={c}
+                      onDelete={() => setPendingDelete(c)}
+                    />
+                  )}
+                </div>
+              </SwipeToRevealDelete>
             </li>
           ))}
           {count > preview.length && (
@@ -398,35 +463,42 @@ export default function PostInteractions({ post }) {
               {comments.map((c) => (
                 <li
                   key={c.id}
-                  className="flex items-start gap-2 text-sm select-none"
+                  className="text-sm select-none"
                   data-testid={`comment-${c.id}`}
                   {...bindLongPress(c)}
                 >
-                  <Link to={`/players/${c.author.uid}`} className="flex-shrink-0">
-                    <img
-                      src={resolveImageUrl(c.author.profilePictureUrl) || DEFAULT_AVATAR}
-                      alt={c.author.name || 'Player'}
-                      className="w-7 h-7 rounded-full object-cover"
-                    />
-                  </Link>
-                  <div className="flex-1 bg-gray-100 rounded-2xl px-3 py-1.5">
-                    <Link
-                      to={`/players/${c.author.uid}`}
-                      className="font-semibold text-gray-800 hover:text-disc-green text-xs"
-                    >
-                      {c.author.name || 'Player'}
-                    </Link>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
-                      {c.body}
-                    </p>
-                    <div className="mt-1">{renderCommentNice(c)}</div>
-                  </div>
-                  {canDelete(c) && (
-                    <CommentActionsMenu
-                      comment={c}
-                      onDelete={() => setPendingDelete(c)}
-                    />
-                  )}
+                  <SwipeToRevealDelete
+                    enabled={canSwipeDelete(c)}
+                    onDelete={() => removeComment(c)}
+                  >
+                    <div className="flex items-start gap-2 bg-transparent py-0.5">
+                      <Link to={`/players/${c.author.uid}`} className="flex-shrink-0">
+                        <img
+                          src={resolveImageUrl(c.author.profilePictureUrl) || DEFAULT_AVATAR}
+                          alt={c.author.name || 'Player'}
+                          className="w-7 h-7 rounded-full object-cover"
+                        />
+                      </Link>
+                      <div className="flex-1 bg-gray-100 rounded-2xl px-3 py-1.5">
+                        <Link
+                          to={`/players/${c.author.uid}`}
+                          className="font-semibold text-gray-800 hover:text-disc-green text-xs"
+                        >
+                          {c.author.name || 'Player'}
+                        </Link>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
+                          {c.body}
+                        </p>
+                        <div className="mt-1">{renderCommentNice(c)}</div>
+                      </div>
+                      {canDelete(c) && (
+                        <CommentActionsMenu
+                          comment={c}
+                          onDelete={() => setPendingDelete(c)}
+                        />
+                      )}
+                    </div>
+                  </SwipeToRevealDelete>
                 </li>
               ))}
             </ul>
