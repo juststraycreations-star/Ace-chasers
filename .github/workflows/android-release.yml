@@ -21,11 +21,11 @@ jobs:
 
       - name: Restore Keystore from Secret
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > app/acechasers-upload.jks
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/acechasers-upload.jks
 
       - name: Create keystore.properties
         run: |
-          cat <<EOF > keystore.properties
+          cat <<EOF > android/keystore.properties
           storeFile=acechasers-upload.jks
           storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
@@ -42,16 +42,17 @@ jobs:
 
       - name: Build and Sign Release Bundle
         run: |
+          cd android
           chmod +x gradlew
           ./gradlew bundleRelease
 
       - name: Securely Shred Keystore
         if: always()
         run: |
-          shred -u app/acechasers-upload.jks || rm -f app/acechasers-upload.jks
+          shred -u android/app/acechasers-upload.jks || rm -f android/app/acechasers-upload.jks
 
       - name: Upload Signed AAB Artifact
         uses: actions/upload-artifact@v4
         with:
           name: signed-app-release
-          path: app/build/outputs/bundle/release/app-release.aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
