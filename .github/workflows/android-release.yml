@@ -1,0 +1,97 @@
+name: Android Release (TWA / Bubblewrap)
+
+# Builds and signs the Trusted Web Activity Android bundle from
+# `build/twa/`. Zero Capacitor / TypeScript involvement — this repo's
+# mobile shell is a pure Bubblewrap-generated Gradle project, so we
+# only need JDK 21 + Android SDK 36 + the standard Gradle toolchain.
+
+on:
+  push:
+    tags:
+      - 'v*'          # e.g. v1.0.3
+  workflow_dispatch:  # manual trigger from the Actions tab
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build signed AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: build/twa
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Set up Android SDK 36
+        uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
+
+      - name: Grant execute permission to gradlew
+        run: chmod +x gradlew
+
+      - name: Show build info
+        run: |
+          echo "Java: $(java -version 2>&1)"
+          echo "Android SDK root: $ANDROID_SDK_ROOT"
+          ./gradlew --version
+
+      # -----------------------------------------------------------------
+      # Signing: the upload keystore lives in GitHub Secrets (base64) so
+      # the private key never touches the repo. Skips signing if the
+      # secret isn't set, so PR builds still succeed with an unsigned AAB.
+      # -----------------------------------------------------------------
+      - name: Decode upload keystore
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > upload-keystore.jks
+          echo "Keystore decoded ($(wc -c < upload-keystore.jks) bytes)"
+
+      - name: Build release AAB
+        run: ./gradlew clean bundleRelease --no-daemon
+
+      - name: Sign AAB
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          UNSIGNED=app/build/outputs/bundle/release/app-release.aab
+          SIGNED=app/build/outputs/bundle/release/acechasers-net-signed.aab
+          jarsigner -verbose \
+            -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore upload-keystore.jks \
+            -storepass "$KS_PASS" -keypass "$KS_PASS" \
+            -signedjar "$SIGNED" "$UNSIGNED" "${KEY_ALIAS:-upload}"
+          jarsigner -verify -verbose:summary "$SIGNED"
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: acechasers-net-aab
+          path: |
+            build/twa/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Cleanup secrets on disk
+        if: always()
+        run: rm -f upload-keystore.jks
