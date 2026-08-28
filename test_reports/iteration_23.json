@@ -1,0 +1,23 @@
+{
+  "summary": "Iteration 23 backend testing: /api/discovery exclusion set fix verified. Created 9 targeted tests covering the 4 new exclusion sources (self, friends via matches, outgoing friend_requests, incoming friend_requests), legacy swipe regression, and filter regressions. Also re-ran iterations 19-22 (45 tests) — all green.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration23.py",
+    "/app/test_reports/pytest/iteration_23.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "discovery_router._viewer_coords does a per-request users.find_one — fine for now but should be cached with the outer users doc if a hot path.",
+    "exclude set builds three sequential async cursors; could use asyncio.gather for parallelism if latency matters (each is small/indexed, so probably negligible today).",
+    "The `.limit(1000)` caps on friend_requests / matches / swipes are silent — a power user with >1000 outgoing requests would leak excluded uids back into discovery. Consider paginating or using an aggregation $unionWith."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration23.py"],
+  "success_rate": {"backend": "100% (9/9 new + 45/45 regression)", "frontend": "skipped per request"},
+  "test_credentials": "Firebase Identity Toolkit signUp with random TEST_i23_* emails; deleted after run.",
+  "seed_data_creation": "Direct MongoDB inserts into `matches` (A-B), `friend_requests` (A->C outgoing, D->A incoming), and `swipes` (A->E pass for legacy regression). All cleaned up in fixture teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_iteration23.py uses direct Mongo injection (via /app/backend/db.get_db) to seed matches + friend_requests without walking the whole friend-request UI flow. Sorted user_a/user_b to match the match_key() normalization used in social_router. Module-scoped teardown removes injected docs by uid.",
+  "rca of the issue": "Original /api/discovery only excluded db.swipes.from_uid==me. Once discovery flow was augmented with friend requests + matches, users who friended or requested each other still reappeared in the discovery deck, so the '24 players to discover' counter never dropped. Fix (already applied by main agent in discovery_router.py L78-93) unions three sources: legacy swipes, friend_requests (from_uid==me OR to_uid==me), and matches (user_a==me OR user_b==me). Self is also explicitly added. Verified end-to-end with 5 real Firebase users."
+}

@@ -1,0 +1,42 @@
+{
+  "GET /api/leagues": {
+    "p50_ms": 114.9,
+    "p95_ms": 134.1,
+    "avg_ms": 116.3
+  },
+  "GET /api/leagues/browse": {
+    "p50_ms": 140.7,
+    "p95_ms": 140.9,
+    "avg_ms": 133.4
+  },
+  "GET /api/leagues/{id}": {
+    "p50_ms": 117.2,
+    "p95_ms": 181.0,
+    "avg_ms": 129.3
+  },
+  "GET /api/leagues/{id}/seasons": {
+    "p50_ms": 125.3,
+    "p95_ms": 154.0,
+    "avg_ms": 126.2
+  },
+  "GET /api/leagues/{id}/rounds": {
+    "p50_ms": 118.9,
+    "p95_ms": 131.5,
+    "avg_ms": 118.1
+  },
+  "GET /api/rounds/{id}": {
+    "p50_ms": 118.9,
+    "p95_ms": 131.6,
+    "avg_ms": 118.0
+  },
+  "GET /api/leagues/{id}/standings": {
+    "p50_ms": 115.0,
+    "p95_ms": 127.0,
+    "avg_ms": 116.6
+  },
+  "GET /api/leagues/{id}/ledger": {
+    "p50_ms": 129.4,
+    "p95_ms": 137.6,
+    "avg_ms": 131.4
+  }
+}

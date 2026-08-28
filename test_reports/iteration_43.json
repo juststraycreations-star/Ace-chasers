@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only iteration 43 verification of new ClubhouseFeedComposer + submitPost adapter in ClubhouseTab. Live-app verification against preview URL using a fresh Firebase director account (TEST_i51_3964d5c6cc@example.com). All composer landmarks + all data-testids present, submit is disabled while empty, text-only post works end-to-end, image + video attachments each round-trip through /api/files/upload → /api/leagues/{id}/feed with correct {body,image_path,video_path} payloads, multi-attach (2 img + 1 vid) correctly renders 3 thumbnails and the adapter forwards ONLY the FIRST image + FIRST video (backend contract preserved). Moderation buttons still present, default landing still Clubhouse, ?tab=rounds still lands on Rounds. Oversize guard LOGIC works (Error 'image too large' / 'video too large' thrown, upload never attempted, queued files preserved), BUT the visible sonner toast never rendered because <Toaster /> is not mounted anywhere in the app tree — this is a pre-existing app-wide bug that also affects previous iterations' 'success' toasts; the composer implementation itself is correct.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "App shell (App.jsx / root)",
+        "issue": "<Toaster /> from sonner is imported/defined in /app/frontend/src/components/ui/sonner.jsx but never mounted anywhere in App.jsx or main.jsx. Runtime check: document.querySelector('[data-sonner-toaster]') returns null on /leagues/{id}. Consequently every toast.error(...) / toast.success(...) across the entire app is a no-op visually. The oversize-image + oversize-video guards in ClubhouseTab.submitPost correctly throw ('image too large' / 'video too large' visible in console.error) and correctly preserve the queued files in the composer, but the user never sees the 'Image too large (max 8MB)' / 'Video too large (max 25MB)' toast.",
+        "selector": "[data-sonner-toaster]",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Mount <Toaster /> (from '@/components/ui/sonner' or 'sonner') once at the root of App.jsx (typically just inside <Router>) so toast.success/toast.error render globally. Without this, the oversize-guard UX from the composer — and every toast fired by ClubhouseTab (delete post, mute user, story upload, etc.) — is invisible."
+  ],
+  "critical_code_review_comments": [
+    "ClubhouseFeedComposer.jsx line 33 uses String.prototype.substr which is deprecated. Prefer substring(2, 11) or crypto.randomUUID(). Not blocking.",
+    "ClubhouseFeedComposer.jsx URL.createObjectURL previews are only revoked on removeAttachment. If the composer unmounts (or after successful submit that resets attachedFiles via setAttachedFiles([])), the blob URLs for the attached files leak because revokeObjectURL is not called in that path. Add a URL.revokeObjectURL loop after successful onPostSubmit and in a useEffect cleanup for the attachedFiles list.",
+    "ClubhouseTab.submitPost silently drops any 2nd+ image / 2nd+ video that the user queued. Code comment says this is intentional (backend accepts single image_path + video_path), but there is no user-facing hint (e.g., 'Only 1 image + 1 video will be attached'). Consider a subtle inline warning in the composer or a toast on submit when media.length > 2 to avoid user surprise.",
+    "ClubhouseTab.uploadOne throws on network failure but the composer's catch swallows the error into console.error only. Combined with the missing <Toaster />, users get zero feedback on a failed feed submit. Fixing the Toaster mount will address this.",
+    "App.jsx — <Toaster /> is missing at the app root (see ui_bugs above). This is the highest-impact finding."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "n/a (frontend-only pass)",
+    "frontend": "8/9 request-list items fully verified; oversize-guard is 1/2 (logic ✅, toast text ❌ due to missing Toaster mount — pre-existing bug, not caused by this iteration)"
+  },
+  "test_credentials": "TEST_i51_3964d5c6cc@example.com / demo1234 (director; created via Firebase Identity signUp + /api/auth/sync). League id d297cf8b-7ea3-47ca-83e5-394f8881d1a1.",
+  "seed_data_creation": "One-off seed via /tmp/seed_iter50_simple.py (unchanged copy of /app/tests/seed_iter50.py stripped to signup + create-league). Created 1 empty Singles league so the Clubhouse tab could be exercised without confounding round state.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Composer wiring is solid — all 6 data-testids resolve, adapter correctly maps {text, media[]} → {body, image_path, video_path} with first-of-kind semantics. When re-verifying, use REAL binary fixtures (PIL for JPGs, ffmpeg color-lavfi for MP4s) because Cloudinary rejects random-byte .mp4 blobs with 500 and that noise looks like a composer bug. Also: React's file input dedupes identical files by name+contents, so if you clear then re-add the same physical file via set_input_files, the second onChange does NOT fire — use two DIFFERENT files across sequential steps. Captured FEED POST bodies proving spec: text-only={body:'E2E test note',image_path:null,video_path:null}; image-only={body:'img-e2e',image_path:'acechasers/uploads/.../uuid.jpg',video_path:null}; video-only={body:'vid-e2e',image_path:null,video_path:'acechasers/uploads/.../uuid.mp4'}; multi 2img+1vid={body:'multi-e2e',image_path:<pic_b>,video_path:<tiny>} — pic_c dropped as expected. The <Toaster /> mount is the ONE thing main-agent must add; after that a single retest of the oversize-guard toast text is enough.",
+  "rca of the issue": "Missing global <Toaster /> mount. Root cause: the sonner Toaster wrapper is defined in /app/frontend/src/components/ui/sonner.jsx (default shadcn export pattern) but was never imported+rendered in App.jsx / main.jsx. `grep -rn '<Toaster' /app/frontend/src` returns zero matches. Reproduction: navigate to any /leagues/{id}, open devtools, run `!!document.querySelector('[data-sonner-toaster]')` → false. Mitigation: in /app/frontend/src/App.jsx, `import { Toaster } from '@/components/ui/sonner'` and render `<Toaster richColors position='top-right' />` once, adjacent to <Navigation /> inside <Router>. This restores visible feedback for the composer's oversize guards and for every existing toast.error/toast.success call across the app (delete post, mute user, story upload, announcement post, LF post, resolve, etc.)."
+}

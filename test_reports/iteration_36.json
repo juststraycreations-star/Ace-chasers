@@ -1,0 +1,22 @@
+{
+  "summary": "Verified user's bug report: 'preview not available, cannot sign in.' Result: preview + auth work end-to-end. Preview URL returns 200, signup created a fresh Firebase user (qa-20260115-1786390302@example.com / demo1234), /api/auth/sync returned 200 with a valid user profile, session persisted, /login redirected an authenticated user to /feed, and /leagues loaded (200 on /api/leagues + /api/leagues/browse). No console errors, no page errors, no 4xx/5xx on any API. Conclusion: sign-in is NOT broken server-side. The user is almost certainly hitting a stale browser cache / old service-worker — exactly the situation the yellow 'Sign-in trouble' banner on /signup warns about. Recommend the user open the site in an incognito/private window OR clear site data for the preview host, then reload.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/test_reports/iteration_36.json"],
+  "action_items": [
+    "No code fix required. Reply to the user with the cache-clear guidance already surfaced by the yellow 'Sign-in trouble' banner on the Signup page (open in a private/incognito window, or clear site data for league-manager-hub-3.preview.emergentagent.com and reload).",
+    "Optional polish: consider also showing the same yellow 'Sign-in trouble' banner on the Login page (currently only on Signup) so users who go straight to /login see it too."
+  ],
+  "critical_code_review_comments": [
+    "Signup.jsx already has a helpful 'Sign-in trouble' cache-hint banner; Login.jsx does not — mirror it there for parity.",
+    "No other issues observed during this run; recent BracketView / canvas-confetti / RoundRecapPoster additions did not surface any console or network errors during auth flow."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Created ephemeral Firebase test user via signup form. Email: qa-20260115-1786390302@example.com, Password: demo1234. Firebase uid: jXOqSQe2i7eb15Sncz4G3edG25t1.",
+  "seed_data_creation": "One new Firebase user + backend user document created via /signup + /api/auth/sync. No manual seeding.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Auth (Firebase mode) is fully working on the preview URL. If user re-reports 'cannot sign in', first ask which browser/device and whether they've tried an incognito window — a service-worker / cached bundle mismatch has been the recurring root cause. The yellow banner in Signup.jsx exists specifically for this. Verified endpoints during signup+login: GET /api/config (200), POST /api/auth/sync (200), GET /api/inbox (200), PUT /api/users/me (200), GET /api/feed (200), GET /api/leagues (200), GET /api/leagues/browse (200), GET /api/news (200), GET /api/feed/top-niced-this-week (200).",
+  "rca of the issue": "User-reported 'preview not available / cannot sign in' could NOT be reproduced. Backend + frontend + Firebase auth all functional. Preview URL responds 200. Root cause is client-side: stale cached JS bundle or old service worker on the user's browser pointing at an outdated build. Mitigation: hard-refresh (Cmd/Ctrl+Shift+R), open in incognito, or DevTools → Application → Clear storage → Clear site data, then reload. This matches the guidance already visible in the yellow 'Sign-in trouble' banner on the /signup page (Signup.jsx)."
+}

@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 30 — Verified P0 fixes for 'cannot create/join round in leagues'. Backend: new POST /api/rounds/{id}/join is member-gated (403 for outsiders), idempotent (already_joined=true on repeat, no duplicate card/scorecard), returns solo Card labeled \"{First}'s Card\" + Scorecard with 18 zeros + computed handicap. Director-only POST /api/leagues/{id}/rounds validated (200 for director, 403 for member, 403 for outsider). League audit surfaces all green: create league seeds Season + director LeagueMember, /join creates player LeagueMember, /browse lists league, /standings 200, /ledger POST+GET 200 with correct category enum ('Entry Fee'), clubhouse announcements 200, /score PATCH 200, individual finalize rejects certified=false, /ctp + /payout 200. Frontend: on /leagues/:id as director the [data-testid=new-round-btn] renders top-right, opens [data-testid=new-round-modal] with name/date/holes/rating inputs (testids are 'new-round-{name,date,holes,rating}-input' — prefixed, not the bare names in the review spec), confirm creates round and navigates to /rounds/{id}, round persists on Rounds tab. On /rounds/{id} the [data-testid=join-round-btn] shows the exact label 'Join this round · create my card' and disappears after click (card materializes). report-bug-btn regression still green on /leagues, absent on /feed. All 3 additional lazy routes (/discovery /messages /profile) render authenticated content.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "LeagueDetail — first visit", "issues": ["Two blocking modals stack in sequence: 'Add a profile photo' then 'Welcome to the Clubhouse · Fair Play' — both must be dismissed before any tab action. Not a bug (each has its own dismiss CTA) but E2E tests need to handle both."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration30.py",
+    "/app/test_reports/pytest/iteration_30.xml"
+  ],
+  "action_items": [
+    "NAMING NIT (optional): the review spec asks for [data-testid=name-input], date-input, holes-input, rating-input inside the new-round-modal, but the JSX uses the prefixed forms new-round-name-input / new-round-date-input / new-round-holes-input / new-round-rating-input. Everything works — but if downstream automation is written against the bare names, either alias them or update the review contract."
+  ],
+  "critical_code_review_comments": [
+    "leagues_router.py POST /rounds/{id}/join is correctly gated via _require_member — outsiders get 403 as expected. Idempotency path handles both (a) member already has scorecard+card_id (returns already_joined=true) and (b) legacy scorecard with no card_id (re-links to a new card). WS broadcast 'player_joined' fires on non-idempotent create. Solo card label uses m['name'].split(' ')[0] — safe on single-word names since split returns [name].",
+    "LeagueDetail.jsx createRound() correctly falls back on seasons[0].id, shows a yellow inline warning if seasons.length===0, disables the confirm button while creatingRound=true, and navigates to /rounds/{id} on success — matches spec.",
+    "RoundScorecard.jsx join-round-btn is correctly gated on (a) user is a league member AND (b) has no scorecard on this round — verified the label 'Join this round · create my card' matches spec exactly.",
+    "Test data cleanup: 3 TEST_i30ui_* firebase users + 3 leagues + 1 round + 1 card + 1 scorecard were created in prod DB during this run. Prior iterations do not clean up either — consistent with baseline. Consider a TEST_ prefix sweep job."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration30.py (new)"
+  ],
+  "success_rate": {"backend": "100% (16/16 pytest)", "frontend": "100% (14/14 UI assertions)"},
+  "test_credentials": "Firebase Identity Toolkit signUp with TEST_i30_*/TEST_i30ui_*@example.com / demo1234 (auto-generated per test). ~6 new users created.",
+  "seed_data_creation": "3 test leagues + 1 round + 1 card + 1 scorecard created in production Mongo via authenticated API calls. Not cleaned up (matches prior iter pattern).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter 30 focus: create-round modal + self-serve join-round endpoint. Actual JSX testids for the modal input fields are new-round-name-input / new-round-date-input / new-round-holes-input / new-round-rating-input (prefixed). Two dismissable onboarding modals fire on first league visit ('Skip for now' for profile photo, 'I Agree' for Clubhouse Fair Play) — dismiss both before interacting with the Rounds tab. The join endpoint is idempotent — feel free to spam-call POST /api/rounds/{id}/join in tests. Ledger POST requires kind (credit/debit) + category (must be one of: 'Ace Pool','CTP Cash','Club Payout','Entry Fee','Weekly Payout','Club Fund','Other') + amount. League format must be one of: 'Singles','Random-Draw Doubles','BYOP','Team'.",
+  "rca of the issue": "N/A — bugfix verified. Original P0 root causes were (1) missing New Round button on LeagueDetail Rounds tab (UI gap only — backend POST /leagues/{id}/rounds already existed) and (2) backend enforced director-only on POST /rounds/{id}/cards, so members had no self-serve path to join an existing round. Both fixes verified working end-to-end."
+}

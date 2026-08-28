@@ -29,7 +29,11 @@ export default function AuthProvider({ children }) {
 
     // Pull server feature flags up-front so signup screens know whether to
     // show the invite field.
-    api.get('/config').then((r) => setConfig(r.data)).catch(() => {});
+    api.get('/config')
+      .then((r) => setConfig(r.data))
+      .catch((err) => {
+        console.warn('Failed to load /api/config:', err?.message);
+      });
 
     async function rehydrate(userObj, onFail) {
       try {

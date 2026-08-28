@@ -1,17 +1,94 @@
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { useAuthStore } from '../store/authStore';
+import { useMatchStore } from '../store/matchStore';
 import { firebaseConfigured, getFirebaseAuth } from '../lib/firebase';
 import { clearDevSession } from '../lib/devAuth';
+import DiscIcon from './DiscIcon';
+import NotificationsBell from './NotificationsBell';
+import SessionRequestsModal from './SessionRequestsModal';
+import LeaguesFeatureAnnouncement from './LeaguesFeatureAnnouncement';
+import api from '../lib/api';
+
+const INBOX_POLL_MS = 30_000;
+
+// Route → lazy loader mapping. When a user hovers or focuses a nav link,
+// we call the loader to warm-download the chunk so the click feels instant.
+// Vite dedupes concurrent dynamic imports so calling this repeatedly is
+// safe.
+const ROUTE_PREFETCHERS = {
+  '/feed': () => import('../pages/Feed'),
+  '/bagcheck': () => import('../pages/BagCheck'),
+  '/courses': () => import('../pages/Courses'),
+  '/leagues': () => import('../pages/leagues/LeagueDashboard'),
+  '/discovery': () => import('../pages/Discovery'),
+  '/daily-plastic': () => import('../pages/DailyPlastic'),
+  '/messages': () => import('../pages/Messages'),
+  '/profile': () => import('../pages/Profile'),
+  '/throws': () => import('../pages/ThrowTracker'),
+};
+const prefetched = new Set();
+const prefetchRoute = (to) => {
+  if (prefetched.has(to)) return;
+  const loader = ROUTE_PREFETCHERS[to];
+  if (!loader) return;
+  prefetched.add(to);
+  // Fire-and-forget — errors are non-fatal.
+  loader().catch(() => prefetched.delete(to));
+};
+
+const NAV_ITEMS = [
+  { to: '/feed', label: 'Feed', testid: 'nav-feed' },
+  { to: '/bagcheck', label: 'Bag Check', testid: 'nav-bagcheck' },
+  { to: '/courses', label: 'Courses', testid: 'nav-courses' },
+  { to: '/leagues', label: 'Leagues', testid: 'nav-leagues' },
+  { to: '/throws', label: 'Throw Tracker', testid: 'nav-throws' },
+  { to: '/discovery', label: 'Discovery', testid: 'nav-discovery' },
+  { to: '/daily-plastic', label: '📰 Daily Plastic', testid: 'nav-daily-plastic' },
+  { to: '/messages', label: 'Messages', testid: 'nav-messages' },
+  { to: '/profile', label: 'Profile', testid: 'nav-profile' },
+];
 
 export default function Navigation() {
   const location = useLocation();
   const navigate = useNavigate();
   const reset = useAuthStore((s) => s.reset);
+  const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
+  const patchProfile = useAuthStore((s) => s.patchProfile);
+  const fetchInbox = useMatchStore((s) => s.fetchInbox);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    fetchInbox();
+    const id = setInterval(fetchInbox, INBOX_POLL_MS);
+    return () => clearInterval(id);
+  }, [user, fetchInbox]);
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  // First-ever click on the Leagues nav link (from anywhere) dismisses the
+  // announcement pulse so the amber dot never comes back for this user.
+  const dismissLeaguesPulseIfNew = () => {
+    if (!profile || profile.hasViewedLeaguesFeature) return;
+    patchProfile({ hasViewedLeaguesFeature: true });
+    api.post('/users/me/dismiss-leagues-feature').catch(() => {});
+  };
 
   const isActive = (path) => location.pathname === path;
   const linkClasses = (path) =>
     `font-semibold transition ${isActive(path) ? 'text-disc-gold' : 'hover:text-disc-gold'}`;
+  const mobileLinkClasses = (path) =>
+    `block py-3 px-4 rounded-lg font-semibold transition ${
+      isActive(path)
+        ? 'bg-disc-gold/20 text-disc-gold'
+        : 'text-white hover:bg-white/10 hover:text-disc-gold'
+    }`;
 
   const handleLogout = async () => {
     if (firebaseConfigured) {
@@ -24,32 +101,50 @@ export default function Navigation() {
       clearDevSession();
     }
     reset();
+    setMobileOpen(false);
     navigate('/login');
   };
 
   return (
     <nav className="bg-disc-green text-white shadow-lg sticky top-0 z-50">
-      <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-        <Link to="/feed" className="text-2xl font-bold" data-testid="nav-logo">
-          ⛳ Ace Chasers
+      <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center gap-3">
+        <Link
+          to="/feed"
+          className="text-xl sm:text-2xl font-bold flex items-center gap-2 min-w-0"
+          data-testid="nav-logo"
+        >
+          <DiscIcon className="h-6 w-6 sm:h-7 sm:w-7 flex-shrink-0" />
+          <span className="truncate">Ace Chasers</span>
         </Link>
 
-        <div className="flex gap-6 items-center">
-          <Link to="/feed" className={linkClasses('/feed')} data-testid="nav-feed">
-            Feed
-          </Link>
-          <Link to="/discovery" className={linkClasses('/discovery')} data-testid="nav-discovery">
-            Discovery
-          </Link>
-          <Link to="/likes" className={linkClasses('/likes')} data-testid="nav-likes">
-            Likes
-          </Link>
-          <Link to="/messages" className={linkClasses('/messages')} data-testid="nav-messages">
-            Messages
-          </Link>
-          <Link to="/profile" className={linkClasses('/profile')} data-testid="nav-profile">
-            Profile
-          </Link>
+        {/* Desktop nav (lg and up) */}
+        <div className="hidden lg:flex gap-6 items-center">
+          {NAV_ITEMS.map((item) => {
+            const linkEl = (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={linkClasses(item.to)}
+                data-testid={item.testid}
+                onMouseEnter={() => prefetchRoute(item.to)}
+                onFocus={() => prefetchRoute(item.to)}
+                onTouchStart={() => prefetchRoute(item.to)}
+                onClick={item.to === '/leagues' ? dismissLeaguesPulseIfNew : undefined}
+              >
+                {item.label}
+              </Link>
+            );
+            if (item.to === '/leagues') {
+              return (
+                <span key={item.to} className="inline-flex items-center gap-1.5">
+                  {linkEl}
+                  <LeaguesFeatureAnnouncement />
+                </span>
+              );
+            }
+            return linkEl;
+          })}
+          <NotificationsBell />
           <button
             onClick={handleLogout}
             className="bg-disc-purple hover:bg-disc-purple/80 px-4 py-2 rounded-lg font-semibold transition"
@@ -58,7 +153,92 @@ export default function Navigation() {
             Logout
           </button>
         </div>
+
+        {/* Mobile right cluster (below lg) */}
+        <div className="flex lg:hidden items-center gap-2">
+          <LeaguesFeatureAnnouncement mobile />
+          <NotificationsBell />
+          <button
+            type="button"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label={mobileOpen ? 'Close Chasers Hub' : 'Open Chasers Hub'}
+            aria-expanded={mobileOpen}
+            className="group inline-flex items-center gap-2 px-3 py-2 rounded-full bg-slate-800/80 backdrop-blur border border-slate-700 hover:border-amber-500 hover:bg-slate-800 transition-all duration-200 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-amber-500/60"
+            data-testid="nav-mobile-toggle"
+          >
+            {mobileOpen ? (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+            <span className="text-xs uppercase tracking-wider font-semibold text-slate-100 group-hover:text-amber-300 transition-colors">
+              Chasers Hub
+            </span>
+          </button>
+        </div>
       </div>
+
+      {/* Mobile dropdown panel */}
+      {mobileOpen && (
+        <div
+          className="lg:hidden bg-disc-green border-t border-white/10 shadow-lg"
+          data-testid="nav-mobile-panel"
+        >
+          <div className="max-w-6xl mx-auto px-4 py-3 space-y-1">
+            <Link
+              to="/throws"
+              data-testid="nav-throws-cta-mobile"
+              onClick={() => setMobileOpen(false)}
+              onTouchStart={() => prefetchRoute('/throws')}
+              className="block w-full text-center py-4 px-4 mb-2 rounded-xl font-bold text-base bg-white text-emerald-600 border-2 border-emerald-600 active:bg-emerald-50 transition-colors shadow-sm"
+            >
+              Throw Tracker
+            </Link>
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={mobileLinkClasses(item.to)}
+                data-testid={`${item.testid}-mobile`}
+                onClick={() => {
+                  setMobileOpen(false);
+                  if (item.to === '/leagues') dismissLeaguesPulseIfNew();
+                }}
+                onTouchStart={() => prefetchRoute(item.to)}
+              >
+                {item.label}
+              </Link>
+            ))}
+            <button
+              onClick={handleLogout}
+              className="w-full text-left bg-disc-purple hover:bg-disc-purple/80 py-3 px-4 rounded-lg font-semibold transition mt-2"
+              data-testid="nav-logout-mobile"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      )}
+
+      <SessionRequestsModal />
     </nav>
   );
 }

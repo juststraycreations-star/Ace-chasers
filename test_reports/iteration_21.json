@@ -1,0 +1,57 @@
+{
+  "summary": "Iteration 21 — `submitted_by_name` on CourseOut feature partially working. GET /api/courses and GET /api/courses/{id} correctly resolve and surface the submitter's display name from the MongoDB users collection (verified via dedicated tests with a freshly signed-up user whose name was set via PUT /api/users/me). Admin-seeded courses correctly return null. Anon users (no profile name) correctly return null (not empty string). However, POST /api/courses INLINE response returns `submitted_by_name: null` for users who have a profile name — this is a real bug: the endpoint reads `current.get('name')` from Firebase token claims instead of looking up the user in MongoDB. Combined with Courses.jsx's optimistic prepend (which uses the POST response unmodified), the newly added card on the UI will NOT show the 'Suggested by …' line until the page is refreshed, breaking the feature spec. Iteration 19 + 20 regression suites still 100% green (22/22). Frontend e2e via Firebase signup could not be completed (signup form stays on /signup silently — same flakiness observed in this preview), but the UI behavior is deterministically derivable from the backend bug.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/courses",
+        "issue": "Inline response returns `submitted_by_name: null` even when the submitting user has a profile name set in MongoDB. Root cause: courses_router.py:338 reads `current.get('name')` which is the Firebase ID-token claim (display_name), NOT the user's MongoDB profile name. Real users typically set their name via PUT /api/users/me during onboarding — that path never updates the Firebase token's display_name claim, so `current['name']` stays None. Result: the immediate POST response always has submitted_by_name=null for email/password signups, breaking the spec line ‘POST returns the new course with submitted_by_name populated from the current user's name (without requiring a follow-up GET)’.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Add Course → newly inserted card",
+        "issue": "Courses.jsx:219-221 (`onAdded={(c) => setCourses(prev => [c, ...prev])}`) prepends the POST response unchanged. Because the backend POST response has submitted_by_name=null (see backend bug above), the newly added card will not render the ‘🥏 Suggested by …’ line until the page is reloaded. After reload it renders correctly because GET /api/courses resolves the name via users.find. Fix at the backend; no frontend change needed once POST returns the right value.",
+        "affected_selectors": ["[data-testid^='course-submitter-']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration21.py",
+    "/app/test_reports/pytest/iteration_21.xml",
+    "/app/backend/tests/test_iteration20.py",
+    "/app/backend/tests/test_iteration19.py"
+  ],
+  "action_items": [
+    "Fix POST /api/courses to resolve the submitter name from MongoDB (mirror the pattern already used in add_course_review at courses_router.py:259: `me = await db.users.find_one({'uid': current['uid']}) or {}; submitter_name = (me.get('name') or '').strip()`). Just replacing the `submitter_name = (current.get('name') or '').strip()` line at courses_router.py:338 with a DB lookup will make the inline response correct and the frontend ‘Suggested by …’ line will appear immediately after submit.",
+    "Once fix is in, re-run /app/backend/tests/test_iteration21.py — only one test (TestSubmittedByNameOnCreate::test_post_returns_submitted_by_name) needs to flip to green; the other 7 already pass.",
+    "Optionally update the docstring/comment at courses_router.py:336-338 since it claims the value comes from ‘current user's name’ — it should explicitly say ‘from users.find_one in MongoDB’."
+  ],
+  "critical_code_review_comments": [
+    "courses_router.py:338 — `current.get('name')` comes from firebase_auth.get_current_user (line 121: `claims.get('name') or claims.get('display_name')`). For email/password signups created via Firebase Identity Toolkit without displayName, this claim is always None. Profile names set later via PUT /api/users/me only go to MongoDB. So the inline POST response will never carry the right name for the common signup path. The two GET helpers (`_attach_submitter_names`) already do the right thing by querying `db.users.find({uid: ...})`. The simplest patch is to reuse that helper or copy its 2-line pattern.",
+    "courses_router.py:50-70 — `_attach_submitter_names` is well-batched (single users.find), correctly skips falsy/empty names so we don't surface empty strings, and correctly leaves admin-seeded courses (no submitted_by) untouched. Good.",
+    "models.py:174-183 — CourseOut now has `submitted_by_name: Optional[str] = None`. Schema is clean.",
+    "Courses.jsx:146-153 / CourseDetail.jsx:171 — testids `course-submitter-<id>` and `course-submitter` are correctly added and gated on truthy `c.submitted_by_name`, so the regression for ‘admin-seeded courses must NOT show the line’ is implicitly satisfied.",
+    "Courses.jsx:219-221 — optimistic prepend means any backend regression on POST inline data will leak directly into UX. Either (a) fix the backend (preferred, also matches the feature spec ‘without requiring a follow-up GET’) or (b) have onAdded merge in the known current user's name client-side as a defensive fallback."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration21.py",
+    "/app/test_reports/iteration_21.json",
+    "/app/test_reports/pytest/iteration_21.xml"
+  ],
+  "success_rate": {
+    "backend": "29/30 = 96.7% (7/8 new iter21 + 10/10 iter20 + 12/12 iter19). Failing: POST /api/courses inline submitted_by_name only.",
+    "frontend": "Not verified end-to-end — Firebase signup on /signup stayed on the same URL silently in this preview run; same flake mentioned in iter20 context. UI rendering of the field IS correctly gated on the data (verified by code review)."
+  },
+  "test_credentials": "Same as iter20: REACT_APP_FIREBASE_API_KEY for Identity Toolkit signUp, ADMIN_API_KEY for admin cleanup. TEST_ prefix on emails + course names for traceability.",
+  "seed_data_creation": "Test creates 2 ephemeral Firebase users (TEST_i21_named_*, TEST_i21_anon_*) and 3 courses (TEST_Course_i21_*, TEST_Course_anon_*, TEST_AdminCourse_i21_*). Course cleanup runs via /api/admin/courses/{id} at module teardown. Firebase users deleted via accounts:delete.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests for iter21 are at /app/backend/tests/test_iteration21.py. After main agent fixes courses_router.py:338 to read the name from MongoDB instead of Firebase claims, all 8 tests will pass and the frontend ‘Suggested by …’ line on the just-added card will work without refresh. Frontend e2e signup in this preview is flaky — when it works, the flow is: navigate to /signup → fill email+password+confirm → submit → onboarding gate appears (data-testid='onboarding-gate') → fill name → click Next → click Skip on photo → navigate to /courses → click ‘Add a course’ (data-testid='add-course-btn') → wait ≥500ms for modal reset → fill name → submit. The current visible signup form has TWO password fields (password + confirm).",
+  "rca of the issue": "Backend RCA: POST /api/courses pulls `current['name']` from firebase_auth.get_current_user, which derives `name` only from the Firebase ID-token claims (`name` or `display_name`). Email/password signups created via the Identity Toolkit REST endpoint do not set a displayName by default; users set their name later via PUT /api/users/me, which writes only to MongoDB. So the inline POST response code path never sees the real name. Reproduction: 1) curl Identity Toolkit signUp → get id_token, 2) PUT /api/users/me {'name':'Alice'} → 200, 3) POST /api/courses {'name':'Foo','aceClub':false} → response has submitted_by_name=null, 4) GET /api/courses → same course now has submitted_by_name='Alice'. Mitigation: in add_course, replace `submitter_name = (current.get('name') or '').strip()` with `me = await db.users.find_one({'uid': current['uid']}) or {}; submitter_name = (me.get('name') or '').strip()` (same pattern already used at lines 259-260 for add_course_review). Frontend has no fix needed — Courses.jsx already gates the line on `c.submitted_by_name` truthiness."
+}

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
@@ -10,11 +10,31 @@ import { useAuthStore } from '../store/authStore';
 import { firebaseConfigured, getFirebaseAuth, googleProvider } from '../lib/firebase';
 import { clearDevSession, makeDevSession } from '../lib/devAuth';
 import { api } from '../lib/api';
+import CacheNotice from '../components/CacheNotice';
+import DiscIcon from '../components/DiscIcon';
+
+function friendlyError(err) {
+  const code = err?.code || '';
+  const raw = err?.message || err?.response?.data?.detail || '';
+  const text = `${code} ${raw}`.toLowerCase();
+  if (text.includes('network') || text.includes('failed to fetch')) {
+    return 'Network error. Your browser may be caching an older version of the site — try an incognito window, or clear site data and reload. If that still fails, give it a minute and try again.';
+  }
+  return raw || 'Sign up failed';
+}
 
 export default function SignUp() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const setUser = useAuthStore((s) => s.setUser);
   const setProfile = useAuthStore((s) => s.setProfile);
+  // ?ref=CODE — remember the founder-sponsor code across the async signup
+  // flow so we can stamp the new account after `/auth/sync` succeeds.
+  const [refCode, setRefCode] = useState('');
+  useEffect(() => {
+    const q = (searchParams.get('ref') || '').trim().toUpperCase();
+    if (q) setRefCode(q);
+  }, [searchParams]);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -43,6 +63,14 @@ export default function SignUp() {
       await api.post('/auth/sync', {
         invite_code: formData.inviteCode ? formData.inviteCode.trim() : undefined,
       });
+      // Redeem the founder-sponsor code (if any) — best-effort, non-fatal.
+      // Stamps the new account with `priority_tier: true` for bag-tag calcs
+      // and awards the "Founder Sponsor" badge on the profile.
+      if (refCode) {
+        try {
+          await api.post('/users/me/redeem-referral', { ref_code: refCode });
+        } catch { /* invalid or self-refer — silent */ }
+      }
       const payload = {
         name: formData.name || userObj.name || null,
         age: formData.age ? Number(formData.age) : null,
@@ -101,18 +129,20 @@ export default function SignUp() {
         if (ok) {
           // Fire the verification email (best-effort; soft banner handles
           // the rest of the lifecycle).
-          try {
-            await sendEmailVerification(cred.user);
-          } catch (err) {
-            console.warn('sendEmailVerification failed:', err?.message);
-          }
+          // Email verification disabled — users sign in immediately.
+          // To re-enable: uncomment the block below.
+          // try {
+          //   await sendEmailVerification(cred.user);
+          // } catch (err) {
+          //   console.warn('sendEmailVerification failed:', err?.message);
+          // }
         }
       } else {
         const { user } = makeDevSession({ email: formData.email, name: formData.name });
         await commitSession(user);
       }
     } catch (err) {
-      setError(err?.message || 'Sign up failed');
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -135,7 +165,7 @@ export default function SignUp() {
         photoURL: cred.user.photoURL,
       });
     } catch (err) {
-      setError(err?.message || 'Google sign-in failed');
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -145,11 +175,24 @@ export default function SignUp() {
     <div className="min-h-screen bg-gradient-to-br from-disc-green via-disc-purple to-disc-gold flex items-center justify-center px-4 py-8">
       <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-disc-green mb-2">⛳ Ace Chasers</h1>
+          <h1 className="text-4xl font-bold text-disc-green mb-2 flex items-center justify-center gap-2">
+            <DiscIcon className="h-9 w-9" />
+            <span>Ace Chasers</span>
+          </h1>
           <p className="text-gray-600">Create your account</p>
         </div>
 
         <form onSubmit={handleEmailSignup} className="space-y-4" data-testid="signup-form">
+          <CacheNotice />
+          {refCode && (
+            <div
+              className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-4 py-3 text-sm"
+              data-testid="signup-referral-badge"
+            >
+              🏆 You were invited by a founder — <span className="font-mono font-semibold">{refCode}</span>.
+              You&apos;ll receive the <strong>Founder Sponsor</strong> badge and priority bag-tag placement.
+            </div>
+          )}
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" data-testid="signup-error">
               {error}

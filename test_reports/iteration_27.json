@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 27 — verified P0 create-league fix, sweep-finalize (backend+UI wiring), DM Fair Play terms endpoint, Clubhouse agreement modal lift-up to LeagueDetail, and Clubhouse-router refactor. Backend pytest: 15/15 PASS covering (a) fresh Firebase signup can POST /api/leagues successfully with no 500 — P0 fix confirmed; (b) POST /api/rounds/{id}/finalize requires certified=true (400 otherwise), certifies all open scorecards, marks round=completed, non-director => 403, empty round => 200 with empty list, persisted certified_by_name contains 'DIRECTOR SWEEP'; (c) GET /api/users/me exposes dmTermsAgreedAt=null initially, POST /api/users/me/dm-terms/agree sets an ISO timestamp and is idempotent, requires auth (401 without); (d) Clubhouse router refactor endpoints (announcements CRUD, lost-found CRUD+resolve, stories POST/GET, feed POST/GET) all functional; (e) regression: individual scorecard finalize still enforces certification (400/200/409 for PATCH after finalize); (f) core auth-required endpoints /api/discovery, /api/feed, /api/courses, /api/users/me, /api/messages/threads all return 200 for a fresh signup. Frontend E2E on public URL: created a fresh Firebase signup, walked wizard (Identity->Format->Season->Payouts), clicked 'Create League' -> navigated to /leagues/{new_id} (P0 blank-loop RESOLVED); on first render of LeagueDetail (rounds tab), data-testid=clubhouse-agreement-modal appeared, 'I Agree' click dismissed it, and after full reload the modal did NOT re-appear (persisted). Ledger tab shows ledger-tab-disclaimer, wizard step 4 shows wizard-ledger-disclaimer. data-testid attributes for sweep-finalize-btn/sweep-finalize-modal/sweep-cert-checkbox/sweep-complete-round-checkbox/sweep-confirm-btn/sweep-row-{id} and dm-terms-gate/dm-terms-agree-btn/message-compose-send are all present in the source (code-reviewed).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration27.py",
+    "/app/test_reports/pytest/iteration_27.xml"
+  ],
+  "action_items": [
+    "None — all requested checks pass. Live click-through E2E of the sweep-finalize modal (needs director + round-with-active-cards setup) and the DM-terms gate inside MessageComposeModal were not clicked through in the browser this iter but the backend endpoints they call are fully unit-tested (15/15 green) and the required data-testid attributes are in place."
+  ],
+  "critical_code_review_comments": [
+    "leagues_router.py L104 _upsert_league_user now coerces email:None -> '' on both the existing-user backfill branch and the initial insert branch. Correct fix for the P0. The fallback_name derivation also handles email=None safely (uses 'player' when both name and email are None).",
+    "POST /api/rounds/{id}/finalize (L815) correctly returns 400 with 'Certification required...' when certified=false, guards director-only via _require_member + role check, only touches unfinalized scorecards ({finalized:{$ne:True}}), stamps 'DIRECTOR SWEEP' in certified_by_name and writes a ProofLog audit row with edited_by_name containing 'DIRECTOR SWEEP-CERTIFIED'. WebSocket broadcast on completion also fires. Good.",
+    "leagues_clubhouse_router.py Phase-1 refactor reuses the same api_router instance imported from leagues_router — attaches to same URL surface, no double-mount, no duplicated auth shim. Circular-import risk resolved via bottom-of-file import in leagues_router.py L1681. Clean.",
+    "auth_router.py L112 POST /api/users/me/dm-terms/agree is idempotent (only writes if dm_terms_agreed_at is falsy) and returns full ProfileOut so the frontend can mirror the new timestamp without a follow-up fetch. Correct.",
+    "LeagueDetail.jsx lifts ClubhouseAgreementModal above the tab switcher so it covers rounds/standings/ledger/clubhouse tabs uniformly. Verified in browser — modal appears on the default 'rounds' tab. Good.",
+    "MessageComposeModal.jsx wires dm-terms-gate + dm-terms-agree-btn to POST /users/me/dm-terms/agree with message-compose-send disabled when gate is showing. Code review confirms the disabled state on send button. Live click-through not executed this iter but backend endpoint is proven.",
+    "Minor (not a bug, note for later): _upsert_league_user still uses `fb_user.get('name')` for fallback_name derivation. In dev-mode signup with only email/password the Firebase decoded token often has no `name` claim, so the fallback lands on the local-part of the email — that's the correct behavior."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration27.py (new — 15 tests: P0 create-league fix, sweep-finalize 4 tests, DM terms 3 tests, clubhouse refactor 4 tests, individual scorecard regression, core endpoints regression)"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15 iteration 27 tests pass; prior iter 26 baseline 10/10 preserved)",
+    "frontend": "100% for the tested slice — P0 create-league end-to-end (signup -> wizard -> /leagues/{id}), clubhouse-agreement-modal lifted-to-LeagueDetail flow (appears on rounds tab, dismisses, persists across reload), wizard-ledger-disclaimer + ledger-tab-disclaimer both present."
+  },
+  "test_credentials": "Firebase Identity Toolkit signUp with random TEST_i27_*@example.com / demo1234 credentials. UI test user: testi27ui_1784259320@example.com / demo1234.",
+  "seed_data_creation": "Created several TEST_i27_* users + leagues + rounds via Identity Toolkit signUp + /api/leagues + /api/leagues/{id}/rounds during pytest and 1 TEST_i27_UI_* league end-to-end via the wizard in the browser. Firebase test users are not cleaned up (same pattern as iter 19-26).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter 27 delivers the P0 create-league fix (email None coercion in _upsert_league_user), sweep-finalize round endpoint, DM Fair Play terms endpoint, Clubhouse-agreement-modal lifted to LeagueDetail (covers all private tabs), and phase-1 clubhouse router refactor. Baselines from iter 26 hold. Ledger and other domains remain in the monolithic leagues_router.py (1681 lines) — refactor is phased, do NOT flag remaining domains as bugs. NOTE: the wizard has an 'Add a profile photo' overlay that pops on first /leagues/new visit for a new user; a Playwright test walking the wizard must dismiss it with `button:has-text(\"Skip for now\")` before the first Continue click.",
+  "rca of the issue": "N/A — no new bugs found. The P0 bug documented in the request (email:None on pre-existing user docs -> 500 on /api/leagues* -> stuck on wizard) has been correctly patched at leagues_router.py L133-136 (backfill on existing) and L143 (empty string on initial insert). Both code paths verified via new signup pytest fixtures and via a live wizard walk-through in Chromium."
+}

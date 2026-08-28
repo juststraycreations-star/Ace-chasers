@@ -1,0 +1,19 @@
+{
+  "bundle_p50_ms": 118.9,
+  "individual_sum_p50_ms": 584.1,
+  "speedup": 4.91,
+  "bundle_samples_ms": [
+    114.7,
+    128.0,
+    109.9,
+    124.2,
+    118.9
+  ],
+  "individual_samples_ms": [
+    548.3,
+    584.1,
+    588.8,
+    703.6,
+    537.5
+  ]
+}

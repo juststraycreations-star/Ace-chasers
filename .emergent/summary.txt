@@ -1,0 +1,131 @@
+<analysis>original_problem_statement: 
+Build and polish Ace Chasers, a React/FastAPI/MongoDB disc-golf social platform. Recent requests focused on creating a First Run founding member badge system, refactoring the League Dashboard UI, extracting monolithic backend routers, building a UDisc-style green-themed Scorecard Grid, adding a Print/PDF feature, and fixing production Cloudflare 520 sign-in errors and WebSocket reconnect loops.
+**LATEST CRITICAL REQUEST**: The user is highly frustrated due to high credit consumption (down to 14 credits). The completed scorecard view STILL does not perfectly match the requested PDF/Grid layout. The score tab needs to be completely removed for completed rounds so it looks identical to the printed version.
+
+**User's preferred language**: English
+INSTRUCT next agent to respond in English only.
+
+**what currently exists?** 
+A full-stack React/FastAPI/MongoDB application. Features include Firebase Auth, League Operations, real-time WebSockets for active round scoring, a UDisc-style green scorecard grid, a Compliance board for directors, beta invites via Google Groups, and an Android PWA/TWA.
+
+**Last working item**:
+    - Last item agent was working: Fixing the  UI so that completed rounds show *only* the green  (exactly matching the PDF), removing the active scoring tabs. The user reported that the current UI still does not match the PDF/image they provided.
+    - Status: IN PROGRESS (User is highly frustrated)
+    - Agent Testing Done: N
+    - Which testing method agent to use? screenshot tool (CRITICAL: Do NOT use the testing subagent to save user credits. Rely on self-testing/screenshots).
+    - User Testing Done: N
+
+**All Pending/In progress Issue list**:
+  - Issue 1: Completed Scorecard UI mismatch (P0 - HIGH FRUSTRATION)
+     - Attempted fixes: Agent previously added logic to force  and hide certain elements on completed rounds, but the UI is still rendering unwanted elements (like the score tab) that differ from the PDF.
+     - Next debug checklist: 
+        1. Open .
+        2. Identify exactly what is rendering around the  when  is true.
+        3. Remove or hide any remaining tabs, toggles, or padding that deviates from the pure  layout.
+     - Why fix this issue and what will be achieved with the fix? Fixes the user's core complaint, matches the UI to the requested design, and restores trust after high credit consumption.
+     - Status: IN PROGRESS
+     - Is recurring issue? Y
+     - Should Test frontend/backend/both after fix? Frontend (Screenshot only)
+     - Blocked on other issue: None
+
+**In progress Task List**:
+  None. Focus entirely on the P0 UI issue above.
+
+**Upcoming and Future Tasks**:
+  - Founder Sponsor Referral Flow (P1): Give the 40 founders a shareable invite link that stamps referred users with a Founder Sponsor badge and priority bag-tag placement.
+  - Rounds Extraction Phase 4 (P2): Continue extracting the remaining round operations from the  monolith.
+
+**Completed work in this session**:
+- Replaced Beta Admin invite logic to point to an open Google Group ().
+- Bumped Android TWA  to 2.7.2 to fix Android 15 warnings, rebuilt  AAB, and generated a new upload keystore.
+- Created First Run Founder badges limited to the first 40 real users (, ).
+- Refactored  layout (chunking, card boundaries) & added  bundle endpoint.
+- Extracted , , and  from the main monolith.
+- Built Compliance Dashboard with DM nudges ().
+- Added Player Self-Certify ().
+- Built green-themed UDisc-style  and added Print to PDF functionality.
+- Fixed production Cloudflare 520 errors by adding global exception handlers and service worker hardening.
+- Hardened  with  and null-safety.
+- Fixed WebSocket reconnect loops by utilizing the Firebase token and correcting origin resolution in .
+
+**Earlier issues found/mentioned but not fixed**:
+  None
+
+**Known issue recurrence from previous fork**:
+  - Issue recurrence in previous fork: None applicable, though WebSockets required multiple patches to stabilize cross-origin behavior in production.
+  - Recurrence count: 0
+  - Status: RESOLVED
+
+**Code Architecture**:
+
+
+**Key Technical Concepts**:
+React/Vite, React Router, Zustand, Tailwind CSS, Shadcn UI, FastAPI, Motor (Async MongoDB), Firebase Auth, WebSockets.
+
+**key DB schema**:
+  - : 
+  - : 
+  - : 
+
+**changes in tech stack**:
+  - None
+
+**All files of reference**:
+  - : Needs exact UI alignment for completed rounds.
+  - : The target grid component.
+  - : Updated to handle Firebase tokens and same-origin URLs.
+
+**Areas that need refactoring**:
+  - : Reduced to ~800 lines but can be extracted further.
+
+**key api endpoints**:
+  - : Bundled dashboard load.
+  - : Player self-certification.
+
+**Critical Info for New Agent**:
+🚨 **HIGH ALERT REGARDING CREDITS** 🚨: The user is extremely frustrated. They spent nearly 0 on the last few iterations and are down to 14 credits, yet the scorecard UI is still not perfectly matching their request. 
+1. **DO NOT USE SUBAGENTS** (especially the testing agent) unless explicitly necessary.
+2. Implement a minimal, direct fix to  so that if , the page shows **ABSOLUTELY NOTHING** except the back navigation, print button, and the  component. Remove any vestigial score tabs or spacing that makes the web view differ from the printed PDF.
+3. Test using screenshots locally to preserve the user's credits.
+4. Apologize briefly, get straight to the code, and confirm it visually.
+
+**documents and test reports created in this job**:
+  -  (Updated)
+  -  through 
+
+**Last 10 User Messages and any pending HUMAN messages**:
+1. (Latest) User complained heavily about credit usage. Stated they are down to 14 credits, out of money, and the completed scorecard STILL does not look like the PDF. Wants the score tab completely removed.
+2. User reported the discovery page initial loading bug couldn't be reproduced, but asked to fortify the codebase (try/catch, error boundary). (Done)
+3. User reported the scorecard on production was stuck reconnecting and suggested CORS env var updates. (Fixed via ws.js client-side origin resolution).
+4. User reported the finalized scorecard doesn't look like the PDF and score tab is still showing/reconnecting. (Partially fixed, requires UI layout cleanup).
+5. User confirmed production sign-in worked and they saved the Android signing files.
+6. User reported Cloudflare 520 bad gateway errors on production sign-in. (Fixed)
+7. User requested UDisc-style green scorecard layout, First Run badge logic, League UI refactors. (Done)
+
+**Project Health Check:**
+  - Broken:  layout for completed rounds.
+  - Mocked: None
+
+**3rd Party Integrations**:
+  - Firebase Auth (Requires User keys)
+  - Cloudinary (Requires User keys)
+  - Gmail SMTP (Requires User keys)
+  - No Emergent LLM key currently in use.
+
+**Testing status**:
+  - Testing agent used after significant changes: YES (Heavily used in previous session, **DO NOT USE NOW**).
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: None new.
+  - Known regressions: None, but UI discrepancy remains.
+
+**Credentials to test flow**:
+  - See .
+
+**What agent forgot to execute**:
+  - The agent failed to completely remove the surrounding UI chrome/tabs from  for completed rounds, leaving the visual output mismatched with the printed PDF view.
+
+**Debugging checklist for current issue**
+    Issue: Completed round scorecard UI contains unwanted tabs/elements and does not match the printed PDF.
+    
+    Frontend files to check: 
+    -  (Check the render logic and ternary operators governing what renders when  is true. Strip out anything that isn't the  or header).</analysis>

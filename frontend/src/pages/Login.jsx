@@ -8,6 +8,26 @@ import { useAuthStore } from '../store/authStore';
 import { firebaseConfigured, getFirebaseAuth, googleProvider } from '../lib/firebase';
 import { clearDevSession, makeDevSession } from '../lib/devAuth';
 import { api } from '../lib/api';
+import CacheNoticeModal from '../components/CacheNoticeModal';
+import CacheNotice from '../components/CacheNotice';
+import DiscIcon from '../components/DiscIcon';
+
+const CACHE_DISMISSED_KEY = 'ace_cache_notice_dismissed_v1';
+
+/**
+ * Surface a friendlier hint when Firebase or our backend throws a generic
+ * "network error" — these almost always mean stale cache or an interrupted
+ * sign-in popup. Without this hint users assume the site itself is broken.
+ */
+function friendlyError(err) {
+  const code = err?.code || '';
+  const raw = err?.message || err?.response?.data?.detail || '';
+  const text = `${code} ${raw}`.toLowerCase();
+  if (text.includes('network') || text.includes('failed to fetch')) {
+    return 'Network error. Your browser may be caching an older version of the site — try an incognito window, or clear site data and reload. If that still fails, give it a minute and try again.';
+  }
+  return raw || 'Login failed';
+}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -17,6 +37,21 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [cacheModalOpen, setCacheModalOpen] = useState(false);
+
+  /**
+   * Show the cache-notice modal whenever a sign-in attempt fails, unless
+   * the user has already dismissed it (localStorage flag). The first
+   * failure surfaces the hint; once dismissed it never nags again.
+   */
+  const maybeOpenCacheModal = () => {
+    try {
+      if (localStorage.getItem(CACHE_DISMISSED_KEY)) return;
+    } catch {
+      /* ignore — private mode etc. */
+    }
+    setCacheModalOpen(true);
+  };
 
   /**
    * Run /api/auth/sync and commit the session only on success. The local
@@ -73,7 +108,9 @@ export default function Login() {
         await commitSession(user);
       }
     } catch (err) {
-      setError(err?.message || 'Login failed');
+      const msg = friendlyError(err);
+      setError(msg);
+      maybeOpenCacheModal();
     } finally {
       setLoading(false);
     }
@@ -96,21 +133,44 @@ export default function Login() {
         photoURL: cred.user.photoURL,
       });
     } catch (err) {
-      setError(err?.message || 'Google sign-in failed');
+      const msg = friendlyError(err);
+      setError(msg);
+      maybeOpenCacheModal();
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-disc-green via-disc-purple to-disc-gold flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-disc-green via-disc-purple to-disc-gold flex items-center justify-center px-4 py-8">
       <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-disc-green mb-2">⛳ Ace Chasers</h1>
+        <div className="text-center mb-6">
+          <h1 className="text-4xl font-bold text-disc-green mb-2 flex items-center justify-center gap-2">
+            <DiscIcon className="h-9 w-9" />
+            <span>Ace Chasers</span>
+          </h1>
           <p className="text-gray-600">Connect with local players</p>
         </div>
 
+        {/* Closed-beta banner — drives new tester signups */}
+        <Link
+          to="/beta"
+          data-testid="login-beta-banner"
+          className="mb-5 flex items-center justify-between gap-3 rounded-lg border border-[#F5C542]/60 bg-[#F5C542]/10 px-4 py-3 hover:bg-[#F5C542]/20 transition-colors"
+        >
+          <div>
+            <div className="font-mono-data text-[10px] uppercase tracking-wider text-[#8a6d10]">
+              Now in closed beta · Android
+            </div>
+            <div className="text-sm font-bold text-gray-900 mt-0.5">
+              Join the beta →
+            </div>
+          </div>
+          <div className="text-xs text-[#8a6d10] font-mono-data uppercase tracking-wider whitespace-nowrap">Sign up</div>
+        </Link>
+
         <form onSubmit={handleEmailLogin} className="space-y-4" data-testid="login-form">
+          <CacheNotice />
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" data-testid="login-error">
               {error}
@@ -182,6 +242,11 @@ export default function Login() {
           </p>
         </div>
       </div>
+
+      <CacheNoticeModal
+        open={cacheModalOpen}
+        onClose={() => setCacheModalOpen(false)}
+      />
     </div>
   );
 }

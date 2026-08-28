@@ -11,13 +11,17 @@ import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
+from pymongo import ReturnDocument
+
 from db import get_db
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"}
+ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB
+MAX_VIDEO_BYTES = 25 * 1024 * 1024  # 25MB cap for short videos
 
 
 # Validated MIME -> safe extension. The client-supplied filename extension is
@@ -29,6 +33,9 @@ MIME_TO_EXT = {
     "image/png": "png",
     "image/webp": "webp",
     "image/gif": "gif",
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "video/quicktime": "mov",
 }
 
 
@@ -48,6 +55,45 @@ def sniff_image_mime(data: bytes) -> Optional[str]:
     return None
 
 
+def sniff_video_mime(data: bytes) -> Optional[str]:
+    """Detect mp4/webm/mov by inspecting container magic bytes.
+
+    For ISO-BMFF (mp4/mov) we enforce a brand whitelist: the 4 bytes at
+    offset 8 must be one of the known "safe" major brands. This rejects
+    fragmented or container formats that share the `ftyp` header but are
+    not standard mp4/mov (e.g. .3gp, .heic, .heif, .avif, .crx, .f4v).
+    """
+    if len(data) < 16:
+        return None
+    # mp4/mov - ISO base media file format: bytes 4..8 == 'ftyp'
+    if data[4:8] == b"ftyp":
+        brand = data[8:12]
+        # QuickTime
+        if brand in (b"qt  ",):
+            return "video/quicktime"
+        # Standard MP4 brands.
+        SAFE_MP4_BRANDS = {
+            b"isom",  # ISO Base Media file format
+            b"iso2",
+            b"iso4",
+            b"iso5",
+            b"iso6",
+            b"mp41",
+            b"mp42",
+            b"avc1",
+            b"M4V ",  # iTunes M4V
+            b"dash",
+            b"mmp4",
+        }
+        if brand in SAFE_MP4_BRANDS:
+            return "video/mp4"
+        return None  # unknown brand -> reject
+    # webm/matroska - EBML header 1A 45 DF A3
+    if data[0:4] == b"\x1a\x45\xdf\xa3":
+        return "video/webm"
+    return None
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -64,7 +110,10 @@ async def get_friend_uids(uid: str) -> list[str]:
     `friended_by` array."""
     db = get_db()
     out: list[str] = []
-    async for m in db.matches.find({"friended_by": uid}):
+    async for m in db.matches.find(
+        {"friended_by": uid},
+        {"user_a": 1, "user_b": 1, "friended_by": 1, "_id": 0},
+    ).limit(500):
         friended = m.get("friended_by") or []
         other = m["user_b"] if m["user_a"] == uid else m["user_a"]
         if other in friended:
@@ -90,6 +139,8 @@ async def create_post(
     body: str,
     visibility: str,
     image_path: Optional[str] = None,
+    video_path: Optional[str] = None,
+    kind: str = "post",
 ) -> dict:
     db = get_db()
     doc = {
@@ -97,7 +148,9 @@ async def create_post(
         "author_uid": author_uid,
         "body": body.strip(),
         "image_path": image_path,
+        "video_path": video_path,
         "visibility": visibility,
+        "kind": kind,
         "created_at": _now_iso(),
     }
     await db.posts.insert_one(doc)
@@ -109,9 +162,12 @@ async def list_feed(
     viewer_uid: str,
     limit: int = 20,
     before: Optional[str] = None,
+    kind: Optional[str] = None,
 ) -> list[dict]:
     """Return posts visible to the viewer, newest first, paginated by an
-    ISO `created_at` cursor (`before` excluded)."""
+    ISO `created_at` cursor (`before` excluded). Pass `kind="disc_review"`
+    to filter the Bag Check feed; pass `kind="post"` (or None) for the
+    regular social feed."""
     db = get_db()
     friends = await get_friend_uids(viewer_uid)
 
@@ -122,6 +178,11 @@ async def list_feed(
             {"visibility": "friends_only", "author_uid": {"$in": friends}},
         ]
     }
+    if kind == "disc_review":
+        query["kind"] = "disc_review"
+    else:
+        # Legacy rows have no `kind` field; treat them as regular posts.
+        query["kind"] = {"$ne": "disc_review"}
     if before:
         query["created_at"] = {"$lt": before}
 
@@ -136,6 +197,51 @@ async def delete_post(post_id: str, author_uid: str) -> bool:
     db = get_db()
     res = await db.posts.delete_one({"id": post_id, "author_uid": author_uid})
     return res.deleted_count == 1
+
+
+async def update_post_body(
+    post_id: str, author_uid: str, body: str
+) -> Optional[dict]:
+    """Update the body text of a post the caller owns. Returns the updated
+    post document, or None if the post doesn't exist / isn't owned by
+    `author_uid`. Media (image/video) is intentionally not editable — users
+    delete + repost if they want to change media."""
+    db = get_db()
+    now = datetime.now(timezone.utc).isoformat()
+    res = await db.posts.find_one_and_update(
+        {"id": post_id, "author_uid": author_uid},
+        {"$set": {"body": body, "edited_at": now}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if res is None:
+        return None
+    res.pop("_id", None)
+    return res
+
+
+async def list_user_posts(
+    author_uid: str,
+    viewer_uid: str,
+    limit: int = 50,
+) -> list[dict]:
+    """Posts authored by `author_uid` that `viewer_uid` is allowed to see.
+    Drops disc reviews (they live on Bag Check) and respects friends-only
+    visibility for non-self viewers."""
+    db = get_db()
+    is_self = author_uid == viewer_uid
+    query: dict = {"author_uid": author_uid, "kind": {"$ne": "disc_review"}}
+    if not is_self:
+        friends = await get_friend_uids(viewer_uid)
+        if author_uid in friends:
+            pass  # all of their visible posts are fair game
+        else:
+            query["visibility"] = "public"
+    posts: list[dict] = []
+    async for p in db.posts.find(query).sort("created_at", -1).limit(limit):
+        p.pop("_id", None)
+        posts.append(p)
+    return posts
+
 
 
 async def get_post(post_id: str) -> Optional[dict]:

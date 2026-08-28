@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="15" time="9.165" timestamp="2026-08-05T21:54:47.368174+00:00" hostname="agent-env-c466b9f7-0f69-4f3a-bc63-a00b891d27f3"><testcase classname="tests.test_iteration32.TestDashboardBundle" name="test_dashboard_401_without_auth" time="0.760" /><testcase classname="tests.test_iteration32.TestDashboardBundle" name="test_dashboard_404_unknown_league" time="0.153" /><testcase classname="tests.test_iteration32.TestDashboardBundle" name="test_dashboard_non_member" time="1.021" /><testcase classname="tests.test_iteration32.TestDashboardBundle" name="test_dashboard_member" time="0.723" /><testcase classname="tests.test_iteration32.TestDashboardBundle" name="test_dashboard_director" time="0.137" /><testcase classname="tests.test_iteration32.TestDashboardBundle" name="test_dashboard_parity_with_individual_endpoints" time="0.703" /><testcase classname="tests.test_iteration32.TestDashboardBundle" name="test_dashboard_perf_beats_individual" time="3.845" /><testcase classname="tests.test_iteration32" name="test_backfill_founding_members_count" time="0.017"><failure message="AssertionError: first_run=true rows (6) != expected (3, real_count=3)&#10;assert 6 == 3">tests/test_iteration32.py:241: in test_backfill_founding_members_count
+    asyncio.run(_run())
+/usr/local/lib/python3.11/asyncio/runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_iteration32.py:223: in _run
+    assert first_run_count == expected, (
+E   AssertionError: first_run=true rows (6) != expected (3, real_count=3)
+E   assert 6 == 3</failure></testcase><testcase classname="tests.test_iteration32.TestAuthSyncGating" name="test_test_email_signup_never_flips_first_run" time="0.488"><failure message="AssertionError: Test-email signup incorrectly awarded first_run=true&#10;assert True is False">tests/test_iteration32.py:249: in test_test_email_signup_never_flips_first_run
+    assert u["profile"]["firstRun"] is False, (
+E   AssertionError: Test-email signup incorrectly awarded first_run=true
+E   assert True is False</failure></testcase><testcase classname="tests.test_iteration32.TestDismissEndpoints" name="test_dismiss_first_run_401" time="0.120" /><testcase classname="tests.test_iteration32.TestDismissEndpoints" name="test_dismiss_leagues_feature_401" time="0.157" /><testcase classname="tests.test_iteration32.TestDismissEndpoints" name="test_dismiss_first_run_200" time="0.153" /><testcase classname="tests.test_iteration32.TestDismissEndpoints" name="test_dismiss_leagues_feature_200" time="0.164" /><testcase classname="tests.test_iteration32.TestCardCreationRegression" name="test_director_can_create_card" time="0.318" /><testcase classname="tests.test_iteration32.TestCardCreationRegression" name="test_non_director_cannot_create_card" time="0.130" /></testsuite></testsuites>

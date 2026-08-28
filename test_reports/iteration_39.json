@@ -1,0 +1,57 @@
+{
+  "summary": "Iteration 47 — Verified Tournament Bulk PDF Compiler ('Print All Scorecards') feature end-to-end. Backend regression: 9/9 green (test_iteration45_regression.py 7/7 + test_iteration44.py 2/2). Frontend: seeded via API a TEST_i47 league + active Week 1 round with 2 members, 2 scorecards, 2 cards (Card A + Card B, 1 player each). Executed the full brief test matrix: (A) ACTIVE view / DIRECTOR — bulk-print-btn renders in BOTH the top action row (line 578, RoundScorecard.jsx) AND the card-picker row (line 643); label 'Print All Scorecards'; top-row class list contains border-slate-700, text-slate-800, bg-white, rounded-full (P1: card-picker instance at line 647 is MISSING bg-white — outline-only classes there). (B) OVERLAY — clicking the button mounts data-testid=bulk-scorecard-print-overlay; the toolbar shows 'Print all tournament scorecards · 2 cards · landscape letter · save as PDF supported' plus Print again / Close buttons; two groups render (bulk-print-group-<cardA_id> + bulk-print-group-<cardB_id>), each labeled 'Card A · 1 player' / 'Card B · 1 player', each containing one <table> (the ScorecardGrid); each group carries the ac-bulk-card-group page-break class. Verified visually in /tmp/bulk_active.png — the two green ScorecardGrids stack top-to-bottom exactly like the completed-view single grid. window.print() fires ~350ms after mount (silent try/catch, no console error). (C) NON-DIRECTOR (player) — bulk-print-btn count = 0 ✓, recap-poster-btn absent ✓, sweep-finalize-btn absent ✓. (D) COMPLETED view / DIRECTOR — PATCHed /api/rounds/{id}/status to 'completed', reloaded /rounds/{id}: bulk-print-btn count = 0 ❌ HIGH. recap-poster-btn also absent (gated behind any score > 0, which is fine since no strokes were logged). back-to-league-btn ✓, go-to-league-feed-btn ✓, scorecard-print-btn ✓, scorecard-round-final-badge ✓, no card-builder ✓, no hole-nav ✓, no sweep-finalize-btn ✓ — strict unmount preserved. (E) EMPTY STATE — not directly reproduced (would require deleting scorecards) but source-verified: RoundScorecard.jsx line 578 gate `{isDirector && scorecards.length > 0 && (` correctly hides the top-row button, and BulkScorecardPrintOverlay.jsx line 119-123 renders data-testid=bulk-print-empty with 'No scorecards yet on this round.' if opened with zero groups. Overall: 6/7 brief clauses PASS; 1 P0 REGRESSION — completed-view button was NEVER wired into the isCompleted early-return branch (lines 352-408).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "RoundScorecard.jsx isCompleted early-return (lines 352-408)",
+        "issue": "bulk-print-btn is MISSING from the COMPLETED-round view. The brief explicitly says a director should see the button in the top action row next to scorecard-print-btn on completed rounds ('Master Admin Dashboard' surface). Currently only scorecard-print-btn is rendered in the header of the completed branch. The two existing bulk-print-btn instances (line 578 shared row + line 643 card-picker row) both live in the !isCompleted code path so they never mount when the round is completed. recap-poster-btn is also absent from the completed branch (but that's a pre-existing gap outside this iteration's scope).",
+        "selector": "[data-testid='bulk-print-btn']",
+        "priority": "HIGH"
+      },
+      {
+        "component": "RoundScorecard.jsx line 647 card-picker bulk-print-btn class list",
+        "issue": "The active-view card-picker instance uses `border border-slate-700 text-slate-800 hover:bg-slate-100 ...` but is MISSING `bg-white`. The brief calls for `border-slate-700 text-slate-800 bg-white hover:bg-slate-100 rounded-full`. Because the parent card-picker row has no background, the button appears transparent — inconsistent with the same-testid button at line 584 which is correct. Cosmetic only; button still functions.",
+        "selector": "[data-testid='bulk-print-btn']",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "RoundScorecard.jsx active-view",
+        "issue": "TWO elements with data-testid='bulk-print-btn' render simultaneously on the active director view (one in the shared top action row line 582, one in the card-picker row line 645). Both wired to setShowBulkPrint(true) so functionally identical, but duplicate testids will trip up any Playwright selector that expects a unique node (e.g., page.locator('[data-testid=bulk-print-btn]').click() will error 'strict mode violation, 2 elements'). Consider dropping one of the two, or differentiating testids (e.g., bulk-print-btn-top / bulk-print-btn-picker).",
+        "selector": "[data-testid='bulk-print-btn']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration45_regression.py",
+    "/app/backend/tests/test_iteration44.py",
+    "/app/test_reports/pytest/iteration_47.xml"
+  ],
+  "action_items": [
+    "HIGH: Add the bulk-print-btn (and ideally recap-poster-btn) into the completed-view header at RoundScorecard.jsx lines 375-392, gated by `isDirector && scorecards.length > 0`. The brief calls this the 'Master Admin Dashboard' surface — it must expose the bulk PDF compiler.",
+    "MEDIUM: Add `bg-white` to the card-picker instance at RoundScorecard.jsx line 647 so both bulk-print-btn instances match the brief's outline styling.",
+    "MEDIUM: Resolve duplicate bulk-print-btn testids on the active director view — either drop the shared-row instance (line 578) since the card-picker row already covers it, or split the testids.",
+    "OPTIONAL: RoundScorecard.jsx is still 1195 lines (was 1158). Splitting the completed early-return, card builder, and card-picker action row into sub-components remains outstanding from iteration 38."
+  ],
+  "critical_code_review_comments": [
+    "BulkScorecardPrintOverlay.jsx (145 lines) is clean, well-commented, and correctly delegates grid rendering to ScorecardGrid — the P0 layout parity invariant (green grid = PDF) is preserved. The print-CSS gate correctly hides toolbar via .ac-bulk-print-hide and forces page-break-after between groups.",
+    "The overlay's useEffect at line 52 auto-fires window.print() after 350ms with a try/catch — good defensive coding; no crash in the automation environment where the print dialog can't open.",
+    "Grouping logic at BulkScorecardPrintOverlay.jsx lines 31-48 correctly buckets orphan scorecards (no card_id) under '__solo__' — the tournament will always print in full even if the round has stray singles. Verified with 2 grouped scorecards.",
+    "P0 completed-round strict unmount is preserved: no LiveSimulatorPanel, no card builder, no hole nav, no sweep-finalize-btn rendered in the isCompleted branch. Verified by DOM inspection.",
+    "isCompleted early-return branch (lines 352-408) was NOT updated when the bulk PDF compiler was added — that's the root of the HIGH priority bug. The brief's 'completed round' clause was implemented on the wrong code path."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (9/9 pytest regression green)",
+    "frontend": "~86% — 6 of 7 brief clauses pass. FAIL: completed-view bulk-print-btn not rendered. PASS: active-view button + styling + label, non-director hidden, overlay open, toolbar + Print again + Close, 2 groups with headers, ScorecardGrid inside each group, page-break class, regression buttons intact, completed-view strict unmount preserved."
+  },
+  "test_credentials": "Fresh Firebase dev-mode signups per run. This iteration used director=qa-i47d-nrpsq0@example.com and player=qa-i47p-nrpsq0@example.com, password demo1234. Signup form has a required Full Name (name attribute) and Age (type=number) field in addition to email + password + confirm password.",
+  "seed_data_creation": "One league (TEST_i47_1786492227543, id=e949b228-9afb-4adc-a94d-db768a93a7b4), one active/then-completed Week 1 round (id=6d076d36-4e63-406b-b4e6-ecb8c2b1a9ab, 9 holes par 3), two members, two scorecards, two cards (Card A / Card B).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Correct route for the scorecard page is /rounds/{roundId} — NOT /leagues/{leagueId}/rounds/{roundId} (that path silently redirects to /feed). Signup form REQUIRES name, email, age (number), password, confirm password — omitting age blocks the form. Firebase token lives at localStorage['firebase:authUser:<apiKey>:[DEFAULT]'].stsTokenManager.accessToken. Two bulk-print-btn nodes coexist on the active director view — use `.first` when selecting or the assertion will strict-mode-fail. The isCompleted branch is a totally separate JSX tree (RoundScorecard.jsx lines 352-408) — any future header-row additions must be replicated there.",
+  "rca of the issue": "Root cause: the Tournament Bulk PDF Compiler was added to two locations in RoundScorecard.jsx — line 578 (shared top row within the !isCompleted code path) and line 643 (card-picker row, viewMode==='score' only). Neither location is reachable when roundStatus === 'completed' because line 352 early-returns to a separate JSX tree at lines 353-407 that only contains back-to-league-btn, go-to-league-feed-btn, scorecard-round-final-badge, scorecard-print-btn, and the ScorecardGrid. The brief's clause about seeing bulk-print-btn on the completed round ('Master Admin Dashboard') was therefore never wired up. Fix: add a copy of the button JSX at lines 375-392 inside the flex row that already houses scorecard-print-btn, gated by `{isDirector && scorecards.length > 0 && (...)}`, using the identical outline classes from line 584. Reproduction steps: (1) signup as director, create league + active round, join round to seed a scorecard, (2) POST a card, (3) PATCH /api/rounds/{id}/status body {status:'completed'}, (4) GET /rounds/{id} in the browser — bulk-print-btn is absent from the DOM. Confirmed via query_selector_all returning zero nodes while scorecard-print-btn returns one. Mitigation is a ~12-line JSX addition in the completed early-return; no state or backend changes needed."
+}

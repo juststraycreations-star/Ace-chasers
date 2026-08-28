@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "388698465312",
+    "project_id": "acechaser-38c33",
+    "storage_bucket": "acechaser-38c33.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:388698465312:android:726dae7631da76f3de495f",
+        "android_client_info": {
+          "package_name": "net.acechasers.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCaW_gjQ6zyUiHrr99VFmJPHvSgC2w2rVA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

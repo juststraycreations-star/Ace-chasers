@@ -1,0 +1,161 @@
+"""Push notification token registry (Iteration 69).
+
+Backs the Capacitor `@capacitor/push-notifications` client on Android.
+The client posts its FCM token here on every successful registration
+so we can fan out real-time round updates and payout alerts.
+
+Design notes:
+  • Multi-device — the same user can have several {user_id, token}
+    rows (phone + tablet). The token itself is unique globally, so we
+    upsert on token.
+  • No `platform` enum locked yet — we accept whatever the client
+    reports ("android", "ios", "web") to keep future channel logic
+    flexible.
+  • The DELETE endpoint is idempotent so a re-launch after logout
+    can safely clean up without needing to check existence first.
+"""
+from __future__ import annotations
+import os
+import uuid
+from datetime import datetime, timezone
+from typing import Literal, Optional
+
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, Field
+
+from .leagues_router import get_current_user
+from deps import require_admin
+
+api_router = APIRouter()
+
+_client = AsyncIOMotorClient(os.environ["MONGO_URL"])
+db = _client[os.environ["DB_NAME"]]
+
+
+def _now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+class PushTokenPayload(BaseModel):
+    # Whatever Capacitor / the Web Push API hands us — treated as an
+    # opaque string, not parsed.
+    token: str
+    platform: Literal["android", "ios", "web"] = "android"
+    # Optional device metadata so a manager could distinguish phone vs
+    # tablet if we ever surface a "your devices" list.
+    device_id: Optional[str] = None
+    device_name: Optional[str] = None
+
+
+@api_router.post("/push/register-token")
+async def register_push_token(payload: PushTokenPayload, request: Request,
+                                 session_token: Optional[str] = Cookie(None),
+                                 authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    if not payload.token or len(payload.token) < 8:
+        raise HTTPException(status_code=400, detail="Push token missing or too short")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user.user_id,
+        "token": payload.token,
+        "platform": payload.platform,
+        "device_id": payload.device_id,
+        "device_name": payload.device_name,
+        "updated_at": _now_iso(),
+    }
+    # Upsert on token so re-registration (a common Capacitor event on
+    # cold-start) never creates a duplicate row for the same device.
+    # If the same token ever migrates to a different user_id (rare —
+    # only via device factory reset), we overwrite the ownership too.
+    await db.push_tokens.update_one(
+        {"token": payload.token},
+        {"$set": doc},
+        upsert=True,
+    )
+    return {"ok": True, "user_id": user.user_id, "platform": payload.platform}
+
+
+@api_router.get("/push/tokens")
+async def list_my_push_tokens(request: Request,
+                                session_token: Optional[str] = Cookie(None),
+                                authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    rows = await db.push_tokens.find(
+        {"user_id": user.user_id}, {"_id": 0}
+    ).sort("updated_at", -1).to_list(50)
+    return {"tokens": rows, "count": len(rows)}
+
+
+@api_router.get("/push/log")
+async def list_push_notifications_log(request: Request,
+                                        session_token: Optional[str] = Cookie(None),
+                                        authorization: Optional[str] = Header(None),
+                                        limit: int = 25,
+                                        event_type: Optional[str] = None,
+                                        round_id: Optional[str] = None):
+    """Observability endpoint — returns recent fan-out telemetry rows.
+
+    Not user-scoped (this is a system-wide observability surface for
+    managers/devs). Callers need to be authenticated to hit it.
+    """
+    await get_current_user(request, session_token, authorization)
+    query: dict = {}
+    if event_type: query["eventType"] = event_type
+    if round_id:   query["roundId"] = round_id
+    rows = await db.push_notifications_log.find(query, {"_id": 0}) \
+        .sort("timestamp", -1).limit(max(1, min(limit, 200))).to_list(200)
+    # Aggregate totals for quick dashboard glance.
+    totals = {"sent": 0, "failed": 0, "pruned": 0, "count": len(rows)}
+    for r in rows:
+        totals["sent"]   += int(r.get("totalSent") or 0)
+        totals["failed"] += int(r.get("totalFailed") or 0)
+        totals["pruned"] += int(r.get("tokensPruned") or 0)
+    return {"rows": rows, "totals": totals}
+
+
+class PushTokenDeletePayload(BaseModel):
+    token: str
+
+
+@api_router.post("/push/unregister-token")
+async def unregister_push_token(payload: PushTokenDeletePayload, request: Request,
+                                  session_token: Optional[str] = Cookie(None),
+                                  authorization: Optional[str] = Header(None)):
+    user = await get_current_user(request, session_token, authorization)
+    # Scope to the caller so a bad actor can't delete another user's
+    # device rows even if they know a token string.
+    res = await db.push_tokens.delete_one(
+        {"token": payload.token, "user_id": user.user_id}
+    )
+    return {"ok": True, "deleted": int(res.deleted_count)}
+
+
+# ══════════════════════════════════════════════════════════════════
+# Admin — weekly push-health digest email trigger
+# ══════════════════════════════════════════════════════════════════
+@api_router.post("/admin/push/digest/run")
+async def admin_run_push_digest(
+    window_days: int = 7,
+    dry_run: bool = False,
+    _: bool = Depends(require_admin),
+):
+    """Aggregate the last `window_days` of `push_notifications_log`
+    rows, group by league, and email each director a digest of
+    successes, retries and permanent drops.
+
+    Admin-gated by `X-Admin-Key`. Intended trigger surface is an
+    external weekly cron / GitHub Action / manual curl. No in-process
+    scheduler is used so a multi-pod rollout can't double-send.
+
+    Query params:
+      • `window_days` (default 7) — size of the aggregation window.
+      • `dry_run=true` (default false) — skip SMTP, just return the
+        computed subject lines + totals for a preview.
+    """
+    if window_days < 1 or window_days > 90:
+        raise HTTPException(status_code=400,
+                             detail="window_days must be between 1 and 90")
+    from push_digest import run_weekly_digest  # lazy import
+    return await run_weekly_digest(db, window_days=window_days, dry_run=dry_run)
+

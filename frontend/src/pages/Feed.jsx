@@ -3,16 +3,17 @@ import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../lib/api';
 import { compressImage } from '../lib/compressImage';
-import AlphaBanner from '../components/AlphaBanner';
+import { resolveImageUrl as fullImageUrl } from '../lib/images';
+import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
+import NewsSidebar from '../components/NewsSidebar';
+import PostInteractions from '../components/PostInteractions';
+import GetTheAppBanner from '../components/GetTheAppBanner';
+import { FeedSkeleton } from '../components/Skeletons';
+import { extractVideoPoster } from '../lib/videoPoster';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const MAX_RAW_BYTES = 30 * 1024 * 1024;
-
-function fullImageUrl(path) {
-  if (!path) return null;
-  if (path.startsWith('http')) return path;
-  return `${BACKEND_URL}${path}`;
-}
+const MAX_RAW_IMAGE_BYTES = 30 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
+const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
 function timeAgo(iso) {
   if (!iso) return '';
@@ -33,9 +34,16 @@ export default function Feed() {
   const [visibility, setVisibility] = useState('public');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [videoFile, setVideoFile] = useState(null);
+  const [videoPreview, setVideoPreview] = useState(null);
+  const [videoPoster, setVideoPoster] = useState(null);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState('');
+  // The single post with the most 👍 Nice reactions in the past 7 days — null
+  // when no qualifying post exists yet (e.g. brand-new community).
+  const [topNiced, setTopNiced] = useState(null);
   const fileInputRef = useRef(null);
+  const videoInputRef = useRef(null);
 
   const fetchFeed = async () => {
     try {
@@ -46,6 +54,17 @@ export default function Feed() {
       setError(err?.response?.data?.detail || err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTopNiced = async () => {
+    try {
+      const res = await api.get('/feed/top-niced-this-week');
+      setTopNiced(res.data || null);
+    } catch (err) {
+      // Non-critical — silently skip if the backend hiccups.
+      console.warn('top-niced fetch failed', err);
+      setTopNiced(null);
     }
   };
 
@@ -64,7 +83,11 @@ export default function Feed() {
   };
 
   useEffect(() => {
+    // Intentionally runs once on mount. `fetchFeed` is declared inside the
+    // component (recreated each render) so listing it in deps would cause
+    // an infinite refetch loop.
     fetchFeed();
+    fetchTopNiced();
   }, []);
 
   const handleFileChange = async (e) => {
@@ -79,12 +102,16 @@ export default function Feed() {
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
-    if (file.size > MAX_RAW_BYTES) {
+    if (file.size > MAX_RAW_IMAGE_BYTES) {
       setError('Image is huge (>30MB). Pick a smaller file or take a fresh photo.');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
     setError('');
+    // Photo replaces any pending video.
+    setVideoFile(null);
+    setVideoPreview(null);
+    if (videoInputRef.current) videoInputRef.current.value = '';
     try {
       const compressed = await compressImage(file, 'post');
       setImageFile(compressed);
@@ -95,17 +122,58 @@ export default function Feed() {
     }
   };
 
+  const handleVideoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setVideoFile(null);
+      setVideoPreview(null);
+      return;
+    }
+    if (!ACCEPTED_VIDEO_TYPES.includes(file.type) && !file.name.match(/\.(mp4|webm|mov)$/i)) {
+      setError(`Unsupported video format (got ${file.type || 'unknown type'}). Use mp4, webm, or mov.`);
+      if (videoInputRef.current) videoInputRef.current.value = '';
+      return;
+    }
+    if (file.size > MAX_VIDEO_BYTES) {
+      setError(`Video is too large (max ${Math.round(MAX_VIDEO_BYTES / 1024 / 1024)}MB).`);
+      if (videoInputRef.current) videoInputRef.current.value = '';
+      return;
+    }
+    setError('');
+    // Video replaces any pending photo.
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setVideoFile(file);
+    setVideoPreview(URL.createObjectURL(file));
+    setVideoPoster(null);
+    // Extract a poster frame in the background so the preview shows a
+    // static image instantly instead of a black tile — and we can leave
+    // `preload="none"` on the <video>, avoiding buffering the full file
+    // in memory on mobile until the user actually taps play.
+    extractVideoPoster(file).then((dataUrl) => {
+      if (dataUrl) setVideoPoster(dataUrl);
+    });
+  };
+
   const clearImage = () => {
     setImageFile(null);
     setImagePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const clearVideo = () => {
+    setVideoFile(null);
+    setVideoPreview(null);
+    setVideoPoster(null);
+    if (videoInputRef.current) videoInputRef.current.value = '';
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!body.trim() && !imageFile) {
-      setError('Add some text or a photo first.');
+    if (!body.trim() && !imageFile && !videoFile) {
+      setError('Add some text, a photo, or a video first.');
       return;
     }
     setPosting(true);
@@ -114,13 +182,16 @@ export default function Feed() {
       form.append('body', body);
       form.append('visibility', visibility);
       if (imageFile) form.append('image', imageFile);
-      const res = await api.post('/posts', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      if (videoFile) form.append('media', videoFile);
+      // Let the browser set Content-Type with the correct multipart boundary.
+      // Explicitly setting it without a boundary breaks the upload on some
+      // mobile browsers (iOS Safari in particular).
+      const res = await api.post('/posts', form);
       setPosts((prev) => [res.data, ...prev]);
       setBody('');
       setVisibility('public');
       clearImage();
+      clearVideo();
     } catch (err) {
       setError(err?.response?.data?.detail || err.message);
     } finally {
@@ -138,10 +209,92 @@ export default function Feed() {
     }
   };
 
+  // --- Inline edit ---------------------------------------------------------
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  const startEdit = (post) => {
+    setEditingId(post.id);
+    setEditDraft(post.body || '');
+    setEditError('');
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditDraft('');
+    setEditError('');
+  };
+  const saveEdit = async () => {
+    const trimmed = editDraft.trim();
+    if (!trimmed) {
+      setEditError('Post body cannot be empty.');
+      return;
+    }
+    setEditSaving(true);
+    setEditError('');
+    try {
+      const res = await api.patch(`/posts/${editingId}`, { body: trimmed });
+      setPosts((prev) => prev.map((p) => (p.id === editingId ? res.data : p)));
+      cancelEdit();
+    } catch (err) {
+      setEditError(err?.response?.data?.detail || err.message || 'Could not save');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8" data-testid="feed-view">
-      <AlphaBanner />
+    <div
+      className="max-w-7xl mx-auto px-4 py-8 flex gap-6 items-start"
+      data-testid="feed-view"
+    >
+      <main className="flex-1 max-w-2xl mx-auto xl:mx-0 w-full min-w-0">
+      <GetTheAppBanner />
       <h1 className="text-4xl font-bold text-disc-green mb-6">Feed</h1>
+
+      {topNiced && (
+        <a
+          href={`#post-${topNiced.id}`}
+          className="block mb-6 bg-gradient-to-r from-disc-gold/30 via-white to-disc-gold/30 border-2 border-disc-gold rounded-2xl shadow-sm hover:shadow-md transition p-4"
+          data-testid="top-niced-banner"
+          aria-label="Jump to the most niced post this week"
+        >
+          <div className="flex items-center gap-3">
+            <img
+              src={fullImageUrl(topNiced.author?.profilePictureUrl) || DEFAULT_AVATAR}
+              alt={topNiced.author?.name || 'Player'}
+              className="w-12 h-12 rounded-full object-cover border-2 border-white shadow ring-2 ring-disc-gold flex-shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-disc-gold uppercase tracking-wider">
+                🏆 Most niced this week
+              </p>
+              <p
+                className="font-bold text-gray-800 truncate"
+                data-testid="top-niced-author"
+              >
+                {topNiced.author?.name || 'Player'}
+              </p>
+              <p
+                className="text-sm text-gray-600 line-clamp-1"
+                data-testid="top-niced-body"
+              >
+                {topNiced.body || '(media post)'}
+              </p>
+            </div>
+            <div className="flex flex-col items-end flex-shrink-0">
+              <span
+                className="bg-disc-gold text-white font-bold text-sm px-3 py-1 rounded-full"
+                data-testid="top-niced-count"
+              >
+                👍 {topNiced.nice_count}
+              </span>
+              <span className="text-[10px] text-gray-500 mt-1">{timeAgo(topNiced.created_at)}</span>
+            </div>
+          </div>
+        </a>
+      )}
 
       {/* Compose box */}
       <form
@@ -184,8 +337,8 @@ export default function Feed() {
                 profile?.profilePictureUrl
                   ? (profile.profilePictureUrl.startsWith('http')
                       ? profile.profilePictureUrl
-                      : `${BACKEND_URL}${profile.profilePictureUrl}`)
-                  : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop'
+                      : fullImageUrl(profile.profilePictureUrl))
+                  : DEFAULT_AVATAR
               }
               alt="You"
               className="w-12 h-12 rounded-full object-cover"
@@ -221,6 +374,29 @@ export default function Feed() {
               </div>
             )}
 
+            {videoPreview && (
+              <div className="relative mt-3 inline-block" data-testid="compose-video-preview">
+                <video
+                  src={videoPreview}
+                  poster={videoPoster || undefined}
+                  controls
+                  playsInline
+                  preload="none"
+                  className="max-h-60 rounded-lg border border-gray-200 bg-black"
+                  data-testid="compose-video-el"
+                />
+                <button
+                  type="button"
+                  onClick={clearVideo}
+                  className="absolute top-1 right-1 bg-black/70 hover:bg-black text-white rounded-full w-6 h-6 text-xs"
+                  data-testid="compose-remove-video-btn"
+                  aria-label="Remove video"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <input
@@ -238,6 +414,38 @@ export default function Feed() {
                   data-testid="compose-add-photo-btn"
                 >
                   📷 Photo
+                </button>
+
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/mp4,video/webm,video/quicktime"
+                  onChange={handleVideoChange}
+                  className="hidden"
+                  data-testid="compose-video-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => videoInputRef.current?.click()}
+                  className="text-disc-green hover:text-disc-green/80 font-semibold text-sm flex items-center gap-1"
+                  data-testid="compose-add-video-btn"
+                >
+                  🎬 Video
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBody((curr) => {
+                      const tag = curr.trim().length === 0 ? 'Nice! 🥏' : `${curr.trimEnd()} Nice! 🥏`;
+                      return tag.slice(0, 1000);
+                    });
+                  }}
+                  className="text-disc-green hover:text-disc-green/80 font-semibold text-sm flex items-center gap-1"
+                  data-testid="compose-add-nice-btn"
+                  title="Insert a quick Nice! tag"
+                >
+                  👍 Nice
                 </button>
 
                 <select
@@ -266,7 +474,7 @@ export default function Feed() {
 
       {/* Feed list */}
       {loading ? (
-        <p className="text-center text-gray-500" data-testid="feed-loading">Loading feed…</p>
+        <FeedSkeleton count={3} />
       ) : posts.length === 0 ? (
         <div
           className="bg-white rounded-xl shadow p-12 text-center text-gray-500"
@@ -279,7 +487,8 @@ export default function Feed() {
           {posts.map((post) => (
             <article
               key={post.id}
-              className="bg-white rounded-2xl shadow-lg p-5"
+              id={`post-${post.id}`}
+              className="bg-white rounded-2xl shadow-lg p-5 scroll-mt-24"
               data-testid={`post-${post.id}`}
             >
               <header className="flex items-start justify-between mb-3">
@@ -295,8 +504,8 @@ export default function Feed() {
                         post.author.profilePictureUrl
                           ? (post.author.profilePictureUrl.startsWith('http')
                               ? post.author.profilePictureUrl
-                              : `${BACKEND_URL}${post.author.profilePictureUrl}`)
-                          : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop'
+                              : fullImageUrl(post.author.profilePictureUrl))
+                          : DEFAULT_AVATAR
                       }
                       alt={post.author.name || 'Player'}
                       className="w-10 h-10 rounded-full object-cover"
@@ -323,21 +532,82 @@ export default function Feed() {
                   </div>
                 </div>
                 {post.is_mine && (
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(post.id)}
-                    className="text-xs text-gray-400 hover:text-red-600 transition"
-                    data-testid={`post-delete-btn-${post.id}`}
-                  >
-                    Delete
-                  </button>
+                  <div className="flex items-center gap-3" data-testid={`post-actions-${post.id}`}>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(post)}
+                      className="text-xs text-gray-400 hover:text-disc-green transition"
+                      data-testid={`post-edit-btn-${post.id}`}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(post.id)}
+                      className="text-xs text-gray-400 hover:text-red-600 transition"
+                      data-testid={`post-delete-btn-${post.id}`}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 )}
               </header>
 
-              {post.body && (
-                <p className="text-gray-800 whitespace-pre-wrap mb-3" data-testid={`post-body-${post.id}`}>
-                  {post.body}
-                </p>
+              {editingId === post.id ? (
+                <div className="mb-3" data-testid={`post-edit-form-${post.id}`}>
+                  <textarea
+                    value={editDraft}
+                    onChange={(e) => setEditDraft(e.target.value)}
+                    maxLength={1000}
+                    rows={3}
+                    disabled={editSaving}
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-disc-green resize-none"
+                    data-testid={`post-edit-textarea-${post.id}`}
+                  />
+                  {editError && (
+                    <p
+                      className="text-red-600 text-xs mt-1"
+                      data-testid={`post-edit-error-${post.id}`}
+                    >
+                      {editError}
+                    </p>
+                  )}
+                  <div className="flex justify-end gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      disabled={editSaving}
+                      className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 rounded transition disabled:opacity-50"
+                      data-testid={`post-edit-cancel-${post.id}`}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveEdit}
+                      disabled={editSaving || !editDraft.trim()}
+                      className="text-sm bg-disc-green hover:bg-disc-green/90 text-white font-semibold px-3 py-1 rounded transition disabled:opacity-50"
+                      data-testid={`post-edit-save-${post.id}`}
+                    >
+                      {editSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                post.body && (
+                  <p className="text-gray-800 whitespace-pre-wrap mb-3" data-testid={`post-body-${post.id}`}>
+                    {post.body}
+                    {post.edited_at && (
+                      <span
+                        className="ml-2 text-xs text-gray-400 italic"
+                        title={`Edited ${new Date(post.edited_at).toLocaleString()}`}
+                        data-testid={`post-edited-${post.id}`}
+                      >
+                        (edited)
+                      </span>
+                    )}
+                  </p>
+                )
               )}
               {post.image_url && (
                 <img
@@ -347,6 +617,17 @@ export default function Feed() {
                   data-testid={`post-image-${post.id}`}
                 />
               )}
+              {post.video_url && (
+                <video
+                  src={fullImageUrl(post.video_url)}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="rounded-lg max-h-[520px] w-full bg-black"
+                  data-testid={`post-video-${post.id}`}
+                />
+              )}
+              <PostInteractions post={post} />
             </article>
           ))}
 
@@ -365,6 +646,11 @@ export default function Feed() {
           )}
         </div>
       )}
+      </main>
+
+      <aside className="hidden xl:block w-80 flex-shrink-0 sticky top-24" data-testid="feed-news-rail">
+        <NewsSidebar />
+      </aside>
     </div>
   );
 }

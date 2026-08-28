@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 29 — Verified perceived-perf improvements: (1) Navigation hover/focus/touch prefetch handlers correctly wired to lazy chunks via ROUTE_PREFETCHERS map; (2) Skeleton loaders render during in-flight data fetch on Feed (3 placeholders), Discovery (8 placeholders), and LeagueDashboard (4 placeholders); (3) Old plain 'Loading feed…' and 'LOADING…' text no longer visible during load. All 11 lazy routes render authenticated content post-signup with no infinite Suspense-fallback loops. Report-bug regression from iter 28 still green on /leagues. Frontend-only iter — backend intentionally not re-tested per review request.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration28.py (prior iter — untouched, still green)"
+  ],
+  "action_items": [
+    "None — every item in the review request verified green. Perceived slowness fix is confirmed working: skeletons appear immediately on paint during data fetch (CLS=0), and hover-prefetch handlers are present on all 8 nav links (both desktop + mobile menu variants)."
+  ],
+  "critical_code_review_comments": [
+    "Navigation.jsx ROUTE_PREFETCHERS map correctly imports 8 lazy routes; prefetchRoute() dedupes via a module-level Set and swallows errors (correct). Handlers (onMouseEnter, onFocus, onTouchStart) verified present on both desktop [data-testid=nav-discovery] and mobile [data-testid=nav-discovery-mobile] variants via React fiber inspection.",
+    "Skeletons.jsx uses only Tailwind animate-pulse — no keyframes needed. Shapes mimic real content (avatar circle + text bars + media block) so CLS=0 when data arrives. Each variant exposes both container + item data-testids (feed-skeleton/feed-post-skeleton, player-grid-skeleton/player-card-skeleton, league-grid-skeleton/league-card-skeleton) — testability excellent.",
+    "Feed.jsx replaces the old plain 'Loading feed…' with <FeedSkeleton count={3}/> — verified 3 feed-post-skeleton nodes render during a slowed /api/feed. Post-load, skeleton unmounts cleanly and real posts render.",
+    "Discovery.jsx renders <PlayerGridSkeleton count={8}/> inside the loading branch (deck.length===0 && loading). 8 player-card-skeleton nodes verified during a slowed /api/discovery. Filters (radiusBar + interestBar) render above the skeleton so users can still adjust filters mid-load — nice UX detail.",
+    "LeagueDashboard.jsx uses {loading && <LeagueGridSkeleton count={4}/>} — 4 league-card-skeleton nodes verified with a 3s slowed /api/leagues. No 'LOADING…' mono-data text in DOM during loading state.",
+    "Vite dev mode (preview URL) does NOT emit named per-route chunks — dynamic imports stream individual source modules (e.g. /src/lib/interestTags.js seen on Discovery hover). Chunk-level verification requires a production build. Per review note this is acceptable — the ROUTE_PREFETCHERS map + wired handlers are the actual invariant, and both are confirmed present.",
+    "Perf sanity: /feed responseEnd = 57ms; total load = 677ms. Well within the <3s / <5s budget. All 11 lazy routes (/feed /discovery /courses /messages /profile /likes /bagcheck /leagues /daily-plastic /leagues/new /legal/privacy) render authenticated content len>200 without infinite fallback.",
+    "Regression: [data-testid=report-bug-btn] still present next to [data-testid=dashboard-create-league-btn] on /leagues (visible in screenshot as 'REPORT A BUG' pill). GiveawayPromo remains absent from /login."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (not re-tested per review — no backend changes this iter; last green iter 28: 8/8)",
+    "frontend": "100% for tested slice — signup redirects to /feed; 3 skeletons (Feed/Discovery/Leagues) all render during in-flight API with correct testids and counts (3/8/4); nav handlers (onMouseEnter+onFocus+onTouchStart) confirmed via React props inspection on both desktop and mobile links; hover on nav-discovery triggers new JS module requests in dev mode (prefetch actively firing); 11/11 lazy routes render authenticated content; report-bug-btn still visible on /leagues alongside create-league-btn."
+  },
+  "test_credentials": "Firebase Identity Toolkit signUp with testi29_*@example.com / Demo1234! (auto-generated per test). Created ~4 TEST_ users during this iter.",
+  "seed_data_creation": "Fresh Firebase test users signed up during test (testi29_*, testi29l_*). Not cleaned up — same pattern as iters 19-28.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter 29 covers: (1) hover-prefetch via ROUTE_PREFETCHERS map — Vite dev mode won't emit named chunks so runtime chunk-name assertion via page.on('request') is unreliable on the preview URL; instead we verified React fiber onMouseEnter/onFocus/onTouchStart props are attached to both [data-testid=nav-discovery] and [data-testid=nav-discovery-mobile] links, AND hovering triggers new JS module requests in Vite dev. For production chunk-level verification run `cd /app/frontend && yarn build && ls dist/assets/`; (2) skeleton loaders — all 3 skeletons (feed-skeleton, player-grid-skeleton, league-grid-skeleton) render with correct child counts (3/8/4) during a 2.5–3s slowed API response using page.route interception, and old plain 'Loading …' / 'LOADING…' text is gone; (3) regression sweep for prior iter 26/27/28 features (report-bug-btn, GiveawayPromo removal, all lazy routes) still green. Signup + auth/sync + /api/feed + /api/discovery + /api/leagues all 200 with <3s combined latency.",
+  "rca of the issue": "N/A — no bugs found. Root-cause of the original user complaint ('pages take ages to load') was correctly identified as perceived-slowness (blank screen during chunk download + data fetch), and this iter's mitigation (hover-prefetch + skeleton loaders) is verified working end-to-end."
+}

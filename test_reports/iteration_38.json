@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 46 — Verified the League Dashboard palette refactor + Sweep Finalize P1 gate fix. Backend: 9/9 regression pass (test_iteration45_regression.py 7/7 + test_iteration44.py WS 2/2). Frontend: signed up a fresh Firebase user (qa-i38d-eevr9j@example.com / demo1234), created TEST_i38_* league + Week 1 round via API using the browser's Firebase JWT, then exercised the LeagueDetail dashboard end-to-end. 21/21 UI assertions PASS: (a) all four white-chip metadata tiles render — league-chip-location, league-chip-players, league-chip-ace-pool, league-chip-bag-tag; (b) three temporal round sections behave correctly — rounds-upcoming-section always renders, rounds-active-section is ABSENT when the round is 'scheduled' and APPEARS after PATCH /rounds/{id}/status='active', rounds-completed-section is ABSENT with no completed rounds; (c) the active round card renders all three testids — round-open-<id>, round-complete-<id>, round-qr-btn-<id>; (d) button classes match the unified system — Open Scorecard / New Round / Broadcast all have `bg-emerald-600 rounded-full font-semibold text-white`, and Finalize / DM / Check-In QR all have `bg-white border rounded-full`; (e) Broadcast button is emerald and clicking it opens manager-dm-modal; (f) Sweep Finalize gate — screenshot at /tmp/final.png shows the scorecard active view for a round with 0 cards showing 'No cards yet. Create one to start scoring.' WITHOUT the sweep-finalize-btn pill (previous iteration's P1 REGRESSION IS FIXED). Source verified at RoundScorecard.jsx:618 `{isDirector && cards.length > 0 && (`. NOTE: The final programmatic sweep-finalize toggle (0-cards → create card → 1-card) was interrupted by a Firebase Identity Toolkit 429 rate-limit storm on the last page.goto — but the 0-card empty state is visually confirmed in the screenshot AND the 1-card branch was tested in iteration_37 (which flagged this exact bug). Backend contract unchanged — pure frontend restyle + one-line gate fix, both green.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration45_regression.py",
+    "/app/backend/tests/test_iteration44.py",
+    "/app/test_reports/pytest/iteration_38.xml"
+  ],
+  "action_items": [
+    "None blocking. Optional refactor still open from iteration 37: RoundScorecard.jsx is 1158 lines — well over 700-line soft limit. Consider splitting the completed-round early return, middle-zone accordion, and card builder into their own components.",
+    "Optional: LeagueDetail.jsx round-card renders three routing scenarios (active/upcoming/completed) with duplicated markup — consider extracting a <RoundCard variant='active|upcoming|completed' /> to remove ~150 lines of duplication."
+  ],
+  "critical_code_review_comments": [
+    "RoundScorecard.jsx:618 — sweep-finalize-btn gate now correctly reads `{isDirector && cards.length > 0 && (` — the P1 from iteration 37 is fixed with a clean one-liner. Verified in source + visually in /tmp/final.png.",
+    "LeagueDetail.jsx — the three-section split (rounds-active/upcoming/completed) is cleanly implemented; the completed accordion (rounds-completed-toggle) starts with aria-expanded='false' — good a11y. Not clicked in this run but source review shows the toggle is wired correctly.",
+    "LeagueDetail.jsx:154-175 — the four chip testids (location/players/ace-pool/bag-tag) all use the same `bg-white border-slate-200 rounded-full text-emerald-600` pattern — consistent with the brief. Nice.",
+    "ManagerDMPanel.jsx:101-102 — Broadcast button correctly uses `text-white bg-emerald-600 hover:bg-emerald-700 rounded-full font-semibold`. DM button is the slate outline. Matches the brief exactly.",
+    "Unified button system honored: round-open (primary), round-complete (secondary), round-qr-btn (secondary), new-round-btn (primary), manager-dm-open-broadcast (primary), manager-dm-open-dm (secondary) all pass the class-name assertions programmatically."
+  ],
+  "updated_files": [
+    "/app/test_reports/iteration_38.json",
+    "/app/test_reports/pytest/iteration_38.xml"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9)",
+    "frontend": "100% of 21 executed assertions PASS. The 22nd assertion (programmatic sweep-finalize hidden with 0 cards) was interrupted by Firebase 429 rate-limit but is visually confirmed in /tmp/final.png and source-verified at RoundScorecard.jsx:618."
+  },
+  "test_credentials": "Fresh Firebase user each run: qa-i38d-<random>@example.com / demo1234. Grab the JWT from localStorage key `firebase:authUser:<REACT_APP_FIREBASE_API_KEY>:[DEFAULT]`.stsTokenManager.accessToken. Firebase Identity 429s the same egress after ~5 signups/token refreshes in a short window.",
+  "seed_data_creation": "Each run leaves 1 Firebase user + 1 league (name prefix `TEST_i38_<epochms>`) + 1 season + 1 active Week 1 round in Mongo. No automated teardown; safe due to TEST_ prefix isolation.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Setup pattern that works reliably: (1) POST /api/leagues with ONLY {name, location, format, description, win_points, points_step, entry_fee, divisions} — the older payload with course_rating/start_date/weeks worked but is out of the schema and relies on Pydantic ignoring extras. (2) GET /api/leagues/{id} returns the FLAT league object (not {league, seasons, rounds, members} — that shape exists elsewhere in the source but the actual handler at line 536 is the flat one). Fetch seasons and members via GET /api/leagues/{id}/seasons and /api/leagues/{id}/members. (3) POST /api/leagues/{id}/rounds needs {season_id, name, date (YYYY-MM-DD str), holes}. (4) PATCH /api/rounds/{id}/status with body {status:'active'} moves a scheduled round into the active section. (5) POST /api/rounds/{id}/cards needs {label:'Card A', player_ids:[<memberId>]} — that's how you flip the sweep-finalize gate. (6) The Clubhouse tab pops a first-time 'Welcome to the Clubhouse' fair-play modal — dismiss with `button:has-text('I Agree')` before further clicks. (7) The scorecard 'League Feed' shortcut testid is `go-to-league-feed-btn` and it does append `?tab=clubhouse`. (8) Rate-limit: don't reload the scorecard more than ~3 times in a row without a 5s pause or Firebase 429s the token refresh loop.",
+  "rca of the issue": "Iteration-37 P1 (sweep-finalize-btn rendered with 0 cards) was a single missing conjunct in the JSX gate at RoundScorecard.jsx:618. Original: `{isDirector && (`; fixed: `{isDirector && cards.length > 0 && (`. cards is the local state populated from GET /api/rounds/{id}.cards. Verified in source + a screenshot of the empty-state scorecard confirms the pill no longer renders. No backend change needed."
+}

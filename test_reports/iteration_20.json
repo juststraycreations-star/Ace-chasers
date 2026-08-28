@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 20 — POST /api/courses (user-facing add-a-course) feature fully verified. Backend: 10/10 new tests pass (success, duplicate 409 case-insensitive, empty/whitespace name 400/422, no-auth 401/403, list+detail reflect new course, admin /api/admin/courses regression still works with X-Admin-Key). Iteration 19 regression suite: 12/12 still green. Frontend e2e (Firebase signup → login → onboarding → /courses): Add-a-course modal opens, submits successfully (toast + course card appears), and a duplicate submission shows the in-modal error 'A course with that name and location already exists.' with the modal staying open.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration20.py",
+    "/app/test_reports/pytest/iteration_20.xml",
+    "/app/backend/tests/test_iteration19.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AddCourseModal.jsx:28-38 — the reset useEffect runs on every open=true transition and clears all fields. Functionally correct, but during e2e a Playwright .fill() that fires immediately after the modal opens can be clobbered by the reset effect (race). Not a real-user bug (no human types in <300ms), but consider gating the reset on a useRef-tracked 'just opened' flag if you want to be defensive. Test side handled with a 600ms wait.",
+    "courses_router.py:264-310 — POST /api/courses implementation is solid: trims name/location, treats whitespace-only as 400, anchors the duplicate regex with ^...$ + re.escape so case-insensitive dedupe is exact rather than substring. submitted_by is persisted for future moderation. CourseOut response correctly seeds review_count=0 and avg_rating=null without an extra round-trip. Good.",
+    "courses_router.py:281-286 — when payload.location is empty/None, dup_query only matches on name (location filter omitted entirely). That means two courses named 'Maple Hill' — one with no location and one with 'Leicester, MA' — would NOT conflict (no-location side matches anything by name only). Acceptable today (you'd want the user to add location) but worth a comment / future tightening.",
+    "Courses.jsx:208-216 — onAdded prepends the new course to the local list instead of refetching. Lightweight and matches the toast UX. Note: this skips a backend re-sort by name; the new course will appear at the top of the list until the page reloads. Probably intended.",
+    "models.py:160 — CourseIn docstring still says 'Admin-facing payload for adding/editing a course.' The model is now used for both admin and user POSTs; consider updating the docstring."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration20.py",
+    "/app/test_reports/iteration_20.json",
+    "/app/test_reports/pytest/iteration_20.xml"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 new + 12/12 i19 regression)",
+    "frontend": "100% (add + duplicate-error e2e flows verified)"
+  },
+  "test_credentials": "Real Firebase users minted at runtime via Identity Toolkit signUp REST endpoint using REACT_APP_FIREBASE_API_KEY. Backend in Firebase mode (FIREBASE_SERVICE_ACCOUNT_JSON=/app/backend/firebase-admin.json). Test data prefixed TEST_. Admin regression uses ADMIN_API_KEY from /app/backend/.env.",
+  "seed_data_creation": "Each backend run creates 1 ephemeral Firebase user (TEST_i20_user_*) and ~2 courses (TEST_Course_* + TEST_AdminCourse_*). Course teardown uses /api/admin/courses/{id} with X-Admin-Key. Firebase user deleted via accounts:delete. E2E run leaves one TestCourse_<random> in the DB per execution (frontend has no admin teardown hook) — non-blocking but trackable via the TEST_/TestCourse_ prefix.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Auth path is unchanged from iteration_19: use Identity Toolkit signUp -> POST /api/auth/sync to register a user. For the courses-page UI, the onboarding gate (data-testid='onboarding-gate') intercepts pointer events until you fill the name field and click 'Next' then click 'Skip for now' on the photo step. Add ≥500ms wait after opening AddCourseModal before .fill() to avoid a race with the modal's reset-on-open useEffect (AddCourseModal.jsx:28-38). The duplicate-detection regex is anchored (^...$) so substring matches won't false-positive.",
+  "rca of the issue": "N/A — no defects found. One test-side gotcha worth surfacing: AddCourseModal resets form state via useEffect on every open transition. A Playwright .fill() that runs before that effect commits can be cleared, causing a confusing 'Please fill out this field' tooltip on the duplicate attempt. Mitigation: wait ~500ms after opening the modal before filling. Not a product bug."
+}

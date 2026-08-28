@@ -1,18 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useMatchStore } from '../store/matchStore';
 import { api } from '../lib/api';
 import { compressImage } from '../lib/compressImage';
 import { resolveImageUrl } from '../lib/images';
+import { DEFAULT_AVATAR } from '../lib/defaultAvatar';
+import {
+  INTEREST_TAG_OPTIONS,
+  activeInterestTags,
+  toggleInterestTag,
+} from '../lib/interestTags';
 import PublicProfilePreview from '../components/PublicProfilePreview';
+import FirstRunBadge from '../components/FirstRunBadge';
+import ReferralCard from '../components/ReferralCard';
 
 const DEFAULT_INTERESTS = ['tournaments', 'hiking', 'casual play'];
-const DEFAULT_AVATAR =
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop';
 const MAX_RAW_BYTES = 30 * 1024 * 1024;
 
 export default function Profile() {
   const profile = useAuthStore((s) => s.profile);
   const setProfile = useAuthStore((s) => s.setProfile);
+  const friends = useMatchStore((s) => s.friends);
+  const inbox = useMatchStore((s) => s.inbox);
+  const fetchFriends = useMatchStore((s) => s.fetchFriends);
+  const fetchInbox = useMatchStore((s) => s.fetchInbox);
 
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(null);
@@ -26,7 +38,14 @@ export default function Profile() {
 
   useEffect(() => {
     if (profile) setDraft(profile);
-  }, [profile]);
+  }, [profile, setDraft]);
+
+  useEffect(() => {
+    fetchFriends();
+    fetchInbox();
+  }, [fetchFriends, fetchInbox]);
+
+  const pendingRequestsCount = inbox?.incoming_friend_requests?.length || 0;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -54,9 +73,7 @@ export default function Profile() {
       form.append('image', compressed);
       const endpoint =
         kind === 'avatar' ? '/users/me/profile-picture' : '/users/me/banner';
-      const res = await api.post(endpoint, form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const res = await api.post(endpoint, form);
       setProfile(res.data);
     } catch (e) {
       setUploadError(e?.response?.data?.detail || e.message);
@@ -77,8 +94,13 @@ export default function Profile() {
         location: draft.location,
         favoriteCourse: draft.favoriteCourse,
         favoriteFrisbee: draft.favoriteFrisbee,
+        homeCourse: draft.homeCourse,
+        interestedIn: draft.interestedIn,
+        aceClub: !!draft.aceClub,
+        aceClubCount: draft.aceClub && draft.aceClubCount ? Number(draft.aceClubCount) : null,
         bio: draft.bio,
         interests: draft.interests,
+        privacy: draft.privacy || {},
       };
       const res = await api.put('/users/me', payload);
       setProfile(res.data);
@@ -132,6 +154,25 @@ export default function Profile() {
           data-testid="profile-save-message"
         >
           {saveMessage}
+        </div>
+      )}
+
+      {pendingRequestsCount > 0 && (
+        <div
+          className="mb-4 bg-disc-gold/15 border border-disc-gold/40 rounded-lg px-4 py-3 flex items-center justify-between"
+          data-testid="profile-pending-requests-notice"
+        >
+          <div className="text-sm text-disc-green font-semibold">
+            🤝 You have <span className="font-bold">{pendingRequestsCount}</span> pending friend request
+            {pendingRequestsCount === 1 ? '' : 's'}.
+          </div>
+          <Link
+            to="/likes"
+            className="text-xs uppercase tracking-wide font-bold text-disc-green hover:text-disc-green/80"
+            data-testid="profile-view-requests-link"
+          >
+            View →
+          </Link>
         </div>
       )}
 
@@ -231,12 +272,43 @@ export default function Profile() {
             )}
           </div>
 
-          <h2 className="mt-3 text-2xl font-bold text-gray-800">
-            {profile.name || 'Your name'}
-            {profile.age ? `, ${profile.age}` : ''}
+          {isEditing && !profile.profilePictureUrl && (
+            <div
+              className="mt-3 bg-disc-gold/15 border border-disc-gold/40 rounded-lg px-3 py-2 text-sm text-gray-800 flex items-start gap-2"
+              data-testid="profile-avatar-prompt"
+            >
+              <span aria-hidden="true">📸</span>
+              <p className="flex-1">
+                <strong className="font-semibold">Add a profile picture!</strong> Players are
+                4× more likely to make friends when your profile has a photo. Tap the green 📷
+                button on your avatar above.
+              </p>
+            </div>
+          )}
+
+          <h2 className="mt-3 text-2xl font-bold text-gray-800 flex items-center justify-center gap-2 flex-wrap">
+            <span>
+              {profile.name || 'Your name'}
+              {profile.age ? `, ${profile.age}` : ''}
+            </span>
+            {profile.firstRun && <FirstRunBadge size={20} />}
+            {profile.priorityTier && (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider px-2 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200"
+                data-testid="founder-sponsor-badge"
+                title={profile.founderSponsorByName ? `Sponsored by ${profile.founderSponsorByName}` : "Founder Sponsor"}
+              >
+                🏆 Founder Sponsor
+              </span>
+            )}
           </h2>
           <p className="text-disc-gold font-semibold">{profile.skillLevel || 'Beginner'}</p>
         </div>
+      </div>
+
+      {/* Founder referral card — always visible so users can share. */}
+      <div className="mt-4">
+        <ReferralCard />
       </div>
 
       {/* Editable fields */}
@@ -290,34 +362,210 @@ export default function Profile() {
                 name="location"
                 value={draft.location || ''}
                 onChange={handleChange}
+                placeholder="e.g. Seattle, WA"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
                 data-testid="profile-location-input"
               />
+              <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.privacy?.location)}
+                  onChange={(e) =>
+                    setDraft((p) => ({
+                      ...p,
+                      privacy: { ...(p.privacy || {}), location: e.target.checked },
+                    }))
+                  }
+                  data-testid="profile-location-private-toggle"
+                />
+                <span>Keep my location private (won&apos;t appear on Discovery)</span>
+              </label>
             </div>
 
-            <div className="col-span-2">
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Favorite Course</label>
-              <input
-                type="text"
-                name="favoriteCourse"
-                value={draft.favoriteCourse || ''}
-                onChange={handleChange}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
-                data-testid="profile-favorite-course-input"
-              />
-            </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Favorite Course</label>
+                <input
+                  type="text"
+                  name="favoriteCourse"
+                  value={draft.favoriteCourse || ''}
+                  onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
+                  data-testid="profile-favorite-course-input"
+                />
+                <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(draft.privacy?.favoriteCourse)}
+                    onChange={(e) =>
+                      setDraft((p) => ({
+                        ...p,
+                        privacy: { ...(p.privacy || {}), favoriteCourse: e.target.checked },
+                      }))
+                    }
+                    data-testid="profile-favorite-course-private"
+                  />
+                  Keep private (hide from other players)
+                </label>
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Home Course</label>
+                <input
+                  type="text"
+                  name="homeCourse"
+                  value={draft.homeCourse || ''}
+                  onChange={handleChange}
+                  placeholder="The course you play most often"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
+                  data-testid="profile-home-course-input"
+                />
+                <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(draft.privacy?.homeCourse)}
+                    onChange={(e) =>
+                      setDraft((p) => ({
+                        ...p,
+                        privacy: { ...(p.privacy || {}), homeCourse: e.target.checked },
+                      }))
+                    }
+                    data-testid="profile-home-course-private"
+                  />
+                  Keep private (hide from other players)
+                </label>
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Favorite Disc</label>
+                <input
+                  type="text"
+                  name="favoriteFrisbee"
+                  value={draft.favoriteFrisbee || ''}
+                  onChange={handleChange}
+                  placeholder="e.g. Innova Destroyer, Discraft Buzzz"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
+                  data-testid="profile-favorite-frisbee-input"
+                />
+                <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(draft.privacy?.favoriteFrisbee)}
+                    onChange={(e) =>
+                      setDraft((p) => ({
+                        ...p,
+                        privacy: { ...(p.privacy || {}), favoriteFrisbee: e.target.checked },
+                      }))
+                    }
+                    data-testid="profile-favorite-frisbee-private"
+                  />
+                  Keep private (hide from other players)
+                </label>
+              </div>
 
             <div className="col-span-2">
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Favorite Frisbee</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Interested in</label>
+              <div
+                className="flex flex-wrap gap-2 mb-2"
+                data-testid="profile-interested-in-tags"
+              >
+                {INTEREST_TAG_OPTIONS.map((opt) => {
+                  const active = activeInterestTags(draft.interestedIn).has(opt.value);
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() =>
+                        setDraft((p) => ({
+                          ...p,
+                          interestedIn: toggleInterestTag(p.interestedIn, opt),
+                        }))
+                      }
+                      className={
+                        active
+                          ? 'bg-disc-gold text-white font-bold text-sm px-3 py-1.5 rounded-full shadow'
+                          : 'border border-disc-gold text-disc-gold hover:bg-disc-gold/10 font-semibold text-sm px-3 py-1.5 rounded-full'
+                      }
+                      data-testid={`profile-interested-in-tag-${opt.value}`}
+                      aria-pressed={active}
+                    >
+                      {active ? '✓ ' : '+ '}
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
               <input
                 type="text"
-                name="favoriteFrisbee"
-                value={draft.favoriteFrisbee || ''}
+                name="interestedIn"
+                value={draft.interestedIn || ''}
                 onChange={handleChange}
-                placeholder="e.g. Innova Destroyer, Discraft Buzzz"
+                placeholder="Tap a chip above, or write your own (e.g. early-morning rounds)"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
-                data-testid="profile-favorite-frisbee-input"
+                data-testid="profile-interested-in-input"
+                maxLength={200}
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Pick what you&apos;re looking for so the Discovery filter can match you with players who want the same thing.
+              </p>
+              <label className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.privacy?.interestedIn)}
+                  onChange={(e) =>
+                    setDraft((p) => ({
+                      ...p,
+                      privacy: { ...(p.privacy || {}), interestedIn: e.target.checked },
+                    }))
+                  }
+                  data-testid="profile-interested-in-private"
+                />
+                Keep private (hide from other players)
+              </label>
+            </div>
+
+            <div className="col-span-2 border-t border-gray-100 pt-4">
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.aceClub)}
+                  onChange={(e) =>
+                    setDraft((p) => ({
+                      ...p,
+                      aceClub: e.target.checked,
+                      // Clear count when toggled off.
+                      aceClubCount: e.target.checked ? p.aceClubCount : null,
+                    }))
+                  }
+                  data-testid="profile-ace-club-toggle"
+                />
+                🏆 I&apos;m in an Ace Club
+              </label>
+              {draft.aceClub && (
+                <div className="mt-2">
+                  <label
+                    htmlFor="profile-ace-club-count"
+                    className="block text-xs font-semibold text-gray-700 mb-1"
+                  >
+                    How many aces?
+                  </label>
+                  <input
+                    id="profile-ace-club-count"
+                    type="number"
+                    min="0"
+                    max="10000"
+                    value={draft.aceClubCount ?? ''}
+                    onChange={(e) =>
+                      setDraft((p) => ({
+                        ...p,
+                        aceClubCount: e.target.value === '' ? null : Number(e.target.value),
+                      }))
+                    }
+                    placeholder="0"
+                    className="w-32 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-disc-green"
+                    data-testid="profile-ace-club-count-input"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="col-span-2">
@@ -355,6 +603,10 @@ export default function Profile() {
               location: profile.location,
               favoriteCourse: profile.favoriteCourse,
               favoriteFrisbee: profile.favoriteFrisbee,
+              homeCourse: profile.homeCourse,
+              interestedIn: profile.interestedIn,
+              aceClub: profile.aceClub,
+              aceClubCount: profile.aceClubCount,
               bio: profile.bio,
               interests: profile.interests?.length ? profile.interests : DEFAULT_INTERESTS,
               profilePictureUrl: profile.profilePictureUrl,
@@ -363,6 +615,58 @@ export default function Profile() {
           />
         </>
       )}
+
+      <section
+        className="mt-8 bg-white rounded-2xl shadow-lg p-6"
+        data-testid="profile-friends-section"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-disc-green">
+            🥏 Your Friends
+            <span className="ml-2 text-sm text-gray-500 font-normal">
+              ({friends?.length || 0})
+            </span>
+          </h2>
+          {(friends?.length || 0) > 0 && (
+            <Link
+              to="/likes"
+              className="text-xs uppercase tracking-wide font-bold text-disc-green hover:text-disc-green/80"
+              data-testid="profile-see-all-friends"
+            >
+              See all →
+            </Link>
+          )}
+        </div>
+        {(friends?.length || 0) === 0 ? (
+          <p className="text-sm text-gray-500">
+            No friends yet. Head to{' '}
+            <Link to="/discovery" className="text-disc-green font-semibold hover:underline">
+              Discovery
+            </Link>{' '}
+            and tap 🤝 Friend on someone to send a request.
+          </p>
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+            {friends.slice(0, 12).map((f) => (
+              <Link
+                key={f.uid}
+                to={`/players/${f.uid}`}
+                className="flex flex-col items-center group"
+                data-testid={`profile-friend-${f.uid}`}
+              >
+                <img
+                  src={resolveImageUrl(f.profilePictureUrl) || DEFAULT_AVATAR}
+                  alt={f.name || 'Friend'}
+                  className="w-14 h-14 rounded-full object-cover mb-1 group-hover:ring-2 group-hover:ring-disc-green transition"
+                />
+                <span className="text-xs font-semibold text-gray-700 text-center truncate w-full">
+                  {f.name || 'Player'}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

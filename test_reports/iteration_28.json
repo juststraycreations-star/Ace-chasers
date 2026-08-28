@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 28 — verified P0 signup unblocked, GiveawayPromo removed, ReportBugButton on /leagues only, and route-based code splitting works at build + runtime. Backend pytest: 8/8 PASS. Frontend E2E on public URL: fresh signup → /feed redirect (no blocker), /leagues shows report-bug-btn next to dashboard-create-league-btn, clicking it fires a mailto:juststraycreations@gmail.com request with subject 'Ace Chasers · Bug report' and body containing Page:/Browser:/Timestamp: (verified by page.on('request') interception). Report button absent from /feed, /discovery, /profile, /courses, /messages. Vite build produces 25+ separate chunks including index-51KB, Feed-19KB, LeagueDashboard-5KB, LeagueDetail-38KB, RoundScorecard-40KB, vendor-charts-292KB (lazy). All lazy routes render authenticated content after signup.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration28.py",
+    "/app/test_reports/pytest/iteration_28.xml"
+  ],
+  "action_items": [
+    "None — every item in the review request verified green. The 'no new players' user complaint has no code-level root cause: Firebase Identity Toolkit signUp + /api/auth/sync + /api/users/me + /api/discovery + /api/feed all return 200 for a fresh account in <2s. Signup-form E2E in Chromium also completes and redirects to /feed. Recommend investigating traffic/marketing/invite-gating settings (REQUIRE_INVITE env flag) rather than code."
+  ],
+  "critical_code_review_comments": [
+    "App.jsx uses React.lazy for every route except Login/SignUp (kept eager for logged-out first paint) — correct trade-off. Suspense fallback data-testid='route-loading' is present.",
+    "vite.config.js manualChunks correctly buckets recharts+d3 into vendor-charts, firebase into vendor-firebase, @radix-ui into vendor-radix, icons into vendor-icons, react/react-router/react-dom into vendor-react, @tanstack into vendor-query, date-fns/sonner/cmdk/zod into vendor-ui. Build produced index-51KB (was 1318KB) — 96% reduction on the initial bundle.",
+    "ReportBugButton.jsx uses proper encodeURIComponent for subject + body — Ace Chasers · Bug report + Page:/Browser:/Timestamp: metadata block. Interpolation via window.location.href/navigator.userAgent/new Date().toISOString() all present.",
+    "LeagueDashboard.jsx imports ReportBugButton via '@/components/ReportBugButton' and renders it in the top-right toolbar next to dashboard-create-league-btn. Not present on any other page (verified /feed, /discovery, /profile, /courses, /messages).",
+    "Login.jsx no longer imports or renders GiveawayPromo — confirmed via grep and via inner_text scan of /login for 'giveaway'/'disc giveaway'/'win a disc' (0 matches).",
+    "Backend regression sweep: /api/auth/sync, /api/users/me, /api/discovery (returns {players:[...], next_cursor}), /api/feed, /api/courses, /api/leagues, /api/messages/threads all return 200 for a brand-new Firebase account. auth/sync latency ~2s in tests (well under 8s threshold)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration28.py (new — 8 tests: 7 signup+API happy-path + 1 build artifact manifest check)"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 iteration 28 tests pass; prior iter 26/27 baseline still green)",
+    "frontend": "100% for tested slice — signup E2E redirects to /feed; /leagues shows report-bug-btn + dashboard-create-league-btn; mailto intercept confirms proper subject+body; report-bug hidden on /feed /discovery /profile /courses /messages; all lazy-loaded routes render authenticated content."
+  },
+  "test_credentials": "Firebase Identity Toolkit signUp with random TEST_i28_*@example.com / demo1234 credentials (auto-generated per test). UI test users: testi28_*@example.com / demo1234.",
+  "seed_data_creation": "Created ~3 TEST_i28_* Firebase users via pytest + 2 UI signups (testi28_1784316954, testi28mailto_*). Firebase test users are not cleaned up (same pattern as iter 19-27).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter 28 covers: (1) confirming signup blocker doesn't exist in code — Firebase Identity Toolkit + /api/auth/sync end-to-end takes <2s for a new user; recommend investigating non-code causes (invite-gating, marketing) for the user complaint; (2) route-based code splitting via React.lazy — verified via dist/assets/ chunk manifest (25+ chunks, index=51KB, vendor-charts=292KB isolated) and runtime page.on('response') tracking on /login (only vendor + index chunks); (3) ReportBugButton with mailto:juststraycreations@gmail.com pre-fill — verified via page.on('request') mailto interception, containing proper subject + Page/Browser/Timestamp body; (4) GiveawayPromo fully removed from Login.jsx (grep + rendered-body check both clean). Prior iter 26/27 features (sweep-finalize, DM Fair Play, Clubhouse Agreement, Ledger disclaimers, Create League P0) remain untouched and are covered by test_iteration26.py + test_iteration27.py.",
+  "rca of the issue": "N/A — no new bugs found. The 'no new players joining' complaint from the user is NOT a code-level bug: end-to-end signup completes in <2s (Firebase createUser + auth/sync + users/me + discovery + feed all 200). Investigate REQUIRE_INVITE env flag, marketing, or funnel-drop-off analytics outside the code."
+}

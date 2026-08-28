@@ -1,10 +1,36 @@
 import axios from 'axios';
 import { getFirebaseAuth, firebaseConfigured } from './firebase';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+// Hostname-aware backend URL resolution.
+// PRIORITY ORDER (intentional — do not reorder without thinking about it):
+//   1. If we're running on the public custom domain (*.acechasers.net),
+//      use window.location.origin so /api/* hits the same ingress that
+//      serves the SPA. This wins over env vars so a misconfigured
+//      deployment can't break sign-in.
+//   2. If REACT_APP_BACKEND_URL is set at build time, honor it.
+//   3. Otherwise fall back to same-origin (useful for localhost dev).
+function resolveBackendUrl() {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.endsWith('acechasers.net')) {
+      return window.location.origin;
+    }
+  }
+  const fromEnv = process.env.REACT_APP_BACKEND_URL;
+  if (fromEnv) return fromEnv;
+  if (typeof window !== 'undefined') return window.location.origin;
+  return '';
+}
+
+const BACKEND_URL = resolveBackendUrl();
+
+// Named export for consumers (like the merged league components) that want
+// the raw API base URL — e.g. to build absolute URLs for <img src> tags or
+// to hand off to fetch() directly.
+export const API = `${BACKEND_URL}/api`;
 
 export const api = axios.create({
-  baseURL: `${BACKEND_URL}/api`,
+  baseURL: API,
 });
 
 api.interceptors.request.use(async (config) => {

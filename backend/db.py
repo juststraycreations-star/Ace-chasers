@@ -89,6 +89,25 @@ async def ensure_indexes() -> None:
     await db.matches.create_index([("user_a", 1), ("user_b", 1)], unique=True)
     await db.matches.create_index("user_a")
     await db.matches.create_index("user_b")
+    await db.friend_requests.create_index([("from_uid", 1), ("to_uid", 1)], unique=True)
+    await db.friend_requests.create_index("to_uid")
+    await db.post_likes.create_index([("post_id", 1), ("user_uid", 1)], unique=True)
+    await db.post_likes.create_index("post_id")
+    await db.post_comments.create_index("post_id")
+    await db.post_comments.create_index("created_at")
+    await db.messages.create_index([("pair_key", 1), ("created_at", -1)])
+    await db.messages.create_index("to_uid")
+    # Push notification tokens (Iteration 69).
+    await db.push_tokens.create_index("token", unique=True)
+    await db.push_tokens.create_index("user_id")
+    # Push notification observability log (Iteration 72).
+    await db.push_notifications_log.create_index([("timestamp", -1)])
+    await db.push_notifications_log.create_index("eventType")
+    await db.push_notifications_log.create_index("roundId")
+    await db.deleted_leagues.create_index("league_id")
+    await db.deleted_leagues.create_index("actor_id")
+    await db.deleted_leagues.create_index([("actor_id", 1), ("deleted_at", -1)])
+    await db.deleted_leagues.create_index("retention_locked")
 
 
 async def seed_demo_users() -> None:
