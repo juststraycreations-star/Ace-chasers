@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
@@ -205,21 +205,41 @@ async def version():
     }
 
 
-@app.get("/api/config")
-async def config():
-    """Public config consumed by the frontend on app load."""
-    return {"require_invite": require_invite_enabled()}
+@app.delete("/api/posts/{post_id}")
+async def delete_post_endpoint(post_id: str, current=Depends(get_current_user)):
+    ok = await delete_post(post_id, current["uid"])
+    if not ok:
+        raise HTTPException(status_code=404, detail="Post not found or not yours")
+    return {"ok": True}
 
 
-app.include_router(auth_router.router)
-app.include_router(admin_router.router)
-app.include_router(media_router.router)
-app.include_router(discovery_router.router)
-app.include_router(social_router.router)
-app.include_router(posts_router.router)
-app.include_router(messages_router.router)
-app.include_router(courses_router.router)
-app.include_router(news_router.router)
-app.include_router(beta_router.router)
-app.include_router(leagues_router.api_router, prefix="/api")
-app.include_router(push_router.api_router, prefix="/api")
+# --- Frontend (SPA) ----------------------------------------------------------
+# Serves the built React app directly from FastAPI, bypassing Netlify.
+#
+# This MUST be registered last, after every /api/* route above. Starlette
+# matches routes/mounts in the order they were added to the router, and a
+# mount at "/" matches every path as a prefix — if it were registered first
+# (as it previously was), it would swallow /api/health, /api/auth/sync, and
+# every other API call before they ever reached their handlers.
+#
+# The path is resolved relative to this file (not the process's working
+# directory), and the repo folder is "frontend" — not "front-end".
+
+FRONTEND_DIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend", "dist")
+
+if os.path.isdir(FRONTEND_DIST):
+    app.mount(
+        "/assets",
+        StaticFiles(directory=os.path.join(FRONTEND_DIST, "assets")),
+        name="frontend-assets",
+    )
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # Don't let unmatched /api/* paths fall through to index.html — a
+        # typo'd API route should 404, not silently return the SPA shell.
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not found")
+        return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+else:
+    logger.warning("Frontend dist directory not found at %s — skipping SPA mount", FRONTEND_DIST)
